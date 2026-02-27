@@ -1,0 +1,16 @@
+---
+layout: default
+title: bOOmbOOm.NOW!
+permalink: /
+---
+
+<!-- The map fills the viewport. All content is injected by JS. -->
+<!-- This page intentionally has no static body content. -->
+
+<!-- Page overlay container — profile & conversation pages render here -->
+<div id="pageOverlay"></div>
+
+<!-- API base URL — injected at build time via Jekyll environment variable -->
+<script>
+  window.BOOMBOOM_API_URL = '{{ site.api_url | default: "http://localhost:3000/api" }}';
+</script>

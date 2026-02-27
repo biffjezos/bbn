@@ -1,0 +1,184 @@
+/* ============================================================
+   bOOmbOOm.NOW! — App Styles
+   ============================================================ */
+
+:root {
+  --bbm-yellow:   #f5c400;
+  --bbm-pink:     #ff6ec7;
+  --bbm-blue:     #6ec6ff;
+  --bbm-grey:     #9e9e9e;
+  --bbm-bg:       #0d0d0d;
+  --bbm-nav-h:    56px;
+}
+
+/* --- Base -------------------------------------------------- */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bbm-bg);
+  color: #f0f0f0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* --- Map fills viewport below navbar ----------------------- */
+#map {
+  position: fixed;
+  top: var(--bbm-nav-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  background: #111;
+}
+
+/* Leaflet dark override */
+.leaflet-container {
+  background: #111 !important;
+}
+
+/* --- Navbar ------------------------------------------------ */
+#mainNav {
+  height: var(--bbm-nav-h);
+  z-index: 1050;
+}
+
+.letter-spacing-wide {
+  letter-spacing: 0.04em;
+}
+
+.fs-xs {
+  font-size: 0.72rem;
+}
+
+/* Status dot colours */
+#statusDot.locating  { color: #aaa; }
+#statusDot.active    { color: #4caf50; }
+#statusDot.expired   { color: #f44336; }
+
+/* --- Offcanvas --------------------------------------------- */
+.offcanvas {
+  max-width: 300px;
+}
+
+/* --- Custom Leaflet marker icons --------------------------- */
+.bbm-marker {
+  font-size: 2rem;
+  line-height: 1;
+  text-align: center;
+  /* Drop shadow so icons pop on satellite tiles */
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7));
+  cursor: pointer;
+  user-select: none;
+}
+
+.bbm-marker.self {
+  font-size: 2.2rem;
+}
+
+/* Sex-based colouring via CSS filter */
+.bbm-marker.male   { filter: drop-shadow(0 0 4px var(--bbm-blue))   hue-rotate(0deg);   }
+.bbm-marker.female { filter: drop-shadow(0 0 4px var(--bbm-pink))   hue-rotate(280deg); }
+.bbm-marker.other  { filter: drop-shadow(0 0 4px var(--bbm-yellow)) hue-rotate(50deg);  }
+.bbm-marker.guest  { filter: drop-shadow(0 0 3px #555) grayscale(1); }
+.bbm-marker.self   { filter: drop-shadow(0 0 5px var(--bbm-yellow)); }
+
+/* --- Pages rendered on top of map (profile, conversations) - */
+#pageOverlay {
+  position: fixed;
+  top: var(--bbm-nav-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  background: rgba(13,13,13,0.97);
+  overflow-y: auto;
+  padding: 1.5rem;
+  display: none;
+}
+
+#pageOverlay.active {
+  display: block;
+}
+
+/* --- Conversations ----------------------------------------- */
+.conversation-card {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.conversation-card:hover {
+  border-color: var(--bbm-yellow);
+}
+
+.message-bubble {
+  max-width: 78%;
+  padding: 0.5rem 0.85rem;
+  border-radius: 18px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.message-bubble.outgoing {
+  background: #2c2c2c;
+  border-bottom-right-radius: 4px;
+  align-self: flex-end;
+}
+
+.message-bubble.incoming {
+  background: #1a1a2e;
+  border-bottom-left-radius: 4px;
+  align-self: flex-start;
+}
+
+.message-expiry {
+  font-size: 0.68rem;
+  color: #666;
+  margin-top: 2px;
+}
+
+/* Message compose area */
+#composeArea {
+  position: sticky;
+  bottom: 0;
+  background: #0d0d0d;
+  border-top: 1px solid #333;
+  padding: 0.75rem 0;
+}
+
+#msgInput {
+  background: #1a1a1a;
+  border-color: #444;
+  color: #f0f0f0;
+  resize: none;
+}
+
+#charCount {
+  font-size: 0.72rem;
+  color: #666;
+}
+
+#charCount.over {
+  color: #f44336;
+}
+
+/* --- Modal tweaks ------------------------------------------ */
+.modal-content {
+  border-radius: 12px;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: var(--bbm-yellow);
+  box-shadow: 0 0 0 0.2rem rgba(245, 196, 0, 0.2);
+}
+
+/* --- Utility ----------------------------------------------- */
+.text-bbm-yellow { color: var(--bbm-yellow); }
+.text-bbm-pink   { color: var(--bbm-pink);   }
+.text-bbm-blue   { color: var(--bbm-blue);   }

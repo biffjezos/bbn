@@ -1,0 +1,23 @@
+# Ruby / Jekyll
+frontend/vendor/
+frontend/.jekyll-cache/
+frontend/_site/
+public/
+
+# Node / Bun
+middleware/node_modules/
+middleware/bun.lockb
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files — NEVER commit secrets
+.env
+.env.local
+middleware/.env
+
+# IDE
+.vscode/
+.idea/
