@@ -39,7 +39,7 @@ async function apiFetch(path, options = {}) {
 
 // ---- Auth --------------------------------------------------
 
-export const Api = {
+const Api = {
 
   /** Request a guest token for a given UUID */
   guestAuth(guestId) {
