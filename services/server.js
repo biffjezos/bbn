@@ -22,7 +22,7 @@ import cors    from 'cors';
 const app = express();
 
 app.use(cors({
-  origin: 'https://bbn-e86d0c.gitlab.io/',
+  origin: 'https://bbn-e86d0c.gitlab.io',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
