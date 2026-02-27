@@ -3,6 +3,7 @@ image: ruby:alpine
 create-pages:
   script:
     - cd ui
+    - apk add --no-cache build-base
     - bundle install
     - bundle exec jekyll build -d ../public
     # The folder that contains the files to be exposed at the Page URL
