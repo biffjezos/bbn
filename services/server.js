@@ -9,10 +9,10 @@
 // ============================================================
 const CFG = {
   PORT:             process.env.PORT             || 3000,
-  AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
-  USER_SERVICE_URL: process.env.USER_SERVICE_URL || 'http://localhost:3002',
-  LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'http://localhost:3003',
-  MSG_SERVICE_URL:  process.env.MSG_SERVICE_URL  || 'http://localhost:3004',
+  AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || 'auth',
+  USER_SERVICE_URL: process.env.USER_SERVICE_URL || 'usr',
+  LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'loc',
+  MSG_SERVICE_URL:  process.env.MSG_SERVICE_URL  || 'msg',
 };
 // ============================================================
 
@@ -22,7 +22,7 @@ import cors    from 'cors';
 const app = express();
 
 app.use(cors({
-  origin: 'https://hammeley.info',
+  origin: 'https://bbn-e86d0c.gitlab.io/',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
