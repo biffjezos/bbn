@@ -4,7 +4,7 @@
 // BASE_URL is injected at build time by CI (see _config.yml / env).
 // ============================================================
 
-const API_BASE = window.BOOMBOOM_API_URL || 'http://localhost:3000/api';
+const API_BASE = window.BOOMBOOM_API_URL || 'https://bbn-e86d0c.gitlab.io/api';
 
 async function apiFetch(path, options = {}) {
   const token = window.Auth?.getToken?.();
