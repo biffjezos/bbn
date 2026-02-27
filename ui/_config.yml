@@ -1,0 +1,18 @@
+# ============================================================
+# bOOmbOOm.NOW! — Jekyll Configuration
+# ============================================================
+
+title: hammeley admin
+baseurl: ""
+url: "https://hammeley.info"
+
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+
+defaults:
+  - scope:
+      path: "admin"
+    values:
+      layout: base
