@@ -11,8 +11,8 @@
 // ============================================================
 const CFG = {
   PORT:             process.env.PORT       || 3001,
-  MONGO_URI:        process.env.MONGO_URI  || '',
-  DB_NAME:          process.env.DB_NAME    || 'boomboom',
+  MONGO_URI:        process.env.MONGO_URI  || 'mongodb://mongo:bYLUYmlYnOvpvjzgCRTKnQlVUwGhUaFZ@mongodb.railway.internal:27017',
+  DB_NAME:          process.env.DB_NAME    || 'test',
   JWT_SECRET:       process.env.JWT_SECRET || 'change-me-in-production',
   JWT_EXPIRY_USER:  '7d',
   JWT_EXPIRY_GUEST: '15m',
