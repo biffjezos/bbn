@@ -4,7 +4,7 @@
 // BASE_URL is injected at build time by CI (see _config.yml / env).
 // ============================================================
 
-const API_BASE = window.BOOMBOOM_API_URL || 'https://hmmly-boom.up.railway.app/api';
+const API_BASE = window.BOOMBOOM_API_URL || 'http://localhost:3000/api';
 
 async function apiFetch(path, options = {}) {
   const token = window.Auth?.getToken?.();
@@ -14,10 +14,16 @@ async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const url = `${API_BASE}${path}`;
+  console.log('[API] Fetching:', options.method || 'GET', url);
+
+  let res;
+  try {
+    res = await fetch(url, { ...options, headers });
+  } catch (networkErr) {
+    console.error('[API] Network error:', networkErr.message, 'URL:', url);
+    throw networkErr;
+  }
 
   const data = await res.json().catch(() => ({}));
 

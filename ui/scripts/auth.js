@@ -122,6 +122,10 @@ const Auth = (() => {
         Auth.onGuestReady?.();
       } catch (err) {
         console.warn('[Auth] Guest token failed', err);
+        console.warn('[Auth] Error name:', err && err.name);
+        console.warn('[Auth] Error message:', err && err.message);
+        console.warn('[Auth] Error status:', err && err.status);
+        console.warn('[Auth] API_BASE:', window.BOOMBOOM_API_URL || 'not set');
         Auth.onGuestExpired?.();
       }
     },
