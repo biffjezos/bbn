@@ -81,18 +81,24 @@ const MapModule = (() => {
 
   function initMap(lat, lon) {
     if (_map) return;
-
     _map = L.map('map', {
       center: [lat, lon],
       zoom: CFG.DEFAULT_ZOOM,
       zoomControl: true,
       attributionControl: true,
     });
-
     L.tileLayer(CFG.TILE_URL, {
       attribution: CFG.TILE_ATTR,
       maxZoom: 19,
     }).addTo(_map);
+  }
+
+  // Load map immediately with a random world location.
+  // onPosition() will pan to the real location once found.
+  function initMapNow() {
+    const lat = (Math.random() * 140) - 70;
+    const lon = (Math.random() * 360) - 180;
+    initMap(lat, lon);
   }
 
   // ---- Self marker -----------------------------------------
@@ -180,9 +186,8 @@ const MapModule = (() => {
     _selfLat = lat;
     _selfLon = lon;
 
-    if (!_map) {
-      initMap(lat, lon);
-    }
+    // Pan to real location and zoom in
+    _map.setView([lat, lon], CFG.DEFAULT_ZOOM);
 
     placeSelfMarker(lat, lon);
     setStatus('active', 'live');
@@ -191,12 +196,8 @@ const MapModule = (() => {
 
   function onGeoError(err) {
     console.warn('[Map] Geolocation error', err.code, err.message);
-    setStatus('expired', 'no location');
-
-    // Fallback: center on a default location so the map still loads
-    if (!_map) {
-      initMap(48.8566, 2.3522); // Paris — user sees they need to share location
-    }
+    setStatus('locating', 'searching…');
+    // Map is already visible with random location from initMapNow()
   }
 
   // ---- Start / stop ----------------------------------------
@@ -245,7 +246,8 @@ const MapModule = (() => {
 
     init() {
       setStatus('locating', 'locating…');
-      startWatching();
+      initMapNow();      // map visible immediately with random location
+      startWatching();   // will pan to real location when found
       startNearbyPoll();
     },
 
