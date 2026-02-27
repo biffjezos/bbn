@@ -1,12 +1,12 @@
 # The Docker image that will be used to build your app
 image: ruby:alpine
 create-pages:
-  pages:
-    script:
-      - cd ui
-      - bundle install
-      - bundle exec jekyll build -d ../public
+  script:
+    - cd ui
+    - bundle install
+    - bundle exec jekyll build -d ../public
     # The folder that contains the files to be exposed at the Page URL
+  pages:
     publish: public
   rules:
     # This ensures that only pushes to the default branch will trigger
