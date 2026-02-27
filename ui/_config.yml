@@ -2,17 +2,13 @@
 # bOOmbOOm.NOW! — Jekyll Configuration
 # ============================================================
 
-title: hammeley admin
+title: boom boom by hammeley.info
 baseurl: ""
 url: "https://hammeley.info"
 
+api_url: "https://hmmly-boom.up.railway.app/api"
 exclude:
   - README.md
   - Gemfile
   - Gemfile.lock
 
-defaults:
-  - scope:
-      path: "admin"
-    values:
-      layout: base
