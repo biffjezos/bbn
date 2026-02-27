@@ -2,6 +2,10 @@
 image: ruby:alpine
 create-pages:
   pages:
+    script:
+      - cd ui
+      - bundle install
+      - bundle exec jekyll build -d ../public
     # The folder that contains the files to be exposed at the Page URL
     publish: public
   rules:
