@@ -1,61 +1,78 @@
 // ============================================================
 // bOOmbOOm.NOW! — server.js
-// Entry point. Mounts all service routers.
-// Clients talk only to this file.
+// Public gateway. The only service exposed to the client.
+// Forwards requests to internal services with Bearer token.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
-export const CFG = {
-  PORT:            process.env.PORT            || 3000,
-  ALLOWED_ORIGINS: (process.env.ALLOWED_ORIGINS || 'http://localhost:4000').split(','),
-  JWT_SECRET:      process.env.JWT_SECRET      || 'change-me-in-production',
-  JWT_EXPIRY_USER:  '7d',
-  JWT_EXPIRY_GUEST: '15m',
-  GUEST_TTL_MS:     15 * 60 * 1000,
+const CFG = {
+  PORT:             process.env.PORT             || 3000,
+  AUTH_SERVICE_URL: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
+  USER_SERVICE_URL: process.env.USER_SERVICE_URL || 'http://localhost:3002',
+  LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'http://localhost:3003',
+  MSG_SERVICE_URL:  process.env.MSG_SERVICE_URL  || 'http://localhost:3004',
 };
 // ============================================================
 
 import express from 'express';
 import cors    from 'cors';
 
-import { router as authRouter     } from './auth.js';
-import { router as usersRouter    } from './users.js';
-import { router as locationRouter } from './location.js';
-import { router as messagesRouter } from './messages.js';
-
 const app = express();
 
-// --- CORS ---------------------------------------------------
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || CFG.ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed.`));
-  },
+  origin: 'https://hammeley.info',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 app.use(express.json({ limit: '16kb' }));
 
-// --- Health (Railway uses this) -----------------------------
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
-// --- Mount service routers ----------------------------------
-app.use('/api/auth',     authRouter);
-app.use('/api/users',    usersRouter);
-app.use('/api/location', locationRouter);
-app.use('/api/messages', messagesRouter);
+// --- Proxy helper -------------------------------------------
+async function proxy(req, res, targetUrl) {
+  try {
+    const response = await fetch(targetUrl, {
+      method:  req.method,
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': req.headers['authorization'] || '',
+      },
+      body: ['GET', 'DELETE'].includes(req.method) ? undefined : JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e) {
+    console.error('[gateway]', e);
+    res.status(502).json({ error: 'Service unavailable.' });
+  }
+}
+
+// --- Auth ---------------------------------------------------
+app.post('/api/auth/guest',    (req, res) => proxy(req, res, `${CFG.AUTH_SERVICE_URL}/auth/guest`));
+app.post('/api/auth/register', (req, res) => proxy(req, res, `${CFG.AUTH_SERVICE_URL}/auth/register`));
+app.post('/api/auth/login',    (req, res) => proxy(req, res, `${CFG.AUTH_SERVICE_URL}/auth/login`));
+
+// --- Users --------------------------------------------------
+app.get   ('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.put   ('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.delete('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.get   ('/api/users/:nickname/profile', (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.nickname}/profile`));
+
+// --- Location -----------------------------------------------
+app.put('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));
+app.get('/api/location/nearby', (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location/nearby?lat=${req.query.lat}&lon=${req.query.lon}`));
+
+// --- Messages -----------------------------------------------
+app.get   ('/api/messages',             (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages`));
+app.get   ('/api/messages/:nickname',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.nickname}`));
+app.post  ('/api/messages/:nickname',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.nickname}`));
+app.delete('/api/messages/:id',         (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.id}`));
 
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
-app.use((err, _req, res, _next) => {
-  console.error('[Unhandled]', err);
-  res.status(500).json({ error: 'Internal server error.' });
-});
+app.use((err, _req, res, _next) => res.status(500).json({ error: 'Internal server error.' }));
 
-// --- Start --------------------------------------------------
-app.listen(CFG.PORT, () =>
-  console.log(`[bOOmbOOm.NOW!] Running on :${CFG.PORT}`)
-);
+app.listen(CFG.PORT, () => console.log(`[gateway] Running on :${CFG.PORT}`));

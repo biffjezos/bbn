@@ -1,33 +1,34 @@
 // ============================================================
 // bOOmbOOm.NOW! — auth.js
-// Handles: guest token, register, login.
-// JWT issue/verify helpers used by other services.
-// Opens its own MongoDB connection via MONGO_URI.
+// Standalone service. Handles guest tokens, register, login.
+// Every other service imports verifyToken / requireAnyToken
+// by making an HTTP call — but since JWT verification is
+// stateless, each service does it locally with the same secret.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  MONGO_URI:        process.env.MONGO_URI || '',
-  DB_NAME:          process.env.DB_NAME   || 'boomboom',
-  GUEST_TTL_SEC:    15 * 60,   // TTL for guest session docs
+  PORT:             process.env.PORT       || 3001,
+  MONGO_URI:        process.env.MONGO_URI  || '',
+  DB_NAME:          process.env.DB_NAME    || 'boomboom',
+  JWT_SECRET:       process.env.JWT_SECRET || 'change-me-in-production',
+  JWT_EXPIRY_USER:  '7d',
+  JWT_EXPIRY_GUEST: '15m',
+  GUEST_TTL_SEC:    15 * 60,
 };
 // ============================================================
 
-import { Router }   from 'express';
+import express       from 'express';
 import { MongoClient } from 'mongodb';
-import jwt          from 'jsonwebtoken';
-import bcrypt       from 'bcryptjs';
-import { CFG as SERVER_CFG } from './server.js';
+import jwt           from 'jsonwebtoken';
+import bcrypt        from 'bcryptjs';
 
-// --- DB connection ------------------------------------------
-const client = new MongoClient(CFG.MONGO_URI);
-await client.connect();
-const db = client.db(CFG.DB_NAME);
+// --- DB -----------------------------------------------------
+const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[auth] DB connected.');
 
-// Ensure indexes for auth-owned collections
 await db.collection('users').createIndex({ email: 1 },    { unique: true, background: true });
 await db.collection('users').createIndex({ nickname: 1 }, { unique: true, background: true });
 await db.collection('sessions').createIndex(
@@ -35,66 +36,51 @@ await db.collection('sessions').createIndex(
   { expireAfterSeconds: CFG.GUEST_TTL_SEC, background: true }
 );
 
-// --- Helpers ------------------------------------------------
-
-export function issueUserToken(user) {
+// --- JWT helpers (duplicated in each service — same secret) -
+function issueUserToken(user) {
   return jwt.sign(
     { sub: user._id.toString(), email: user.email, nickname: user.nickname, sex: user.sex, role: 'user' },
-    SERVER_CFG.JWT_SECRET,
-    { expiresIn: SERVER_CFG.JWT_EXPIRY_USER }
+    CFG.JWT_SECRET,
+    { expiresIn: CFG.JWT_EXPIRY_USER }
   );
 }
 
-export function issueGuestToken(guestId) {
+function issueGuestToken(guestId) {
   return jwt.sign(
     { sub: guestId, role: 'guest' },
-    SERVER_CFG.JWT_SECRET,
-    { expiresIn: SERVER_CFG.JWT_EXPIRY_GUEST }
+    CFG.JWT_SECRET,
+    { expiresIn: CFG.JWT_EXPIRY_GUEST }
   );
 }
 
-/** Verify any token. Returns decoded payload or throws. */
-export function verifyToken(token) {
-  return jwt.verify(token, SERVER_CFG.JWT_SECRET);
-}
+// --- Express ------------------------------------------------
+const app = express();
+app.use(express.json({ limit: '16kb' }));
 
-/** Express middleware — accepts guest OR registered token. */
-export function requireAnyToken(req, res, next) {
-  const token = _extractToken(req);
+// Verify Bearer token on every request
+app.use((req, res, next) => {
+  // Guest endpoint doesn't need a token
+  if (req.path === '/auth/guest' && req.method === 'POST') return next();
+  if (req.path === '/auth/login' && req.method === 'POST') return next();
+  if (req.path === '/auth/register' && req.method === 'POST') return next();
+  if (req.path === '/health') return next();
+
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided.' });
+
   try {
-    req.auth = verifyToken(token);
+    req.auth = jwt.verify(token, CFG.JWT_SECRET);
     next();
   } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.', detail: e.message });
+    res.status(401).json({ error: 'Token invalid or expired.' });
   }
-}
+});
 
-/** Express middleware — registered users only. */
-export function requireUser(req, res, next) {
-  const token = _extractToken(req);
-  if (!token) return res.status(401).json({ error: 'No token provided.' });
-  try {
-    const payload = verifyToken(token);
-    if (payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.', detail: e.message });
-  }
-}
+app.get('/health', (_req, res) => res.json({ ok: true }));
 
-function _extractToken(req) {
-  const h = req.headers['authorization'] || '';
-  return h.startsWith('Bearer ') ? h.slice(7) : null;
-}
-
-// --- Routes -------------------------------------------------
-export const router = Router();
-
-// POST /api/auth/guest
-router.post('/guest', async (req, res) => {
+// POST /auth/guest
+app.post('/auth/guest', async (req, res) => {
   try {
     const { guestId } = req.body;
     if (!guestId || typeof guestId !== 'string' || guestId.length > 64)
@@ -106,18 +92,15 @@ router.post('/guest', async (req, res) => {
       { upsert: true }
     );
 
-    res.json({
-      token:     issueGuestToken(guestId),
-      expiresIn: SERVER_CFG.GUEST_TTL_MS,
-    });
+    res.json({ token: issueGuestToken(guestId), expiresIn: CFG.GUEST_TTL_SEC * 1000 });
   } catch (e) {
     console.error('[auth/guest]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
 });
 
-// POST /api/auth/register
-router.post('/register', async (req, res) => {
+// POST /auth/register
+app.post('/auth/register', async (req, res) => {
   try {
     const { email, nickname, password, age, sex } = req.body;
 
@@ -152,8 +135,8 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// POST /api/auth/login  (email or nickname + password)
-router.post('/login', async (req, res) => {
+// POST /auth/login
+app.post('/auth/login', async (req, res) => {
   try {
     const { login, password } = req.body;
     if (!login || !password)
@@ -173,3 +156,7 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ error: 'Internal error.' });
   }
 });
+
+app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
+
+app.listen(CFG.PORT, () => console.log(`[auth] Running on :${CFG.PORT}`));

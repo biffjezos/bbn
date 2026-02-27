@@ -1,45 +1,83 @@
 // ============================================================
 // bOOmbOOm.NOW! — messages.js
-// Handles: list conversations, get thread, send, delete message.
-// Proximity is enforced at send time via Haversine (from location.js).
-// Opens its own MongoDB connection via MONGO_URI.
+// Standalone service. Send, list, delete messages.
+// Calls location.js via HTTP to check proximity before sending.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  MONGO_URI: process.env.MONGO_URI || '',
-  DB_NAME:   process.env.DB_NAME   || 'boomboom',
+  PORT:            process.env.PORT            || 3004,
+  MONGO_URI:       process.env.MONGO_URI       || '',
+  DB_NAME:         process.env.DB_NAME         || 'boomboom',
+  JWT_SECRET:      process.env.JWT_SECRET      || 'change-me-in-production',
+  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://localhost:3003',
 
   MESSAGE_MAX_CHARS:   144,
-  MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 h hard expiry per message
-  MESSAGE_PROXIMITY_M: 100,                   // both users must be within this range to send
+  MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 hours
+  MESSAGE_PROXIMITY_M: 100,
 };
 // ============================================================
 
-import { Router }      from 'express';
+import express                   from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
-import { requireUser } from './auth.js';
-import { haversineDistance } from './location.js';
+import jwt                       from 'jsonwebtoken';
 
-// --- DB connection ------------------------------------------
-const client = new MongoClient(CFG.MONGO_URI);
-await client.connect();
-const db = client.db(CFG.DB_NAME);
+// --- DB -----------------------------------------------------
+const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[messages] DB connected.');
 
-// TTL index: MongoDB deletes each message doc when now >= doc.expiresAt
 await db.collection('messages').createIndex(
   { expiresAt: 1 },
   { expireAfterSeconds: 0, background: true }
 );
 
-// --- Routes -------------------------------------------------
-export const router = Router();
+// --- Express ------------------------------------------------
+const app = express();
+app.use(express.json({ limit: '16kb' }));
 
-// GET /api/messages  — all active messages for the logged-in user
-router.get('/', requireUser, async (req, res) => {
+function verifyToken(req, res, next) {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  try {
+    const payload = jwt.verify(token, CFG.JWT_SECRET);
+    if (payload.role !== 'user')
+      return res.status(403).json({ error: 'Registered account required.' });
+    req.auth    = payload;
+    req.token   = token;   // kept to forward to location service
+    next();
+  } catch (e) {
+    res.status(401).json({ error: 'Token invalid or expired.' });
+  }
+}
+
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// --- Internal helper: fetch location from location.js -------
+async function getLocation(userId, bearerToken) {
+  const response = await fetch(`${CFG.LOC_SERVICE_URL}/location/user/${userId}`, {
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
+// --- Haversine (local copy for proximity check) -------------
+const EARTH_RADIUS_M = 6_371_000;
+const toRad = deg => deg * Math.PI / 180;
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// GET /messages — all active conversations for logged-in user
+app.get('/messages', verifyToken, async (req, res) => {
   try {
     const messages = await db.collection('messages')
       .find({
@@ -48,7 +86,6 @@ router.get('/', requireUser, async (req, res) => {
       })
       .sort({ sentAt: -1 })
       .toArray();
-
     res.json({ messages });
   } catch (e) {
     console.error('[messages GET]', e);
@@ -56,8 +93,8 @@ router.get('/', requireUser, async (req, res) => {
   }
 });
 
-// GET /api/messages/:nickname  — thread with one specific user
-router.get('/:nickname', requireUser, async (req, res) => {
+// GET /messages/:nickname — thread with one user
+app.get('/messages/:nickname', verifyToken, async (req, res) => {
   try {
     const other = await db.collection('users').findOne({ nickname: req.params.nickname });
     if (!other) return res.status(404).json({ error: 'User not found.' });
@@ -69,7 +106,7 @@ router.get('/:nickname', requireUser, async (req, res) => {
       .find({
         $or: [
           { fromUserId: me,      toUserId: otherId },
-          { fromUserId: otherId, toUserId: me      },
+          { fromUserId: otherId, toUserId: me },
         ],
         expiresAt: { $gt: new Date() },
       })
@@ -83,8 +120,8 @@ router.get('/:nickname', requireUser, async (req, res) => {
   }
 });
 
-// POST /api/messages/:nickname  — send a message (proximity enforced)
-router.post('/:nickname', requireUser, async (req, res) => {
+// POST /messages/:nickname — send message, proximity enforced
+app.post('/messages/:nickname', verifyToken, async (req, res) => {
   try {
     const { text } = req.body;
     if (!text || typeof text !== 'string' || !text.trim())
@@ -100,10 +137,10 @@ router.post('/:nickname', requireUser, async (req, res) => {
     if (fromId === toId)
       return res.status(400).json({ error: 'Cannot message yourself.' });
 
-    // Both parties must have a fresh location within MESSAGE_PROXIMITY_M
+    // Call location.js to get both users' positions
     const [fromLoc, toLoc] = await Promise.all([
-      db.collection('locations').findOne({ userId: fromId }),
-      db.collection('locations').findOne({ userId: toId }),
+      getLocation(fromId, req.token),
+      getLocation(toId,   req.token),
     ]);
 
     if (!fromLoc || !toLoc)
@@ -134,8 +171,8 @@ router.post('/:nickname', requireUser, async (req, res) => {
   }
 });
 
-// DELETE /api/messages/:id  — sender can delete their own message
-router.delete('/:id', requireUser, async (req, res) => {
+// DELETE /messages/:id — sender deletes their own message
+app.delete('/messages/:id', verifyToken, async (req, res) => {
   try {
     let msgId;
     try   { msgId = new ObjectId(req.params.id); }
@@ -155,3 +192,7 @@ router.delete('/:id', requireUser, async (req, res) => {
     res.status(500).json({ error: 'Internal error.' });
   }
 });
+
+app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
+
+app.listen(CFG.PORT, () => console.log(`[messages] Running on :${CFG.PORT}`));

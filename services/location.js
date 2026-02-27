@@ -1,57 +1,44 @@
 // ============================================================
 // bOOmbOOm.NOW! — location.js
-// Handles: push own location, get nearby users.
-// Haversine distance logic lives here (no DB dependency).
-// Opens its own MongoDB connection via MONGO_URI.
+// Standalone service. Location push, nearby lookup, Haversine.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  MONGO_URI: process.env.MONGO_URI || '',
-  DB_NAME:   process.env.DB_NAME   || 'boomboom',
+  PORT:       process.env.PORT       || 3003,
+  MONGO_URI:  process.env.MONGO_URI  || '',
+  DB_NAME:    process.env.DB_NAME    || 'boomboom',
+  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
 
-  // How often / how far a client must move before we write to DB
-  UPDATE_INTERVAL_MS: 15_000,   // 15 seconds minimum between pushes
-  UPDATE_DISTANCE_M:  100,      // OR moved at least 100 m
-
-  // Stale location TTL (also set as a MongoDB index on auth.js startup)
-  LOCATION_TTL_SEC:   10 * 60, // 10 min — MongoDB drops docs older than this
-
-  // Vicinity rules
-  VICINITY_RADIUS_M:          100,       // radius within which users are visible
-  MAX_VISIBLE_GUESTS:         5,         // pin cap for unregistered viewers
-  MAX_VISIBLE_REGISTERED:     Infinity,  // registered users see everyone
+  UPDATE_INTERVAL_MS:         15_000,
+  UPDATE_DISTANCE_M:          100,
+  LOCATION_TTL_SEC:           10 * 60,
+  VICINITY_RADIUS_M:          100,
+  MAX_VISIBLE_GUESTS:         5,
+  MAX_VISIBLE_REGISTERED:     Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
 };
 // ============================================================
 
-import { Router }      from 'express';
-import { MongoClient } from 'mongodb';
-import { requireAnyToken } from './auth.js';
+import express           from 'express';
+import { MongoClient }   from 'mongodb';
+import jwt               from 'jsonwebtoken';
 
-// --- DB connection ------------------------------------------
-const client = new MongoClient(CFG.MONGO_URI);
-await client.connect();
-const db = client.db(CFG.DB_NAME);
+// --- DB -----------------------------------------------------
+const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[location] DB connected.');
 
-// TTL index: auto-remove location docs older than LOCATION_TTL_SEC
 await db.collection('locations').createIndex(
   { updatedAt: 1 },
   { expireAfterSeconds: CFG.LOCATION_TTL_SEC, background: true }
 );
 
-// ============================================================
-// HAVERSINE GEO LOGIC
-// Pure functions — no DB, no side effects. Replace freely.
-// ============================================================
-
+// --- Haversine ----------------------------------------------
 const EARTH_RADIUS_M = 6_371_000;
 const toRad = deg => deg * Math.PI / 180;
 
-/** Great-circle distance in metres between two lat/lon points. */
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
@@ -61,14 +48,12 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Filter a users array to those within radiusM of origin. Adds .distanceM to each. */
 function filterByRadius(origin, users, radiusM) {
   return users
     .map(u => ({ ...u, distanceM: haversineDistance(origin.lat, origin.lon, u.lat, u.lon) }))
     .filter(u => u.distanceM <= radiusM);
 }
 
-/** Apply the visibility cap using the configured strategy. */
 function applyStrategy(users, maxCount, strategy) {
   if (maxCount === Infinity || users.length <= maxCount) return users;
   switch (strategy) {
@@ -88,7 +73,6 @@ function applyStrategy(users, maxCount, strategy) {
   }
 }
 
-/** True if the incoming location is worth writing to the DB. */
 function shouldUpdate(prev, next) {
   if (!prev) return true;
   const timePassed = Date.now() - new Date(prev.updatedAt).getTime() >= CFG.UPDATE_INTERVAL_MS;
@@ -96,19 +80,36 @@ function shouldUpdate(prev, next) {
   return timePassed || movedFar;
 }
 
-// Export for use in messages.js (proximity check before sending)
-export { haversineDistance };
+// --- Express ------------------------------------------------
+const app = express();
+app.use(express.json({ limit: '16kb' }));
 
-// --- Routes -------------------------------------------------
-export const router = Router();
+function verifyToken(req, res, next, requireRegistered = false) {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  try {
+    const payload = jwt.verify(token, CFG.JWT_SECRET);
+    if (requireRegistered && payload.role !== 'user')
+      return res.status(403).json({ error: 'Registered account required.' });
+    req.auth = payload;
+    next();
+  } catch (e) {
+    res.status(401).json({ error: 'Token invalid or expired.' });
+  }
+}
 
-// PUT /api/location  — upsert caller's current position
-router.put('/', requireAnyToken, async (req, res) => {
+const requireAny = (req, res, next) => verifyToken(req, res, next, false);
+
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// PUT /location — upsert caller's position
+app.put('/location', requireAny, async (req, res) => {
   try {
     const { lat, lon } = req.body;
     if (typeof lat !== 'number' || typeof lon !== 'number' ||
         lat < -90 || lat > 90 || lon < -180 || lon > 180)
-      return res.status(400).json({ error: 'Valid lat and lon (numbers) required.' });
+      return res.status(400).json({ error: 'Valid lat and lon required.' });
 
     const id     = req.auth.sub;
     const isUser = req.auth.role === 'user';
@@ -140,8 +141,8 @@ router.put('/', requireAnyToken, async (req, res) => {
   }
 });
 
-// GET /api/location/nearby?lat=&lon=
-router.get('/nearby', requireAnyToken, async (req, res) => {
+// GET /location/nearby?lat=&lon=
+app.get('/location/nearby', requireAny, async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lon = parseFloat(req.query.lon);
@@ -172,3 +173,19 @@ router.get('/nearby', requireAnyToken, async (req, res) => {
     res.status(500).json({ error: 'Internal error.' });
   }
 });
+
+// GET /location/user/:userId — called internally by messages.js
+app.get('/location/user/:userId', requireAny, async (req, res) => {
+  try {
+    const loc = await db.collection('locations').findOne({ userId: req.params.userId });
+    if (!loc) return res.status(404).json({ error: 'Location not found.' });
+    res.json({ lat: loc.lat, lon: loc.lon, updatedAt: loc.updatedAt });
+  } catch (e) {
+    console.error('[location/user/:userId]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
+
+app.listen(CFG.PORT, () => console.log(`[location] Running on :${CFG.PORT}`));

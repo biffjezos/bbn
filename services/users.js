@@ -1,33 +1,55 @@
 // ============================================================
 // bOOmbOOm.NOW! — users.js
-// Handles: get profile, update profile, delete account.
-// Opens its own MongoDB connection via MONGO_URI.
+// Standalone service. Profile get, update, delete account.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  MONGO_URI: process.env.MONGO_URI || '',
-  DB_NAME:   process.env.DB_NAME   || 'boomboom',
+  PORT:       process.env.PORT       || 3002,
+  MONGO_URI:  process.env.MONGO_URI  || '',
+  DB_NAME:    process.env.DB_NAME    || 'boomboom',
+  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
 };
 // ============================================================
 
-import { Router }      from 'express';
+import express           from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
-import { requireUser, requireAnyToken } from './auth.js';
+import jwt               from 'jsonwebtoken';
 
-// --- DB connection ------------------------------------------
-const client = new MongoClient(CFG.MONGO_URI);
-await client.connect();
-const db = client.db(CFG.DB_NAME);
+// --- DB -----------------------------------------------------
+const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[users] DB connected.');
 
-// --- Routes -------------------------------------------------
-export const router = Router();
+// --- Express ------------------------------------------------
+const app = express();
+app.use(express.json({ limit: '16kb' }));
 
-// GET /api/users/me
-router.get('/me', requireUser, async (req, res) => {
+// Verify Bearer token — registered users only for all user routes
+function verifyToken(req, res, next, requireRegistered = false) {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'No token provided.' });
+
+  try {
+    const payload = jwt.verify(token, CFG.JWT_SECRET);
+    if (requireRegistered && payload.role !== 'user')
+      return res.status(403).json({ error: 'Registered account required.' });
+    req.auth = payload;
+    next();
+  } catch (e) {
+    res.status(401).json({ error: 'Token invalid or expired.' });
+  }
+}
+
+const requireUser = (req, res, next) => verifyToken(req, res, next, true);
+const requireAny  = (req, res, next) => verifyToken(req, res, next, false);
+
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// GET /users/me
+app.get('/users/me', requireUser, async (req, res) => {
   try {
     const user = await db.collection('users').findOne(
       { _id: new ObjectId(req.auth.sub) },
@@ -41,8 +63,8 @@ router.get('/me', requireUser, async (req, res) => {
   }
 });
 
-// PUT /api/users/me
-router.put('/me', requireUser, async (req, res) => {
+// PUT /users/me
+app.put('/users/me', requireUser, async (req, res) => {
   try {
     const allowed = ['nickname', 'age', 'sex'];
     const update  = Object.fromEntries(
@@ -63,8 +85,8 @@ router.put('/me', requireUser, async (req, res) => {
   }
 });
 
-// DELETE /api/users/me — removes account, location, all messages
-router.delete('/me', requireUser, async (req, res) => {
+// DELETE /users/me — removes account, location, all messages
+app.delete('/users/me', requireUser, async (req, res) => {
   try {
     const id = req.auth.sub;
     await db.collection('users').deleteOne({ _id: new ObjectId(id) });
@@ -79,8 +101,8 @@ router.delete('/me', requireUser, async (req, res) => {
   }
 });
 
-// GET /api/users/:nickname/profile  — public profile for map modal
-router.get('/:nickname/profile', requireAnyToken, async (req, res) => {
+// GET /users/:nickname/profile — public profile for map modal
+app.get('/users/:nickname/profile', requireAny, async (req, res) => {
   try {
     const user = await db.collection('users').findOne(
       { nickname: req.params.nickname },
@@ -93,3 +115,7 @@ router.get('/:nickname/profile', requireAnyToken, async (req, res) => {
     res.status(500).json({ error: 'Internal error.' });
   }
 });
+
+app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
+
+app.listen(CFG.PORT, () => console.log(`[users] Running on :${CFG.PORT}`));
