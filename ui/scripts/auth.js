@@ -49,11 +49,9 @@ const Auth = (() => {
   }
 
   function generateUUID() {
-    // crypto.randomUUID() is not available in all browsers/contexts
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
-    // Fallback for Firefox < 92, older Safari, non-HTTPS contexts
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       var r = Math.random() * 16 | 0;
       var v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -73,14 +71,11 @@ const Auth = (() => {
   // ---- Countdown display -----------------------------------
 
   function startCountdown(expiryMs) {
-    const el   = document.getElementById('guestCountdown');
+    const el    = document.getElementById('guestCountdown');
     const timer = document.getElementById('countdownTimer');
     if (!el || !timer) return;
-
     el.classList.remove('d-none');
-
     if (_countdownInterval) clearInterval(_countdownInterval);
-
     _countdownInterval = setInterval(() => {
       const remaining = expiryMs - Date.now();
       if (remaining <= 0) {
@@ -105,9 +100,7 @@ const Auth = (() => {
 
   return {
 
-    /** Called by app.js on startup */
     async init() {
-      // Check for stored registered-user token
       const stored = localStorage.getItem(STORAGE_TOKEN_KEY);
       if (stored && !isTokenExpired(stored)) {
         _token    = stored;
@@ -119,8 +112,6 @@ const Auth = (() => {
       } else if (stored) {
         clearStorage();
       }
-
-      // Issue a guest token
       await Auth.initGuest();
     },
 
@@ -128,23 +119,18 @@ const Auth = (() => {
       _guestId = getOrCreateGuestId();
       try {
         const data = await window.Api.guestAuth(_guestId);
-        _token    = data.token;
-        _isUser   = false;
+        _token       = data.token;
+        _isUser      = false;
         _guestExpiry = Date.now() + GUEST_TTL_MS;
         startCountdown(_guestExpiry);
         Auth.onGuestReady?.();
       } catch (err) {
         console.warn('[Auth] Guest token failed', err);
-        console.warn('[Auth] Error name:', err && err.name);
-        console.warn('[Auth] Error message:', err && err.message);
-        console.warn('[Auth] Error status:', err && err.status);
-        console.warn('[Auth] API_BASE:', window.BOOMBOOM_API_URL || 'not set');
         Auth.onGuestExpired?.();
       }
     },
 
     async login({ login, password }) {
-      // Pass guestId so server can delete the guest location doc immediately
       const data = await window.Api.login({ login, password, guestId: _guestId });
       _token    = data.token;
       _nickname = data.nickname;
@@ -157,7 +143,6 @@ const Auth = (() => {
     },
 
     async register(fields) {
-      // Include guestId so the server can clean up the guest location doc
       const data = await window.Api.register({ ...fields, guestId: _guestId });
       _token    = data.token;
       _nickname = data.nickname;
@@ -169,13 +154,20 @@ const Auth = (() => {
       return data;
     },
 
+    // Call this after a successful PUT /users/me so sex + nickname
+    // stay in sync in memory and localStorage without needing a re-login.
+    updateProfile(fields) {
+      if (fields.sex      !== undefined) { _sex      = fields.sex;      localStorage.setItem(STORAGE_SEX_KEY,  _sex);      }
+      if (fields.nickname !== undefined) { _nickname = fields.nickname; localStorage.setItem(STORAGE_NICK_KEY, _nickname); }
+    },
+
     logout() {
       clearStorage();
       _token    = null;
       _nickname = null;
       _sex      = null;
       _isUser   = false;
-      Auth.initGuest(); // drop back to guest
+      Auth.initGuest();
       Auth.onLogout?.();
     },
 
@@ -190,14 +182,12 @@ const Auth = (() => {
       Auth.onLogout?.();
     },
 
-    // Getters
     getToken()     { return _token; },
     getNickname()  { return _nickname; },
     getSex()       { return _sex; },
     isRegistered() { return _isUser; },
     getGuestId()   { return _guestId; },
 
-    // Event hooks — assigned by app.js
     onLogin:        null,
     onLogout:       null,
     onGuestReady:   null,
