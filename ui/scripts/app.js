@@ -203,7 +203,7 @@
     if (oc) oc.hide();
     renderConversationList();
   });
-})
+
 
   // ============================================================
   // Map pin click — show user profile modal
