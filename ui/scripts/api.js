@@ -37,11 +37,10 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-// ---- Auth --------------------------------------------------
-
 const Api = {
 
-  /** Request a guest token for a given UUID */
+  // ---- Auth -----------------------------------------------
+
   guestAuth(guestId) {
     return apiFetch('/auth/guest', {
       method: 'POST',
@@ -80,8 +79,8 @@ const Api = {
     return apiFetch('/users/me', { method: 'DELETE' });
   },
 
-  getProfile(nickname) {
-    return apiFetch(`/users/${encodeURIComponent(nickname)}/profile`);
+  getProfile(userId) {
+    return apiFetch(`/users/${encodeURIComponent(userId)}/profile`);
   },
 
   // ---- Location -------------------------------------------
@@ -134,5 +133,4 @@ const Api = {
 
 };
 
-// Expose globally (no bundler)
 window.Api = Api;

@@ -13,7 +13,6 @@ const CFG = {
   USER_SERVICE_URL: process.env.USER_SERVICE_URL || 'usr',
   LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'loc',
   MSG_SERVICE_URL:  process.env.MSG_SERVICE_URL  || 'msg',
-  FAV_SERVICE_URL:  process.env.FAV_SERVICE_URL  || 'fav',
 };
 // ============================================================
 
@@ -57,10 +56,10 @@ app.post('/api/auth/register', (req, res) => proxy(req, res, `${CFG.AUTH_SERVICE
 app.post('/api/auth/login',    (req, res) => proxy(req, res, `${CFG.AUTH_SERVICE_URL}/auth/login`));
 
 // --- Users --------------------------------------------------
-app.get   ('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
-app.put   ('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
-app.delete('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
-app.get   ('/api/users/:nickname/profile', (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.nickname}/profile`));
+app.get   ('/api/users/me',               (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.put   ('/api/users/me',               (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.delete('/api/users/me',               (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.get   ('/api/users/:userId/profile',  (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.userId}/profile`));
 
 // --- Location -----------------------------------------------
 app.put('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));
@@ -72,10 +71,10 @@ app.get   ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_S
 app.post  ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
 app.delete('/api/messages/:id',       (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.id}`));
 
-// --- Favourites ---------------------------------------------
-app.get   ('/api/favourites',         (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));
-app.post  ('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
-app.delete('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
+// --- Favourites (handled by user service) -------------------
+app.get   ('/api/favourites',         (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/favourites`));
+app.post  ('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/favourites/${req.params.userId}`));
+app.delete('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/favourites/${req.params.userId}`));
 
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));

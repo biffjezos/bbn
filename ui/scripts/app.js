@@ -93,7 +93,6 @@
 
   // ============================================================
   // Favourites cache
-  // Loaded once on login, updated optimistically on add/remove.
   // ============================================================
 
   var _favouriteIds = new Set();
@@ -249,7 +248,6 @@
     document.getElementById('profileModalIcon').textContent =
       user.isRegistered ? (iconMap[user.sex] || '👆') : '✊';
 
-    // Hide action buttons until we confirm both are registered
     var msgLink = document.getElementById('profileModalMsgLink');
     var favBtn  = document.getElementById('profileModalFavBtn');
     msgLink.classList.add('d-none');
@@ -259,7 +257,7 @@
 
     if (user.isRegistered && user.userId) {
       try {
-        var profile = await Api.getProfile(user.nickname);
+        var profile = await Api.getProfile(user.userId);
         document.getElementById('profileModalAge').textContent = profile.age || '—';
 
         if (Auth.isRegistered()) {
@@ -282,7 +280,7 @@
             btn.innerHTML = favourited
               ? '<i class="bi bi-star-fill me-1"></i>Unfavourite'
               : '<i class="bi bi-star me-1"></i>Favourite';
-            btn.classList.toggle('btn-warning',    favourited);
+            btn.classList.toggle('btn-warning',        favourited);
             btn.classList.toggle('btn-outline-warning', !favourited);
           }
 
@@ -313,7 +311,7 @@
   };
 
   // ============================================================
-  // Profile page — edit all fields including email + password
+  // Profile page
   // ============================================================
 
   async function renderProfilePage() {
