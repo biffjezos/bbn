@@ -190,26 +190,20 @@
   // Menu nav links
   // ============================================================
 
-  var profileLink = document.querySelector('a[href*="profile"]');
-  var convLink    = document.querySelector('a[href*="conversations"]');
+  document.getElementById('navProfileLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    var oc = bootstrap.Offcanvas.getInstance(document.getElementById('appMenu'));
+    if (oc) oc.hide();
+    renderProfilePage();
+  });
 
-  if (profileLink) {
-    profileLink.addEventListener('click', function(e) {
-      e.preventDefault();
-      var oc = bootstrap.Offcanvas.getInstance(document.getElementById('appMenu'));
-      if (oc) oc.hide();
-      renderProfilePage();
-    });
-  }
-
-  if (convLink) {
-    convLink.addEventListener('click', function(e) {
-      e.preventDefault();
-      var oc = bootstrap.Offcanvas.getInstance(document.getElementById('appMenu'));
-      if (oc) oc.hide();
-      renderConversationList();
-    });
-  }
+  document.getElementById('navConvLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    var oc = bootstrap.Offcanvas.getInstance(document.getElementById('appMenu'));
+    if (oc) oc.hide();
+    renderConversationList();
+  });
+})
 
   // ============================================================
   // Map pin click — show user profile modal
