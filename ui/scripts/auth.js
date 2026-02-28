@@ -144,7 +144,8 @@ const Auth = (() => {
     },
 
     async login({ login, password }) {
-      const data = await window.Api.login({ login, password });
+      // Pass guestId so server can delete the guest location doc immediately
+      const data = await window.Api.login({ login, password, guestId: _guestId });
       _token    = data.token;
       _nickname = data.nickname;
       _sex      = data.sex;

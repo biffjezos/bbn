@@ -49,15 +49,6 @@ function issueGuestToken(guestId) {
   );
 }
 
-// --- Helper: clean up guest location + session docs ---------
-async function cleanupGuest(guestId) {
-  if (!guestId || typeof guestId !== 'string') return;
-  await Promise.all([
-    db.collection('locations').deleteOne({ userId: guestId }),
-    db.collection('sessions').deleteOne({ guestId }),
-  ]);
-}
-
 // --- Express ------------------------------------------------
 const app = express();
 app.use(express.json({ limit: '16kb' }));
@@ -111,8 +102,8 @@ app.post('/auth/register', async (req, res) => {
 
     if (!email || !nickname || !password || !age || !sex)
       return res.status(400).json({ error: 'All fields required.' });
-    if (!['m', 'f'].includes(sex))
-      return res.status(400).json({ error: "sex must be 'm' or 'f'." });
+    if (!['m', 'f', 'o'].includes(sex))
+      return res.status(400).json({ error: "sex must be 'm', 'f', or 'o'." });
     if (typeof age !== 'number' || age < 18 || age > 120)
       return res.status(400).json({ error: 'Age must be 18–120.' });
     if (password.length < 8)
@@ -130,8 +121,12 @@ app.post('/auth/register', async (req, res) => {
 
     const user = { _id: result.insertedId, email, nickname, sex };
 
-    // Clean up guest location + session docs
-    await cleanupGuest(req.body.guestId);
+    // Remove guest location doc if they were browsing as guest before registering
+    const guestId = req.body.guestId;
+    if (guestId) {
+      await db.collection('locations').deleteOne({ userId: guestId });
+      await db.collection('sessions').deleteOne({ guestId });
+    }
 
     res.status(201).json({ token: issueUserToken(user), nickname, sex });
   } catch (e) {
@@ -147,7 +142,7 @@ app.post('/auth/register', async (req, res) => {
 // POST /auth/login
 app.post('/auth/login', async (req, res) => {
   try {
-    const { login, password, guestId } = req.body;
+    const { login, password } = req.body;
     if (!login || !password)
       return res.status(400).json({ error: 'login and password required.' });
 
@@ -158,9 +153,6 @@ app.post('/auth/login', async (req, res) => {
     const user = await db.collection('users').findOne(query);
     if (!user || !(await bcrypt.compare(password, user.passwordHash)))
       return res.status(401).json({ error: 'Invalid credentials.' });
-
-    // Clean up guest location + session docs so the fist icon disappears immediately
-    await cleanupGuest(guestId);
 
     res.json({ token: issueUserToken(user), nickname: user.nickname, sex: user.sex });
   } catch (e) {

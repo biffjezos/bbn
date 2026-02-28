@@ -17,15 +17,16 @@ const MapModule = (() => {
   };
 
   // Emoji icons per sex/role
-  // 👆 = pointing up (registered user, male or female)
-  // ✊ = fist (guest / unknown sex)
+  // 👆 = pointing up (registered user)  👌 = ok hand (self marker)
+  // ✊ = fist (unregistered)
   const ICONS = {
-    self_m:    { emoji: '👆', cls: 'self male'   },
-    self_f:    { emoji: '👌', cls: 'self female' },
-    self_u:    { emoji: '✊', cls: 'self guest'  },  // registered but sex unknown (fallback)
-    user_m:    { emoji: '👆', cls: 'male'        },
-    user_f:    { emoji: '👌', cls: 'female'      },
-    guest:     { emoji: '✊', cls: 'guest'       },  // guest — fist only
+    self_m:    { emoji: '👆', cls: 'self male'   },  // male self = pointing finger
+    self_f:    { emoji: '👌', cls: 'self female' },  // female self = ok hand
+    self_o:    { emoji: '🤟', cls: 'self other'  },  // other self
+    user_m:    { emoji: '👆', cls: 'male'        },  // male registered
+    user_f:    { emoji: '👌', cls: 'female'      },  // female registered
+    user_o:    { emoji: '🤟', cls: 'other'       },  // other registered
+    guest:     { emoji: '✊', cls: 'guest'       },  // guest
   };
 
   let _map         = null;
@@ -55,16 +56,14 @@ const MapModule = (() => {
 
   function iconTypeFor(isRegistered, sex) {
     if (!isRegistered) return 'guest';
-    if (sex === 'm') return 'user_m';
-    if (sex === 'f') return 'user_f';
-    return 'guest'; // registered but sex unknown — treat as guest icon
+    const s = sex === 'm' ? 'm' : sex === 'f' ? 'f' : 'o';
+    return `user_${s}`;
   }
 
   function selfIconType() {
-    const sex = window.Auth?.getSex?.();
-    if (sex === 'm') return 'self_m';
-    if (sex === 'f') return 'self_f';
-    return 'self_u';
+    const sex = window.Auth?.getSex?.() || 'o';
+    const s = sex === 'm' ? 'm' : sex === 'f' ? 'f' : 'o';
+    return `self_${s}`;
   }
 
   // ---- Status bar ------------------------------------------
