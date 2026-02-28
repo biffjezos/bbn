@@ -1,54 +1,54 @@
 /* ============================================================
    bOOmbOOm.NOW! — App Styles
-   Only what Bootstrap cannot do: map fill, Leaflet tweaks,
-   emoji markers, overlay z-index. Everything else = Bootstrap.
+   Only what Bootstrap cannot do.
    ============================================================ */
 
 /* --- Map: fill the space below the fixed navbar ------------ */
 #map {
   position: fixed;
-  top: 3.5rem;        /* matches Bootstrap's default navbar height */
+  top: 3.5rem;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 1;
 }
 
-/* Leaflet dark tile background */
 .leaflet-container { background: #111 !important; }
-
-/* Keep Leaflet zoom controls below the navbar */
 .leaflet-top { top: 4.5rem !important; }
 
 /* --- Emoji markers ----------------------------------------- */
 .bbm-marker {
-  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  font-size: 1.3rem;
   line-height: 1;
-  text-align: center;
   cursor: pointer;
   user-select: none;
+  border: 2px solid rgba(255,255,255,0.15);
 }
 
-.bbm-marker.self { font-size: 2.5rem; }
+.bbm-marker.male        { background: #1565c0; box-shadow: 0 0 8px #6ec6ff; }
+.bbm-marker.female      { background: #880e4f; box-shadow: 0 0 8px #ff6ec7; }
+.bbm-marker.guest       { background: #333;    box-shadow: 0 0 4px #555;    }
 
-/* Other users */
-.bbm-marker.male   { filter: drop-shadow(0 0 4px #6ec6ff) hue-rotate(0deg);   }
-.bbm-marker.female { filter: drop-shadow(0 0 4px #ff6ec7) hue-rotate(280deg); }
-.bbm-marker.guest  { filter: grayscale(1) drop-shadow(0 0 3px #555); }
+/* Self — brighter border to stand out */
+.bbm-marker.self        { width: 2.8rem; height: 2.8rem; font-size: 1.5rem; border: 2.5px solid rgba(255,255,255,0.5); }
+.bbm-marker.self.male   { background: #1976d2; box-shadow: 0 0 12px #6ec6ff, 0 0 24px #6ec6ff; }
+.bbm-marker.self.female { background: #c2185b; box-shadow: 0 0 12px #ff6ec7, 0 0 24px #ff6ec7; }
+.bbm-marker.self.guest  { background: #444;    box-shadow: 0 0 10px #aaa; }
 
-/* Self — stronger glow. Must come AFTER the rules above. */
-.bbm-marker.self.male   { filter: drop-shadow(0 0 6px #6ec6ff) drop-shadow(0 0 14px #6ec6ff) hue-rotate(0deg);   }
-.bbm-marker.self.female { filter: drop-shadow(0 0 6px #ff6ec7) drop-shadow(0 0 14px #ff6ec7) hue-rotate(280deg); }
-.bbm-marker.self.guest  { filter: grayscale(0.4) drop-shadow(0 0 6px #aaa); }
-
-/* --- Page overlay (profile / conversations over the map) --- */
+/* --- Page overlay ------------------------------------------ */
 #pageOverlay {
   position: fixed;
   top: 3.5rem;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1060;      /* above BS offcanvas (1045) and navbar (1050) */
+  z-index: 1060;
   background: rgba(13, 13, 13, 0.97);
   overflow-y: auto;
   display: none;
