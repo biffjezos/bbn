@@ -66,17 +66,42 @@ app.get('/users/me', requireUser, async (req, res) => {
 // PUT /users/me
 app.put('/users/me', requireUser, async (req, res) => {
   try {
-    const allowed = ['nickname', 'age', 'sex'];
-    const update  = Object.fromEntries(
-      allowed.filter(k => req.body[k] !== undefined).map(k => [k, req.body[k]])
-    );
+    const update = {};
+
+    if (req.body.nickname !== undefined) update.nickname = req.body.nickname.trim();
+    if (req.body.age      !== undefined) update.age      = parseInt(req.body.age, 10);
+    if (req.body.sex      !== undefined) update.sex      = req.body.sex;
+    if (req.body.email    !== undefined) update.email    = req.body.email.toLowerCase().trim();
+    if (req.body.password !== undefined && req.body.password.length >= 8) {
+      const bcrypt = await import('bcryptjs');
+      update.passwordHash = await bcrypt.default.hash(req.body.password, 12);
+    }
+
     if (!Object.keys(update).length)
       return res.status(400).json({ error: 'Nothing to update.' });
+
+    // Validate
+    if (update.age && (update.age < 18 || update.age > 120))
+      return res.status(400).json({ error: 'Age must be 18-120.' });
+    if (update.sex && !['m','f','o'].includes(update.sex))
+      return res.status(400).json({ error: "sex must be 'm', 'f', or 'o'." });
 
     await db.collection('users').updateOne(
       { _id: new ObjectId(req.auth.sub) },
       { $set: update }
     );
+
+    // Keep location doc in sync
+    const locUpdate = {};
+    if (update.sex)      locUpdate.sex      = update.sex;
+    if (update.nickname) locUpdate.nickname = update.nickname;
+    if (Object.keys(locUpdate).length) {
+      await db.collection('locations').updateOne(
+        { userId: req.auth.sub },
+        { $set: locUpdate }
+      );
+    }
+
     res.json({ ok: true });
   } catch (e) {
     if (e.code === 11000) return res.status(409).json({ error: 'Nickname already in use.' });

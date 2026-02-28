@@ -11,8 +11,8 @@
 // ============================================================
 const CFG = {
   PORT:             process.env.PORT       || 3001,
-  MONGO_URI:        process.env.MONGO_URI  || 'mongodb://mongo:bYLUYmlYnOvpvjzgCRTKnQlVUwGhUaFZ@mongodb.railway.internal:27017',
-  DB_NAME:          process.env.DB_NAME    || 'test',
+  MONGO_URI:        process.env.MONGO_URI  || '',
+  DB_NAME:          process.env.DB_NAME    || 'boomboom',
   JWT_SECRET:       process.env.JWT_SECRET || 'change-me-in-production',
   JWT_EXPIRY_USER:  '7d',
   JWT_EXPIRY_GUEST: '15m',
@@ -29,12 +29,8 @@ import bcrypt        from 'bcryptjs';
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[auth] DB connected.');
 
-await db.collection('users').createIndex({ email: 1 },    { unique: true, background: true });
-await db.collection('users').createIndex({ nickname: 1 }, { unique: true, background: true });
-await db.collection('sessions').createIndex(
-  { createdAt: 1 },
-  { expireAfterSeconds: CFG.GUEST_TTL_SEC, background: true }
-);
+// Indexes should be created manually in MongoDB Atlas or via a one-time migration script.
+// Removed from startup to avoid disk space issues on low-storage instances.
 
 // --- JWT helpers (duplicated in each service — same secret) -
 function issueUserToken(user) {
@@ -124,6 +120,14 @@ app.post('/auth/register', async (req, res) => {
     });
 
     const user = { _id: result.insertedId, email, nickname, sex };
+
+    // Remove guest location doc if they were browsing as guest before registering
+    const guestId = req.body.guestId;
+    if (guestId) {
+      await db.collection('locations').deleteOne({ userId: guestId });
+      await db.collection('sessions').deleteOne({ guestId });
+    }
+
     res.status(201).json({ token: issueUserToken(user), nickname, sex });
   } catch (e) {
     if (e.code === 11000) {

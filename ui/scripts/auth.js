@@ -156,7 +156,8 @@ const Auth = (() => {
     },
 
     async register(fields) {
-      const data = await window.Api.register(fields);
+      // Include guestId so the server can clean up the guest location doc
+      const data = await window.Api.register({ ...fields, guestId: _guestId });
       _token    = data.token;
       _nickname = data.nickname;
       _sex      = data.sex;

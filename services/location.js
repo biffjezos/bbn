@@ -30,10 +30,8 @@ import jwt               from 'jsonwebtoken';
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[location] DB connected.');
 
-await db.collection('locations').createIndex(
-  { updatedAt: 1 },
-  { expireAfterSeconds: CFG.LOCATION_TTL_SEC, background: true }
-);
+// Index removed from startup — create manually in MongoDB if needed:
+// db.locations.createIndex({ updatedAt: 1 }, { expireAfterSeconds: 600 })
 
 // --- Haversine ----------------------------------------------
 const EARTH_RADIUS_M = 6_371_000;
@@ -152,7 +150,11 @@ app.get('/location/nearby', requireAny, async (req, res) => {
     const callerId     = req.auth.sub;
     const isRegistered = req.auth.role === 'user';
 
-    const all      = await db.collection('locations').find({ userId: { $ne: callerId } }).toArray();
+    const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
+    const all      = await db.collection('locations').find({
+      userId:    { $ne: callerId },
+      updatedAt: { $gt: cutoff },
+    }).toArray();
     const inRadius = filterByRadius({ lat, lon }, all, CFG.VICINITY_RADIUS_M);
     const maxCount = isRegistered ? CFG.MAX_VISIBLE_REGISTERED : CFG.MAX_VISIBLE_GUESTS;
     const visible  = applyStrategy(inRadius, maxCount, CFG.VISIBLE_SELECTION_STRATEGY);
