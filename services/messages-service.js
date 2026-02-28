@@ -16,7 +16,7 @@ const CFG = {
 
   MESSAGE_MAX_CHARS:   144,
   MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 hours
-  MESSAGE_PROXIMITY_M: 100,
+  MESSAGE_PROXIMITY_M: Infinity,              // no proximity restriction
 };
 // ============================================================
 
@@ -76,31 +76,58 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// --- Live nickname resolution --------------------------------
+// Always reflects current nicknames; falls back to the name
+// stored at send-time for deleted accounts.
+async function resolveNicknames(messages, myId, myNickname) {
+  const partnerIds = [...new Set(
+    messages.map(m => m.fromUserId === myId ? m.toUserId : m.fromUserId)
+  )];
+
+  const partners = partnerIds.length
+    ? await db.collection('users')
+        .find({ _id: { $in: partnerIds.map(id => new ObjectId(id)) } })
+        .project({ _id: 1, nickname: 1 })
+        .toArray()
+    : [];
+
+  const live = Object.fromEntries(partners.map(u => [u._id.toString(), u.nickname]));
+
+  return messages.map(m => ({
+    ...m,
+    fromNickname: m.fromUserId === myId
+      ? myNickname
+      : (live[m.fromUserId] ?? m.fromNickname),
+    toNickname: m.toUserId === myId
+      ? myNickname
+      : (live[m.toUserId] ?? m.toNickname),
+  }));
+}
+
 // GET /messages — all active conversations for logged-in user
 app.get('/messages', verifyToken, async (req, res) => {
   try {
     const messages = await db.collection('messages')
-      .find({
-        $or: [{ fromUserId: req.auth.sub }, { toUserId: req.auth.sub }],
-        expiresAt: { $gt: new Date() },
-      })
+      .find({ $or: [{ fromUserId: req.auth.sub }, { toUserId: req.auth.sub }] })
       .sort({ sentAt: -1 })
       .toArray();
-    res.json({ messages });
+
+    const patched = await resolveNicknames(messages, req.auth.sub, req.auth.nickname);
+    res.json({ messages: patched });
   } catch (e) {
     console.error('[messages GET]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
 });
 
-// GET /messages/:nickname — thread with one user
-app.get('/messages/:nickname', verifyToken, async (req, res) => {
+// GET /messages/:userId — thread with one user
+app.get('/messages/:userId', verifyToken, async (req, res) => {
   try {
-    const other = await db.collection('users').findOne({ nickname: req.params.nickname });
-    if (!other) return res.status(404).json({ error: 'User not found.' });
-
     const me      = req.auth.sub;
-    const otherId = other._id.toString();
+    const otherId = req.params.userId;
+
+    if (me === otherId)
+      return res.status(400).json({ error: 'Cannot view a thread with yourself.' });
 
     const messages = await db.collection('messages')
       .find({
@@ -108,20 +135,20 @@ app.get('/messages/:nickname', verifyToken, async (req, res) => {
           { fromUserId: me,      toUserId: otherId },
           { fromUserId: otherId, toUserId: me },
         ],
-        expiresAt: { $gt: new Date() },
       })
       .sort({ sentAt: 1 })
       .toArray();
 
-    res.json({ messages });
+    const patched = await resolveNicknames(messages, me, req.auth.nickname);
+    res.json({ messages: patched });
   } catch (e) {
-    console.error('[messages/:nickname GET]', e);
+    console.error('[messages/:userId GET]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
 });
 
-// POST /messages/:nickname — send message, proximity enforced
-app.post('/messages/:nickname', verifyToken, async (req, res) => {
+// POST /messages/:userId — send message, proximity enforced
+app.post('/messages/:userId', verifyToken, async (req, res) => {
   try {
     const { text } = req.body;
     if (!text || typeof text !== 'string' || !text.trim())
@@ -130,12 +157,23 @@ app.post('/messages/:nickname', verifyToken, async (req, res) => {
       return res.status(400).json({ error: `Message exceeds ${CFG.MESSAGE_MAX_CHARS} characters.` });
 
     const fromId = req.auth.sub;
-    const toUser = await db.collection('users').findOne({ nickname: req.params.nickname });
-    if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
+    const toId   = req.params.userId;
 
-    const toId = toUser._id.toString();
     if (fromId === toId)
       return res.status(400).json({ error: 'Cannot message yourself.' });
+
+    // Look up recipient to get their nickname for storage
+    let toNickname;
+    try {
+      const toUser = await db.collection('users').findOne(
+        { _id: new ObjectId(toId) },
+        { projection: { nickname: 1 } }
+      );
+      if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
+      toNickname = toUser.nickname;
+    } catch {
+      return res.status(400).json({ error: 'Invalid recipient id.' });
+    }
 
     // Call location.js to get both users' positions
     const [fromLoc, toLoc] = await Promise.all([
@@ -143,24 +181,29 @@ app.post('/messages/:nickname', verifyToken, async (req, res) => {
       getLocation(toId,   req.token),
     ]);
 
-    if (!fromLoc || !toLoc)
-      return res.status(403).json({ error: 'Location required for both parties to message.' });
+    if (CFG.MESSAGE_PROXIMITY_M !== Infinity) {
+      if (!fromLoc || !toLoc)
+        return res.status(403).json({ error: 'Location required for both parties to message.' });
 
-    const dist = haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon);
-    if (dist > CFG.MESSAGE_PROXIMITY_M)
-      return res.status(403).json({
-        error: `Both users must be within ${CFG.MESSAGE_PROXIMITY_M}m to message.`,
-        distanceM: Math.round(dist),
-      });
+      const dist = haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon);
+      if (dist > CFG.MESSAGE_PROXIMITY_M)
+        return res.status(403).json({
+          error: `Both users must be within ${CFG.MESSAGE_PROXIMITY_M}m to message.`,
+          distanceM: Math.round(dist),
+        });
+    }
 
     const now       = new Date();
     const expiresAt = new Date(now.getTime() + CFG.MESSAGE_TTL_MS);
 
+    // Store nicknames at insert time so the conversation list never needs a join
     const result = await db.collection('messages').insertOne({
-      fromUserId: fromId,
-      toUserId:   toId,
-      text:       text.trim(),
-      sentAt:     now,
+      fromUserId:   fromId,
+      fromNickname: req.auth.nickname,
+      toUserId:     toId,
+      toNickname,
+      text:         text.trim(),
+      sentAt:       now,
       expiresAt,
     });
 
