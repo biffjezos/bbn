@@ -48,10 +48,23 @@ const Auth = (() => {
     localStorage.removeItem(STORAGE_SEX_KEY);
   }
 
+  function generateUUID() {
+    // crypto.randomUUID() is not available in all browsers/contexts
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback for Firefox < 92, older Safari, non-HTTPS contexts
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0;
+      var v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
   function getOrCreateGuestId() {
     let id = localStorage.getItem(STORAGE_GUEST_KEY);
     if (!id) {
-      id = crypto.randomUUID();
+      id = generateUUID();
       localStorage.setItem(STORAGE_GUEST_KEY, id);
     }
     return id;

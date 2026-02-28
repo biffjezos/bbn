@@ -11,23 +11,41 @@
   --bbm-nav-h:    56px;
 }
 
+/* --- Cross-browser reset ----------------------------------- */
+*, *::before, *::after {
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
 /* --- Base -------------------------------------------------- */
-html, body {
+html {
   height: 100%;
+  height: -webkit-fill-available;
+}
+
+body {
+  min-height: 100%;
+  min-height: -webkit-fill-available;
   margin: 0;
   padding: 0;
   background: var(--bbm-bg);
   color: #f0f0f0;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* --- Map fills viewport below navbar ----------------------- */
 #map {
   position: fixed;
   top: var(--bbm-nav-h);
+  top: calc(var(--bbm-nav-h));
   left: 0;
   right: 0;
   bottom: 0;
+  width: 100%;
+  height: calc(100% - var(--bbm-nav-h));
+  height: calc(100vh - var(--bbm-nav-h));
   z-index: 1;
   background: #111;
 }
@@ -69,6 +87,9 @@ html, body {
   /* Drop shadow so icons pop on satellite tiles */
   filter: drop-shadow(0 1px 3px rgba(0,0,0,0.7));
   cursor: pointer;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
   user-select: none;
 }
 
@@ -109,6 +130,7 @@ html, body {
   padding: 1rem;
   margin-bottom: 0.75rem;
   cursor: pointer;
+  -webkit-transition: border-color 0.15s;
   transition: border-color 0.15s;
 }
 

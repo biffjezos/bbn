@@ -81,16 +81,28 @@ const MapModule = (() => {
 
   function initMap(lat, lon) {
     if (_map) return;
+
+    // Ensure map container has explicit dimensions for Firefox
+    var container = document.getElementById('map');
+    if (container) {
+      container.style.width  = '100%';
+      container.style.height = 'calc(100vh - 56px)';
+    }
+
     _map = L.map('map', {
       center: [lat, lon],
       zoom: CFG.DEFAULT_ZOOM,
       zoomControl: true,
       attributionControl: true,
     });
+
     L.tileLayer(CFG.TILE_URL, {
       attribution: CFG.TILE_ATTR,
       maxZoom: 19,
     }).addTo(_map);
+
+    // Force Leaflet to recalculate size after init (fixes Firefox rendering)
+    setTimeout(function() { _map.invalidateSize(); }, 100);
   }
 
   // Load map immediately with a random world location.
