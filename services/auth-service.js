@@ -64,9 +64,8 @@ app.use(express.json({ limit: '16kb' }));
 
 // Verify Bearer token on every request
 app.use((req, res, next) => {
-  // Guest endpoint doesn't need a token
-  if (req.path === '/auth/guest' && req.method === 'POST') return next();
-  if (req.path === '/auth/login' && req.method === 'POST') return next();
+  if (req.path === '/auth/guest'    && req.method === 'POST') return next();
+  if (req.path === '/auth/login'    && req.method === 'POST') return next();
   if (req.path === '/auth/register' && req.method === 'POST') return next();
   if (req.path === '/health') return next();
 

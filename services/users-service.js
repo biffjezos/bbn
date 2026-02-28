@@ -1,6 +1,7 @@
 // ============================================================
 // bOOmbOOm.NOW! — users-service.js
-// Handles user profile and favourites.
+// Handles: profile get/update/delete + favourites (merged to
+// avoid spawning a second Railway instance).
 // ============================================================
 
 // ============================================================
@@ -15,28 +16,27 @@ const CFG = {
 };
 // ============================================================
 
-import express                   from 'express';
+import express           from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
-import jwt                       from 'jsonwebtoken';
+import jwt               from 'jsonwebtoken';
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[users] DB connected.');
 
-// Unique index — one favourite entry per owner+target pair
-await db.collection('favourites').createIndex(
-  { ownerUserId: 1, favouriteUserId: 1 },
-  { unique: true, background: true }
-);
+// Note: create this index manually in MongoDB if needed:
+// db.favourites.createIndex({ ownerUserId: 1, favouriteUserId: 1 }, { unique: true })
 
 // --- Express ------------------------------------------------
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
+// Verify Bearer token
 function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided.' });
+
   try {
     const payload = jwt.verify(token, CFG.JWT_SECRET);
     if (requireRegistered && payload.role !== 'user')
@@ -54,7 +54,7 @@ const requireAny  = (req, res, next) => verifyToken(req, res, next, false);
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // ============================================================
-// Users
+// USER PROFILE ROUTES
 // ============================================================
 
 // GET /users/me
@@ -89,10 +89,11 @@ app.put('/users/me', requireUser, async (req, res) => {
     if (!Object.keys(update).length)
       return res.status(400).json({ error: 'Nothing to update.' });
 
+    // Validate
     if (update.age && (update.age < 18 || update.age > 120))
       return res.status(400).json({ error: 'Age must be 18-120.' });
-    if (update.sex && !['m', 'f', 'o'].includes(update.sex))
-      return res.status(400).json({ error: "sex must be 'm', 'f', or 'o'." });
+    if (update.sex && !['m', 'f'].includes(update.sex))
+      return res.status(400).json({ error: "sex must be 'm' or 'f'." });
 
     await db.collection('users').updateOne(
       { _id: new ObjectId(req.auth.sub) },
@@ -118,16 +119,18 @@ app.put('/users/me', requireUser, async (req, res) => {
   }
 });
 
-// DELETE /users/me — removes account, location, messages, and favourites
+// DELETE /users/me — removes account, location, all messages, all favourites
 app.delete('/users/me', requireUser, async (req, res) => {
   try {
     const id = req.auth.sub;
-    await Promise.all([
-      db.collection('users').deleteOne({ _id: new ObjectId(id) }),
-      db.collection('locations').deleteOne({ userId: id }),
-      db.collection('messages').deleteMany({ $or: [{ fromUserId: id }, { toUserId: id }] }),
-      db.collection('favourites').deleteMany({ $or: [{ ownerUserId: id }, { favouriteUserId: id }] }),
-    ]);
+    await db.collection('users').deleteOne({ _id: new ObjectId(id) });
+    await db.collection('locations').deleteOne({ userId: id });
+    await db.collection('messages').deleteMany({
+      $or: [{ fromUserId: id }, { toUserId: id }],
+    });
+    await db.collection('favourites').deleteMany({
+      $or: [{ ownerUserId: id }, { favouriteUserId: id }],
+    });
     res.json({ ok: true });
   } catch (e) {
     console.error('[users/me DELETE]', e);
@@ -135,27 +138,23 @@ app.delete('/users/me', requireUser, async (req, res) => {
   }
 });
 
-// GET /users/:userId/profile — public profile for map modal
-app.get('/users/:userId/profile', requireAny, async (req, res) => {
+// GET /users/:nickname/profile — public profile for map modal
+app.get('/users/:nickname/profile', requireAny, async (req, res) => {
   try {
-    let oid;
-    try   { oid = new ObjectId(req.params.userId); }
-    catch { return res.status(400).json({ error: 'Invalid user id.' }); }
-
     const user = await db.collection('users').findOne(
-      { _id: oid },
+      { nickname: req.params.nickname },
       { projection: { nickname: 1, age: 1, sex: 1, _id: 0 } }
     );
     if (!user) return res.status(404).json({ error: 'User not found.' });
     res.json(user);
   } catch (e) {
-    console.error('[users/:userId/profile]', e);
+    console.error('[users/:nickname/profile]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
 });
 
 // ============================================================
-// Favourites
+// FAVOURITES ROUTES
 // ============================================================
 
 // GET /favourites — list all favourites with live nickname + online status
@@ -170,6 +169,7 @@ app.get('/favourites', requireUser, async (req, res) => {
 
     const ids = entries.map(e => new ObjectId(e.favouriteUserId));
 
+    // Live nicknames from users collection
     const users = await db.collection('users')
       .find({ _id: { $in: ids } })
       .project({ _id: 1, nickname: 1, sex: 1 })
@@ -177,7 +177,8 @@ app.get('/favourites', requireUser, async (req, res) => {
 
     const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
 
-    const cutoff    = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
+    // Online status — has a location doc updated within TTL
+    const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
     const locations = await db.collection('locations')
       .find({ userId: { $in: entries.map(e => e.favouriteUserId) }, updatedAt: { $gt: cutoff } })
       .project({ userId: 1 })
@@ -185,6 +186,7 @@ app.get('/favourites', requireUser, async (req, res) => {
 
     const onlineSet = new Set(locations.map(l => l.userId));
 
+    // Build response — silently drop entries whose account no longer exists
     const favourites = entries
       .filter(e => userMap[e.favouriteUserId])
       .map(e => {
@@ -214,6 +216,7 @@ app.post('/favourites/:userId', requireUser, async (req, res) => {
     if (ownerUserId === favouriteUserId)
       return res.status(400).json({ error: 'Cannot favourite yourself.' });
 
+    // Validate target exists
     let target;
     try {
       target = await db.collection('users').findOne(

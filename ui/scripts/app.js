@@ -92,25 +92,6 @@
   }
 
   // ============================================================
-  // Favourites cache
-  // ============================================================
-
-  var _favouriteIds = new Set();
-
-  async function loadFavouriteCache() {
-    try {
-      var data = await Api.getFavourites();
-      _favouriteIds = new Set((data.favourites || []).map(function(f) { return f.userId; }));
-    } catch(e) {
-      console.warn('[Favs] cache load failed', e);
-    }
-  }
-
-  function isFavourite(userId) {
-    return _favouriteIds.has(userId);
-  }
-
-  // ============================================================
   // Auth event hooks
   // ============================================================
 
@@ -120,14 +101,12 @@
     document.getElementById('menuNickname').textContent = data.nickname;
     MapModule.refreshSelfIcon();
     MapModule.startNearbyPoll();
-    loadFavouriteCache();
   };
 
   Auth.onLogout = function() {
     document.getElementById('guestMenu').classList.remove('d-none');
     document.getElementById('userMenu').classList.add('d-none');
     document.getElementById('menuNickname').textContent = '—';
-    _favouriteIds = new Set();
     MapModule.refreshSelfIcon();
     hideOverlay();
   };
@@ -225,13 +204,6 @@
     renderConversationList();
   });
 
-  document.getElementById('navFavsLink').addEventListener('click', function(e) {
-    e.preventDefault();
-    var oc = bootstrap.Offcanvas.getInstance(document.getElementById('appMenu'));
-    if (oc) oc.hide();
-    renderFavouritesPage();
-  });
-
   // ============================================================
   // Map pin click — show user profile modal
   // ============================================================
@@ -248,58 +220,26 @@
     document.getElementById('profileModalIcon').textContent =
       user.isRegistered ? (iconMap[user.sex] || '👆') : '✊';
 
+    // Hide message link until we confirm both are registered
     var msgLink = document.getElementById('profileModalMsgLink');
-    var favBtn  = document.getElementById('profileModalFavBtn');
     msgLink.classList.add('d-none');
-    favBtn.classList.add('d-none');
 
     modal.show();
 
-    if (user.isRegistered && user.userId) {
+    if (user.isRegistered && user.nickname) {
       try {
-        var profile = await Api.getProfile(user.userId);
+        var profile = await Api.getProfile(user.nickname);
         document.getElementById('profileModalAge').textContent = profile.age || '—';
 
         if (Auth.isRegistered()) {
-          // --- Message link ---
-          var newMsgLink = msgLink.cloneNode(true);
-          msgLink.parentNode.replaceChild(newMsgLink, msgLink);
-          newMsgLink.classList.remove('d-none');
-          newMsgLink.addEventListener('click', function(e) {
+          // Clone to remove old event listeners
+          var newLink = msgLink.cloneNode(true);
+          msgLink.parentNode.replaceChild(newLink, msgLink);
+          newLink.classList.remove('d-none');
+          newLink.addEventListener('click', function(e) {
             e.preventDefault();
             modal.hide();
-            renderThread(user.userId, user.nickname);
-          });
-
-          // --- Favourite button ---
-          var newFavBtn = favBtn.cloneNode(true);
-          favBtn.parentNode.replaceChild(newFavBtn, favBtn);
-          newFavBtn.classList.remove('d-none');
-
-          function renderFavBtn(btn, favourited) {
-            btn.innerHTML = favourited
-              ? '<i class="bi bi-star-fill me-1"></i>Unfavourite'
-              : '<i class="bi bi-star me-1"></i>Favourite';
-            btn.classList.toggle('btn-warning',        favourited);
-            btn.classList.toggle('btn-outline-warning', !favourited);
-          }
-
-          renderFavBtn(newFavBtn, isFavourite(user.userId));
-
-          newFavBtn.addEventListener('click', async function() {
-            var currently = isFavourite(user.userId);
-            try {
-              if (currently) {
-                await Api.removeFavourite(user.userId);
-                _favouriteIds.delete(user.userId);
-              } else {
-                await Api.addFavourite(user.userId);
-                _favouriteIds.add(user.userId);
-              }
-              renderFavBtn(newFavBtn, !currently);
-            } catch(err) {
-              console.warn('[Favs] toggle error', err.message);
-            }
+            renderThread(user.nickname);
           });
         }
       } catch(e) {
@@ -311,7 +251,7 @@
   };
 
   // ============================================================
-  // Profile page
+  // Profile page — edit all fields including email + password
   // ============================================================
 
   async function renderProfilePage() {
@@ -365,7 +305,6 @@
             <select class="form-select bg-black text-light border-secondary" id="pSex">
               <option value="m" ${me.sex==='m'?'selected':''}>Male</option>
               <option value="f" ${me.sex==='f'?'selected':''}>Female</option>
-              <option value="o" ${me.sex==='o'?'selected':''}>Other</option>
             </select>
           </div>
         </div>
@@ -385,6 +324,8 @@
         var msgEl = document.getElementById('profileMsg');
         try {
           await Api.updateMe(update);
+          // Keep in-memory auth state and localStorage in sync
+          Auth.updateProfile({ nickname: update.nickname, sex: update.sex });
           msgEl.className = 'alert alert-success mb-3';
           msgEl.textContent = 'Saved!';
           msgEl.classList.remove('d-none');
@@ -398,90 +339,6 @@
 
     } catch (err) {
       document.getElementById('profileContent').innerHTML =
-        '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
-    }
-  }
-
-  // ============================================================
-  // Favourites page
-  // ============================================================
-
-  async function renderFavouritesPage() {
-    if (!Auth.isRegistered()) {
-      getModal('loginModal').show();
-      return;
-    }
-
-    showOverlay(`
-      <div class="container py-3" style="max-width:580px">
-        <div class="d-flex align-items-center mb-4">
-          <button class="btn btn-link text-light p-0 me-3" id="backBtn">
-            <i class="bi bi-arrow-left fs-5"></i>
-          </button>
-          <h4 class="mb-0 text-warning">Favourites</h4>
-        </div>
-        <div id="favList"><p class="text-secondary">Loading…</p></div>
-      </div>`);
-
-    document.getElementById('backBtn').addEventListener('click', hideOverlay);
-
-    try {
-      var data = await Api.getFavourites();
-      var favs = data.favourites || [];
-
-      if (favs.length === 0) {
-        document.getElementById('favList').innerHTML =
-          '<p class="text-secondary">No favourites yet.<br>Tap someone\'s icon on the map and star them.</p>';
-        return;
-      }
-
-      var html = favs.map(function(f) {
-        var onlineBadge = f.online
-          ? '<span class="badge bg-success ms-2">online</span>'
-          : '<span class="badge bg-secondary ms-2">offline</span>';
-        return '<div class="conversation-card d-flex justify-content-between align-items-center"' +
-          ' data-userid="' + escHtml(f.userId) + '" data-nickname="' + escHtml(f.nickname) + '">' +
-          '<div>' +
-          '<strong>' + escHtml(f.nickname) + '</strong>' + onlineBadge +
-          '<div class="text-secondary mt-1" style="font-size:0.8rem">added ' + timeAgo(f.addedAt) + '</div>' +
-          '</div>' +
-          '<div class="d-flex gap-2">' +
-          '<button class="btn btn-sm btn-outline-warning fav-msg-btn" data-userid="' + escHtml(f.userId) + '" data-nickname="' + escHtml(f.nickname) + '">' +
-          '<i class="bi bi-chat-dots"></i></button>' +
-          '<button class="btn btn-sm btn-outline-danger fav-remove-btn" data-userid="' + escHtml(f.userId) + '">' +
-          '<i class="bi bi-star-fill"></i></button>' +
-          '</div>' +
-          '</div>';
-      }).join('');
-
-      document.getElementById('favList').innerHTML = html;
-
-      document.querySelectorAll('.fav-msg-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          renderThread(btn.dataset.userid, btn.dataset.nickname);
-        });
-      });
-
-      document.querySelectorAll('.fav-remove-btn').forEach(function(btn) {
-        btn.addEventListener('click', async function(e) {
-          e.stopPropagation();
-          try {
-            await Api.removeFavourite(btn.dataset.userid);
-            _favouriteIds.delete(btn.dataset.userid);
-            btn.closest('.conversation-card').remove();
-            if (!document.querySelector('.conversation-card')) {
-              document.getElementById('favList').innerHTML =
-                '<p class="text-secondary">No favourites yet.<br>Tap someone\'s icon on the map and star them.</p>';
-            }
-          } catch(err) {
-            console.warn('[Favs] remove error', err.message);
-          }
-        });
-      });
-
-    } catch (err) {
-      document.getElementById('favList').innerHTML =
         '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
     }
   }
@@ -523,18 +380,18 @@
       var threads = {};
 
       msgs.forEach(function(m) {
-        var isOutgoing  = m.fromUserId === myId;
-        var partnerId   = isOutgoing ? m.toUserId   : m.fromUserId;
-        var partnerNick = isOutgoing ? m.toNickname : m.fromNickname;
+        var isOutgoing   = m.fromUserId === myId;
+        var partnerNick  = isOutgoing ? m.toNickname   : m.fromNickname;
+        var partnerId    = isOutgoing ? m.toUserId     : m.fromUserId;
+        var key          = partnerNick || partnerId;
 
-        if (!threads[partnerId] || new Date(m.sentAt) > new Date(threads[partnerId].latest.sentAt)) {
-          threads[partnerId] = { userId: partnerId, nickname: partnerNick || partnerId, latest: m };
+        if (!threads[key] || new Date(m.sentAt) > new Date(threads[key].latest.sentAt)) {
+          threads[key] = { nickname: partnerNick || key, latest: m };
         }
       });
 
       var html = Object.values(threads).map(function(t) {
-        return '<div class="conversation-card" data-userid="' + escHtml(t.userId) +
-          '" data-nickname="' + escHtml(t.nickname) + '">' +
+        return '<div class="conversation-card" data-nickname="' + escHtml(t.nickname) + '">' +
           '<div class="d-flex justify-content-between align-items-center">' +
           '<strong>' + escHtml(t.nickname) + '</strong>' +
           '<small class="text-secondary">' + timeAgo(t.latest.sentAt) + '</small></div>' +
@@ -546,7 +403,7 @@
 
       document.querySelectorAll('.conversation-card').forEach(function(card) {
         card.addEventListener('click', function() {
-          renderThread(card.dataset.userid, card.dataset.nickname);
+          renderThread(card.dataset.nickname);
         });
       });
 
@@ -560,7 +417,7 @@
   // Message thread
   // ============================================================
 
-  async function renderThread(userId, displayName) {
+  async function renderThread(nickname) {
     if (!Auth.isRegistered()) {
       getModal('loginModal').show();
       return;
@@ -573,7 +430,7 @@
           <button class="btn btn-link text-light p-0 me-3" id="backBtn">
             <i class="bi bi-arrow-left fs-5"></i>
           </button>
-          <h5 class="mb-0 text-warning">${escHtml(displayName || userId)}</h5>
+          <h5 class="mb-0 text-warning">${escHtml(nickname)}</h5>
         </div>
         <div id="threadMsgs"
              class="flex-grow-1 d-flex flex-column gap-2 overflow-auto pb-2"
@@ -624,7 +481,7 @@
       if (errEl) errEl.classList.add('d-none');
 
       try {
-        await Api.sendMessage(userId, text);
+        await Api.sendMessage(nickname, text);
         input.value = '';
         var counter = document.getElementById('charCount');
         if (counter) counter.textContent = '144';
@@ -641,7 +498,7 @@
 
     async function loadMessages() {
       try {
-        var data      = await Api.getConversation(userId);
+        var data      = await Api.getConversation(nickname);
         var msgs      = data.messages || [];
         var container = document.getElementById('threadMsgs');
         if (!container) return;

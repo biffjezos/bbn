@@ -37,10 +37,11 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
+// ---- Auth --------------------------------------------------
+
 const Api = {
 
-  // ---- Auth -----------------------------------------------
-
+  /** Request a guest token for a given UUID */
   guestAuth(guestId) {
     return apiFetch('/auth/guest', {
       method: 'POST',
@@ -79,8 +80,26 @@ const Api = {
     return apiFetch('/users/me', { method: 'DELETE' });
   },
 
-  getProfile(userId) {
-    return apiFetch(`/users/${encodeURIComponent(userId)}/profile`);
+  getProfile(nickname) {
+    return apiFetch(`/users/${encodeURIComponent(nickname)}/profile`);
+  },
+
+  // ---- Favourites -----------------------------------------
+
+  getFavourites() {
+    return apiFetch('/favourites');
+  },
+
+  addFavourite(userId) {
+    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+    });
+  },
+
+  removeFavourite(userId) {
+    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    });
   },
 
   // ---- Location -------------------------------------------
@@ -102,12 +121,12 @@ const Api = {
     return apiFetch('/messages');
   },
 
-  getConversation(userId) {
-    return apiFetch(`/messages/${encodeURIComponent(userId)}`);
+  getConversation(nickname) {
+    return apiFetch(`/messages/${encodeURIComponent(nickname)}`);
   },
 
-  sendMessage(userId, text) {
-    return apiFetch(`/messages/${encodeURIComponent(userId)}`, {
+  sendMessage(nickname, text) {
+    return apiFetch(`/messages/${encodeURIComponent(nickname)}`, {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
@@ -116,21 +135,7 @@ const Api = {
   deleteMessage(id) {
     return apiFetch(`/messages/${id}`, { method: 'DELETE' });
   },
-
-  // ---- Favourites -----------------------------------------
-
-  getFavourites() {
-    return apiFetch('/favourites');
-  },
-
-  addFavourite(userId) {
-    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'POST' });
-  },
-
-  removeFavourite(userId) {
-    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'DELETE' });
-  },
-
 };
 
+// Expose globally (no bundler)
 window.Api = Api;
