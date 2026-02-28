@@ -103,12 +103,12 @@ const Api = {
     return apiFetch('/messages');
   },
 
-  getConversation(nickname) {
-    return apiFetch(`/messages/${encodeURIComponent(nickname)}`);
+  getConversation(userId) {
+    return apiFetch(`/messages/${encodeURIComponent(userId)}`);
   },
 
-  sendMessage(nickname, text) {
-    return apiFetch(`/messages/${encodeURIComponent(nickname)}`, {
+  sendMessage(userId, text) {
+    return apiFetch(`/messages/${encodeURIComponent(userId)}`, {
       method: 'POST',
       body: JSON.stringify({ text }),
     });
@@ -117,6 +117,21 @@ const Api = {
   deleteMessage(id) {
     return apiFetch(`/messages/${id}`, { method: 'DELETE' });
   },
+
+  // ---- Favourites -----------------------------------------
+
+  getFavourites() {
+    return apiFetch('/favourites');
+  },
+
+  addFavourite(userId) {
+    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'POST' });
+  },
+
+  removeFavourite(userId) {
+    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+  },
+
 };
 
 // Expose globally (no bundler)

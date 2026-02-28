@@ -13,6 +13,7 @@ const CFG = {
   USER_SERVICE_URL: process.env.USER_SERVICE_URL || 'usr',
   LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'loc',
   MSG_SERVICE_URL:  process.env.MSG_SERVICE_URL  || 'msg',
+  FAV_SERVICE_URL:  process.env.FAV_SERVICE_URL  || 'fav',
 };
 // ============================================================
 
@@ -66,10 +67,15 @@ app.put('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE
 app.get('/api/location/nearby', (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location/nearby?lat=${req.query.lat}&lon=${req.query.lon}`));
 
 // --- Messages -----------------------------------------------
-app.get   ('/api/messages',             (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages`));
-app.get   ('/api/messages/:nickname',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.nickname}`));
-app.post  ('/api/messages/:nickname',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.nickname}`));
-app.delete('/api/messages/:id',         (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.id}`));
+app.get   ('/api/messages',           (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages`));
+app.get   ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
+app.post  ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
+app.delete('/api/messages/:id',       (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.id}`));
+
+// --- Favourites ---------------------------------------------
+app.get   ('/api/favourites',         (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));
+app.post  ('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
+app.delete('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
 
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
