@@ -102,12 +102,7 @@ body {
 .bbm-marker.female { filter: drop-shadow(0 0 4px var(--bbm-pink))   hue-rotate(280deg); }
 .bbm-marker.other  { filter: drop-shadow(0 0 4px var(--bbm-yellow)) hue-rotate(50deg);  }
 .bbm-marker.guest  { filter: drop-shadow(0 0 3px #555) grayscale(1); }
-
-/* Self markers — same sex colours but stronger glow to stand out */
-.bbm-marker.self.male   { filter: drop-shadow(0 0 8px var(--bbm-blue))   drop-shadow(0 0 14px var(--bbm-blue))   hue-rotate(0deg);   }
-.bbm-marker.self.female { filter: drop-shadow(0 0 8px var(--bbm-pink))   drop-shadow(0 0 14px var(--bbm-pink))   hue-rotate(280deg); }
-.bbm-marker.self.other  { filter: drop-shadow(0 0 8px var(--bbm-yellow)) drop-shadow(0 0 14px var(--bbm-yellow)) hue-rotate(50deg);  }
-.bbm-marker.self.guest  { filter: drop-shadow(0 0 8px #aaa) grayscale(0.5); }
+.bbm-marker.self   { filter: drop-shadow(0 0 5px var(--bbm-yellow)); }
 
 /* --- Pages rendered on top of map (profile, conversations) - */
 #pageOverlay {
