@@ -1,0 +1,57 @@
+/* ============================================================
+   bOOmbOOm.NOW! — App Styles
+   Only what Bootstrap cannot do: map fill, Leaflet tweaks,
+   emoji markers, overlay z-index. Everything else = Bootstrap.
+   ============================================================ */
+
+/* --- Map: fill the space below the fixed navbar ------------ */
+#map {
+  position: fixed;
+  top: 3.5rem;        /* matches Bootstrap's default navbar height */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+}
+
+/* Leaflet dark tile background */
+.leaflet-container { background: #111 !important; }
+
+/* Keep Leaflet zoom controls below the navbar */
+.leaflet-top { top: 4.5rem !important; }
+
+/* --- Emoji markers ----------------------------------------- */
+.bbm-marker {
+  font-size: 2rem;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bbm-marker.self { font-size: 2.5rem; }
+
+/* Other users */
+.bbm-marker.male   { filter: drop-shadow(0 0 4px #6ec6ff) hue-rotate(0deg);   }
+.bbm-marker.female { filter: drop-shadow(0 0 4px #ff6ec7) hue-rotate(280deg); }
+.bbm-marker.guest  { filter: grayscale(1) drop-shadow(0 0 3px #555); }
+
+/* Self — stronger glow. Must come AFTER the rules above. */
+.bbm-marker.self.male   { filter: drop-shadow(0 0 6px #6ec6ff) drop-shadow(0 0 14px #6ec6ff) hue-rotate(0deg);   }
+.bbm-marker.self.female { filter: drop-shadow(0 0 6px #ff6ec7) drop-shadow(0 0 14px #ff6ec7) hue-rotate(280deg); }
+.bbm-marker.self.guest  { filter: grayscale(0.4) drop-shadow(0 0 6px #aaa); }
+
+/* --- Page overlay (profile / conversations over the map) --- */
+#pageOverlay {
+  position: fixed;
+  top: 3.5rem;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1060;      /* above BS offcanvas (1045) and navbar (1050) */
+  background: rgba(13, 13, 13, 0.97);
+  overflow-y: auto;
+  display: none;
+}
+
+#pageOverlay.active { display: block; }

@@ -223,11 +223,9 @@
     document.getElementById('profileModalAge').textContent      = '…';
     document.getElementById('profileModalDist').textContent     = user.distanceM + ' m';
 
-    var iconMap = { m: '👆', f: '👆', o: '👆' };
     document.getElementById('profileModalIcon').textContent =
-      user.isRegistered ? (iconMap[user.sex] || '👆') : '✊';
+      user.isRegistered ? (user.sex === 'f' ? '👌' : '👆') : '✊';
 
-    // Hide message link until we confirm both are registered
     var msgLink = document.getElementById('profileModalMsgLink');
     msgLink.classList.add('d-none');
 
@@ -239,7 +237,6 @@
         document.getElementById('profileModalAge').textContent = profile.age || '—';
 
         if (Auth.isRegistered()) {
-          // Clone to remove old event listeners
           var newLink = msgLink.cloneNode(true);
           msgLink.parentNode.replaceChild(newLink, msgLink);
           newLink.classList.remove('d-none');
@@ -258,7 +255,7 @@
   };
 
   // ============================================================
-  // Profile page — edit all fields including email + password
+  // Profile page
   // ============================================================
 
   async function renderProfilePage() {
@@ -268,14 +265,18 @@
     }
 
     showOverlay(`
-      <div class="container py-3" style="max-width:480px">
+      <div class="container-fluid px-3 py-3">
         <div class="d-flex align-items-center mb-4">
           <button class="btn btn-link text-light p-0 me-3" id="backBtn">
             <i class="bi bi-arrow-left fs-5"></i>
           </button>
           <h4 class="mb-0 text-warning">My Profile</h4>
         </div>
-        <div id="profileContent"><p class="text-secondary">Loading…</p></div>
+        <div class="row justify-content-center">
+          <div class="col-12 col-sm-10 col-md-8 col-lg-5">
+            <div id="profileContent"><p class="text-secondary">Loading…</p></div>
+          </div>
+        </div>
       </div>`);
 
     document.getElementById('backBtn').addEventListener('click', hideOverlay);
@@ -296,7 +297,7 @@
         <div class="mb-3">
           <label class="form-label text-secondary small">
             New Password
-            <span class="text-secondary" style="font-weight:normal"> — leave blank to keep current</span>
+            <span class="fw-normal text-secondary"> — leave blank to keep current</span>
           </label>
           <input class="form-control bg-black text-light border-secondary"
             id="pPassword" type="password" autocomplete="new-password" placeholder="••••••••" />
@@ -312,7 +313,6 @@
             <select class="form-select bg-black text-light border-secondary" id="pSex">
               <option value="m" ${me.sex==='m'?'selected':''}>Male</option>
               <option value="f" ${me.sex==='f'?'selected':''}>Female</option>
-              <option value="o" ${me.sex==='o'?'selected':''}>Other</option>
             </select>
           </div>
         </div>
@@ -360,14 +360,18 @@
     }
 
     showOverlay(`
-      <div class="container py-3" style="max-width:580px">
+      <div class="container-fluid px-3 py-3">
         <div class="d-flex align-items-center mb-4">
           <button class="btn btn-link text-light p-0 me-3" id="backBtn">
             <i class="bi bi-arrow-left fs-5"></i>
           </button>
           <h4 class="mb-0 text-warning">Conversations</h4>
         </div>
-        <div id="convList"><p class="text-secondary">Loading…</p></div>
+        <div class="row justify-content-center">
+          <div class="col-12 col-sm-10 col-md-8 col-lg-6">
+            <div id="convList"><p class="text-secondary">Loading…</p></div>
+          </div>
+        </div>
       </div>`);
 
     document.getElementById('backBtn').addEventListener('click', hideOverlay);
@@ -397,12 +401,14 @@
       });
 
       var html = Object.values(threads).map(function(t) {
-        return '<div class="conversation-card" data-nickname="' + escHtml(t.nickname) + '">' +
+        return '<div class="card bg-dark border-secondary mb-2 conversation-card" data-nickname="' + escHtml(t.nickname) + '" role="button">' +
+          '<div class="card-body py-2 px-3">' +
           '<div class="d-flex justify-content-between align-items-center">' +
           '<strong>' + escHtml(t.nickname) + '</strong>' +
           '<small class="text-secondary">' + timeAgo(t.latest.sentAt) + '</small></div>' +
-          '<div class="text-secondary text-truncate mt-1" style="font-size:0.85rem">' +
-          escHtml(t.latest.text) + '</div></div>';
+          '<div class="text-secondary text-truncate small mt-1">' +
+          escHtml(t.latest.text) + '</div>' +
+          '</div></div>';
       }).join('');
 
       document.getElementById('convList').innerHTML = html;
@@ -430,33 +436,33 @@
     }
 
     showOverlay(`
-      <div class="container py-3 d-flex flex-column"
-           style="max-width:580px;height:calc(100vh - 56px);overflow:hidden">
+      <div class="container-fluid px-3 py-3 d-flex flex-column h-100">
         <div class="d-flex align-items-center mb-3 flex-shrink-0">
           <button class="btn btn-link text-light p-0 me-3" id="backBtn">
             <i class="bi bi-arrow-left fs-5"></i>
           </button>
           <h5 class="mb-0 text-warning">${escHtml(nickname)}</h5>
         </div>
-        <div id="threadMsgs"
-             class="flex-grow-1 d-flex flex-column gap-2 overflow-auto pb-2"
-             style="min-height:0"></div>
-        <div class="flex-shrink-0 pt-2 border-top border-secondary mt-2">
-          <div class="d-flex gap-2 align-items-end">
-            <div class="flex-grow-1">
-              <textarea id="msgInput"
-                class="form-control bg-black text-light border-secondary"
-                rows="2" maxlength="144"
-                placeholder="Say something… (144 chars, Ctrl+Enter to send)"></textarea>
-              <div class="d-flex justify-content-between mt-1">
-                <span id="sendError" class="text-danger small d-none"></span>
-                <span id="charCount" class="ms-auto text-secondary"
-                      style="font-size:0.72rem">144</span>
+        <div class="row justify-content-center flex-grow-1 overflow-hidden">
+          <div class="col-12 col-sm-10 col-md-8 col-lg-6 d-flex flex-column h-100">
+            <div id="threadMsgs" class="flex-grow-1 overflow-auto d-flex flex-column gap-2 pb-2"></div>
+            <div class="flex-shrink-0 pt-2 border-top border-secondary mt-2">
+              <div class="d-flex gap-2 align-items-end">
+                <div class="flex-grow-1">
+                  <textarea id="msgInput"
+                    class="form-control bg-black text-light border-secondary"
+                    rows="2" maxlength="144"
+                    placeholder="Say something… (144 chars, Ctrl+Enter to send)"></textarea>
+                  <div class="d-flex justify-content-between mt-1">
+                    <span id="sendError" class="text-danger small d-none"></span>
+                    <span id="charCount" class="ms-auto text-secondary small">144</span>
+                  </div>
+                </div>
+                <button class="btn btn-warning" id="sendBtn">
+                  <i class="bi bi-send"></i>
+                </button>
               </div>
             </div>
-            <button class="btn btn-warning" id="sendBtn">
-              <i class="bi bi-send"></i>
-            </button>
           </div>
         </div>
       </div>`);
@@ -468,7 +474,7 @@
       var counter = document.getElementById('charCount');
       if (!counter) return;
       counter.textContent = 144 - len;
-      counter.style.color = len > 144 ? '#f44336' : '#666';
+      counter.style.color = len > 144 ? '#f44336' : '';
     });
 
     document.getElementById('msgInput').addEventListener('keydown', function(e) {
@@ -514,10 +520,10 @@
           : msgs.map(function(m) {
               var outgoing = m.fromUserId === myId;
               return '<div class="d-flex ' + (outgoing ? 'justify-content-end' : 'justify-content-start') + '">' +
-                '<div>' +
-                '<div class="message-bubble ' + (outgoing ? 'outgoing' : 'incoming') + '">' +
+                '<div class="' + (outgoing ? 'text-end' : '') + '" style="max-width:78%">' +
+                '<div class="rounded-3 px-3 py-2 small ' + (outgoing ? 'bg-secondary' : 'bg-dark border border-secondary') + '">' +
                 escHtml(m.text) + '</div>' +
-                '<div class="message-expiry ' + (outgoing ? 'text-end' : '') + '">expires ' +
+                '<div class="text-secondary mt-1" style="font-size:0.68rem">expires ' +
                 timeUntil(m.expiresAt) + '</div>' +
                 '</div></div>';
             }).join('');
