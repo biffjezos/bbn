@@ -22,46 +22,13 @@
   window.addEventListener('unhandledrejection', function(e){ console.error('Promise rejected: '+e.reason); });
   document.addEventListener('DOMContentLoaded', function(){
     var div = document.createElement('div');
-    div.innerHTML = '<div id="dbgBox" style="position:fixed;bottom:0;left:0;right:0;max-height:40vh;background:#000;color:#0f0;font-size:11px;font-family:monospace;z-index:99999;overflow-y:auto;border-top:2px solid #0f0;padding:4px"><div style="display:flex;justify-content:space-between;padding:2px 4px"><strong>🐛 DEBUG</strong><button onclick="document.getElementById(\'dbgBox\').style.display=\'none\'">✕</button></div><pre id="dbgOut" style="margin:0;white-space:pre-wrap;word-break:break-all"></pre></div>';
+    div.innerHTML = '<div id="dbgBox" style="position:fixed;bottom:0;left:0;right:0;max-height:40vh;background:#000;color:#0f0;font-size:11px;font-family:monospace;z-index:99999;overflow-y:auto;border-top:2px solid #0f0;padding:4px"><div style="display:flex;justify-content:space-between;padding:2px 4px"><strong>🐛 DEBUG</strong><button onclick="document.getElementById(\'dbgBox\').style.display=\'none\'">&#x2715;</button></div><pre id="dbgOut" style="margin:0;white-space:pre-wrap;word-break:break-all"></pre></div>';
     document.body.appendChild(div);
     console.log('Debug ready — URL: ' + location.href);
   });
 })();
-// ------------------------------------------------------------
 
 (async function () {
-
-  // ============================================================
-  // Tier badge config — mirrors tiers.js TIER_BADGE.
-  // Kept here so the UI has no server dependency for rendering.
-  // If you add a tier, update both tiers.js and this map.
-  // ============================================================
-  var TIER_BADGE = {
-    guest:   { label: 'Guest',   cls: 'bg-secondary' },
-    regular: { label: 'Regular', cls: 'bg-primary'   },
-    premium: { label: 'Premium', cls: 'bg-warning text-dark' },
-  };
-
-  function setTierBadge(tier) {
-    var el = document.getElementById('tierBadge');
-    if (!el) return;
-    var cfg = TIER_BADGE[tier] || TIER_BADGE.guest;
-    // Remove all bg-* classes then apply the correct one
-    el.className = 'badge ' + cfg.cls;
-    el.textContent = cfg.label;
-    el.classList.remove('d-none');
-  }
-
-  function clearTierBadge() {
-    var el = document.getElementById('tierBadge');
-    if (!el) return;
-    el.className = 'badge d-none';
-    el.textContent = '';
-  }
-
-  // ============================================================
-  // Helpers
-  // ============================================================
 
   function escHtml(str) {
     return String(str || '')
@@ -127,7 +94,6 @@
     document.getElementById('guestMenu').classList.add('d-none');
     document.getElementById('userMenu').classList.remove('d-none');
     document.getElementById('menuNickname').textContent = data.nickname;
-    setTierBadge(data.tier || 'regular');
     MapModule.refreshSelfIcon();
     MapModule.startNearbyPoll();
   };
@@ -136,7 +102,6 @@
     document.getElementById('guestMenu').classList.remove('d-none');
     document.getElementById('userMenu').classList.add('d-none');
     document.getElementById('menuNickname').textContent = '—';
-    clearTierBadge();
     MapModule.refreshSelfIcon();
     hideOverlay();
   };
@@ -283,10 +248,7 @@
   // ============================================================
 
   async function renderProfilePage() {
-    if (!Auth.isRegistered()) {
-      getModal('loginModal').show();
-      return;
-    }
+    if (!Auth.isRegistered()) { getModal('loginModal').show(); return; }
 
     showOverlay(`
       <div class="container py-3" style="max-width:480px">
@@ -322,7 +284,7 @@
           <input class="form-control bg-black text-light border-secondary"
             id="pPassword" type="password" autocomplete="new-password" placeholder="••••••••" />
         </div>
-        <div class="row g-3 mb-3">
+        <div class="row g-3 mb-4">
           <div class="col-6">
             <label class="form-label text-secondary small">Age</label>
             <input type="number" class="form-control bg-black text-light border-secondary"
@@ -335,12 +297,6 @@
               <option value="f" ${me.sex==='f'?'selected':''}>Female</option>
             </select>
           </div>
-        </div>
-        <div class="mb-4">
-          <label class="form-label text-secondary small">Account Tier</label><br>
-          <span class="badge ${(TIER_BADGE[me.tier||'regular']||TIER_BADGE.regular).cls} fs-6">
-            ${escHtml((TIER_BADGE[me.tier||'regular']||TIER_BADGE.regular).label)}
-          </span>
         </div>
         <div id="profileMsg" class="d-none mb-3"></div>
         <button class="btn btn-warning w-100 mb-2" id="profileSaveBtn">Save Changes</button>`;
@@ -381,10 +337,7 @@
   // ============================================================
 
   async function renderConversationList() {
-    if (!Auth.isRegistered()) {
-      getModal('loginModal').show();
-      return;
-    }
+    if (!Auth.isRegistered()) { getModal('loginModal').show(); return; }
 
     showOverlay(`
       <div class="container py-3" style="max-width:580px">
@@ -417,7 +370,6 @@
         var partnerNick = isOutgoing ? m.toNickname  : m.fromNickname;
         var partnerId   = isOutgoing ? m.toUserId    : m.fromUserId;
         var key         = partnerNick || partnerId;
-
         if (!threads[key] || new Date(m.sentAt) > new Date(threads[key].latest.sentAt))
           threads[key] = { nickname: partnerNick || key, latest: m };
       });
@@ -432,11 +384,8 @@
       }).join('');
 
       document.getElementById('convList').innerHTML = html;
-
       document.querySelectorAll('.conversation-card').forEach(function(card) {
-        card.addEventListener('click', function() {
-          renderThread(card.dataset.nickname);
-        });
+        card.addEventListener('click', function() { renderThread(card.dataset.nickname); });
       });
 
     } catch (err) {
@@ -450,10 +399,7 @@
   // ============================================================
 
   async function renderThread(nickname) {
-    if (!Auth.isRegistered()) {
-      getModal('loginModal').show();
-      return;
-    }
+    if (!Auth.isRegistered()) { getModal('loginModal').show(); return; }
 
     showOverlay(`
       <div class="container py-3 d-flex flex-column"
@@ -489,7 +435,7 @@
     document.getElementById('backBtn').addEventListener('click', renderConversationList);
 
     document.getElementById('msgInput').addEventListener('input', function() {
-      var len     = this.value.length;
+      var len = this.value.length;
       var counter = document.getElementById('charCount');
       if (!counter) return;
       counter.textContent = 144 - len;
@@ -507,10 +453,8 @@
       var input = document.getElementById('msgInput');
       var text  = input ? input.value.trim() : '';
       if (!text) return;
-
       var errEl = document.getElementById('sendError');
       if (errEl) errEl.classList.add('d-none');
-
       try {
         await Api.sendMessage(nickname, text);
         input.value = '';
@@ -518,10 +462,7 @@
         if (counter) counter.textContent = '144';
         await loadMessages();
       } catch (err) {
-        if (errEl) {
-          errEl.textContent = err.message;
-          errEl.classList.remove('d-none');
-        }
+        if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
       }
     });
 
@@ -533,7 +474,6 @@
         var msgs      = data.messages || [];
         var container = document.getElementById('threadMsgs');
         if (!container) return;
-
         container.innerHTML = msgs.length === 0
           ? '<p class="text-secondary text-center mt-4">No messages yet. Say hi!</p>'
           : msgs.map(function(m) {
@@ -546,7 +486,6 @@
                 timeUntil(m.expiresAt) + '</div>' +
                 '</div></div>';
             }).join('');
-
         container.scrollTop = container.scrollHeight;
       } catch (err) {
         console.warn('[Thread] load error', err);
