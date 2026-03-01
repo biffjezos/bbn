@@ -19,7 +19,8 @@ const CFG = {
 import express                   from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import jwt                       from 'jsonwebtoken';
-import { can, requireTier }      from './tiers.js';
+import { can, requireTier } from 'https://gitlab.com/aspera-non-spernit/bbn/-/raw/main/services/tiers.js';
+
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);

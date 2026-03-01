@@ -26,7 +26,7 @@ const CFG = {
 import express         from 'express';
 import cors            from 'cors';
 import { MongoClient } from 'mongodb';
-import { TIER_BADGE }  from './tiers.js';
+import { TIER_BADGE } from 'https://gitlab.com/aspera-non-spernit/bbn/-/raw/main/services/tiers.js';
 
 // ============================================================
 // MIGRATION SERVICE (standalone: migration-service.js)
