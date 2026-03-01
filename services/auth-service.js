@@ -173,6 +173,10 @@ app.post('/auth/login', async (req, res) => {
 
     await cleanupGuest(guestId);
 
+    // Whitelist tier — unknown/forged values fall back to guest
+    const VALID_TIERS = ['regular', 'premium'];
+    const tier = VALID_TIERS.includes(user.tier) ? user.tier : 'guest';
+    
     res.json({
       token:    issueUserToken(user),
       nickname: user.nickname,
