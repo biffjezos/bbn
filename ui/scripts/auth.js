@@ -7,7 +7,8 @@ const STORAGE_TOKEN_KEY   = 'bbm_token';
 const STORAGE_GUEST_KEY   = 'bbm_guest_id';
 const STORAGE_NICK_KEY    = 'bbm_nickname';
 const STORAGE_SEX_KEY     = 'bbm_sex';
-const GUEST_TTL_MS        = 15 * 60 * 1000; // must match server CONFIG
+const STORAGE_TIER_KEY    = 'bbm_tier';
+const GUEST_TTL_MS        = 15 * 60 * 1000;
 
 const Auth = (() => {
 
@@ -15,6 +16,7 @@ const Auth = (() => {
   let _guestId     = null;
   let _nickname    = null;
   let _sex         = null;
+  let _tier        = null;   // 'guest' | 'regular' | 'premium'
   let _isUser      = false;
   let _guestExpiry = null;
   let _countdownInterval = null;
@@ -40,18 +42,19 @@ const Auth = (() => {
     if (_token)    localStorage.setItem(STORAGE_TOKEN_KEY, _token);
     if (_nickname) localStorage.setItem(STORAGE_NICK_KEY,  _nickname);
     if (_sex)      localStorage.setItem(STORAGE_SEX_KEY,   _sex);
+    if (_tier)     localStorage.setItem(STORAGE_TIER_KEY,  _tier);
   }
 
   function clearStorage() {
     localStorage.removeItem(STORAGE_TOKEN_KEY);
     localStorage.removeItem(STORAGE_NICK_KEY);
     localStorage.removeItem(STORAGE_SEX_KEY);
+    localStorage.removeItem(STORAGE_TIER_KEY);
   }
 
   function generateUUID() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID)
       return crypto.randomUUID();
-    }
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       var r = Math.random() * 16 | 0;
       var v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -106,8 +109,9 @@ const Auth = (() => {
         _token    = stored;
         _nickname = localStorage.getItem(STORAGE_NICK_KEY);
         _sex      = localStorage.getItem(STORAGE_SEX_KEY);
+        _tier     = localStorage.getItem(STORAGE_TIER_KEY) || 'regular';
         _isUser   = true;
-        Auth.onLogin?.({ nickname: _nickname, sex: _sex });
+        Auth.onLogin?.({ nickname: _nickname, sex: _sex, tier: _tier });
         return;
       } else if (stored) {
         clearStorage();
@@ -120,6 +124,7 @@ const Auth = (() => {
       try {
         const data = await window.Api.guestAuth(_guestId);
         _token       = data.token;
+        _tier        = 'guest';
         _isUser      = false;
         _guestExpiry = Date.now() + GUEST_TTL_MS;
         startCountdown(_guestExpiry);
@@ -135,10 +140,11 @@ const Auth = (() => {
       _token    = data.token;
       _nickname = data.nickname;
       _sex      = data.sex;
+      _tier     = data.tier || 'regular';
       _isUser   = true;
       saveToStorage();
       stopCountdown();
-      Auth.onLogin?.({ nickname: _nickname, sex: _sex });
+      Auth.onLogin?.({ nickname: _nickname, sex: _sex, tier: _tier });
       return data;
     },
 
@@ -147,15 +153,14 @@ const Auth = (() => {
       _token    = data.token;
       _nickname = data.nickname;
       _sex      = data.sex;
+      _tier     = data.tier || 'regular';
       _isUser   = true;
       saveToStorage();
       stopCountdown();
-      Auth.onLogin?.({ nickname: _nickname, sex: _sex });
+      Auth.onLogin?.({ nickname: _nickname, sex: _sex, tier: _tier });
       return data;
     },
 
-    // Call this after a successful PUT /users/me so sex + nickname
-    // stay in sync in memory and localStorage without needing a re-login.
     updateProfile(fields) {
       if (fields.sex      !== undefined) { _sex      = fields.sex;      localStorage.setItem(STORAGE_SEX_KEY,  _sex);      }
       if (fields.nickname !== undefined) { _nickname = fields.nickname; localStorage.setItem(STORAGE_NICK_KEY, _nickname); }
@@ -166,6 +171,7 @@ const Auth = (() => {
       _token    = null;
       _nickname = null;
       _sex      = null;
+      _tier     = null;
       _isUser   = false;
       Auth.initGuest();
       Auth.onLogout?.();
@@ -177,6 +183,7 @@ const Auth = (() => {
       _token    = null;
       _nickname = null;
       _sex      = null;
+      _tier     = null;
       _isUser   = false;
       Auth.initGuest();
       Auth.onLogout?.();
@@ -185,6 +192,7 @@ const Auth = (() => {
     getToken()     { return _token; },
     getNickname()  { return _nickname; },
     getSex()       { return _sex; },
+    getTier()      { return _tier || 'guest'; },
     isRegistered() { return _isUser; },
     getGuestId()   { return _guestId; },
 

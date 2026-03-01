@@ -14,7 +14,6 @@ const MapModule = (() => {
     UPDATE_INTERVAL_MS: 15000,
   };
 
-  // CSS classes drive ALL colour — no inline filters ever
   const ICONS = {
     self_m:  { emoji: '👆', cls: 'self male'   },
     self_f:  { emoji: '👌', cls: 'self female' },
@@ -34,6 +33,12 @@ const MapModule = (() => {
   let _prevUpdateTime = 0;
   let _pollTimer      = null;
   let _geoAvailable   = 'geolocation' in navigator;
+  // Tracks whether the user has manually zoomed or panned.
+  // Once true, we stop overriding their map view on position updates.
+  let _userInteracted = false;
+  // Tracks whether we have received the very first position fix.
+  // The first fix always centres + zooms the map regardless of interaction.
+  let _firstFix       = true;
 
   // ---- Marker factory --------------------------------------
 
@@ -65,7 +70,7 @@ const MapModule = (() => {
   function setStatus(state, text) {
     const dot  = document.getElementById('statusDot');
     const span = document.getElementById('statusText');
-    if (dot)  dot.className  = `bi bi-circle-fill ${state}`;
+    if (dot)  dot.className   = `bi bi-circle-fill ${state}`;
     if (span) span.textContent = text;
   }
 
@@ -74,13 +79,18 @@ const MapModule = (() => {
   function initMap(lat, lon) {
     if (_map) return;
     _map = L.map('map', {
-      center: [lat, lon],
-      zoom:   CFG.DEFAULT_ZOOM,
-      zoomControl: true,
+      center:             [lat, lon],
+      zoom:               CFG.DEFAULT_ZOOM,
+      zoomControl:        true,
       attributionControl: true,
     });
     L.tileLayer(CFG.TILE_URL, { attribution: CFG.TILE_ATTR, maxZoom: 19 }).addTo(_map);
     setTimeout(() => _map.invalidateSize(), 100);
+
+    // Mark user interaction on any zoom or drag so subsequent
+    // position fixes don't override their chosen view.
+    _map.on('zoomstart', () => { _userInteracted = true; });
+    _map.on('dragstart',  () => { _userInteracted = true; });
   }
 
   function initMapNow() {
@@ -157,8 +167,21 @@ const MapModule = (() => {
 
   function onPosition(pos) {
     const { latitude: lat, longitude: lon } = pos.coords;
-    _selfLat = lat; _selfLon = lon;
-    _map.setView([lat, lon], CFG.DEFAULT_ZOOM);
+    _selfLat = lat;
+    _selfLon = lon;
+
+    if (_firstFix) {
+      // First position fix — always centre and zoom to user.
+      _map.setView([lat, lon], CFG.DEFAULT_ZOOM);
+      _firstFix = false;
+    } else if (!_userInteracted) {
+      // Subsequent fixes — only pan (keep user's zoom level)
+      // if the user hasn't manually interacted with the map.
+      _map.panTo([lat, lon]);
+    }
+    // If _userInteracted is true, we only update the marker
+    // position — the viewport is left entirely alone.
+
     placeSelfMarker(lat, lon);
     setStatus('active', 'live');
     pushLocation(lat, lon);

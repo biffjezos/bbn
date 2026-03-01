@@ -32,6 +32,34 @@
 (async function () {
 
   // ============================================================
+  // Tier badge config — mirrors tiers.js TIER_BADGE.
+  // Kept here so the UI has no server dependency for rendering.
+  // If you add a tier, update both tiers.js and this map.
+  // ============================================================
+  var TIER_BADGE = {
+    guest:   { label: 'Guest',   cls: 'bg-secondary' },
+    regular: { label: 'Regular', cls: 'bg-primary'   },
+    premium: { label: 'Premium', cls: 'bg-warning text-dark' },
+  };
+
+  function setTierBadge(tier) {
+    var el = document.getElementById('tierBadge');
+    if (!el) return;
+    var cfg = TIER_BADGE[tier] || TIER_BADGE.guest;
+    // Remove all bg-* classes then apply the correct one
+    el.className = 'badge ' + cfg.cls;
+    el.textContent = cfg.label;
+    el.classList.remove('d-none');
+  }
+
+  function clearTierBadge() {
+    var el = document.getElementById('tierBadge');
+    if (!el) return;
+    el.className = 'badge d-none';
+    el.textContent = '';
+  }
+
+  // ============================================================
   // Helpers
   // ============================================================
 
@@ -99,6 +127,7 @@
     document.getElementById('guestMenu').classList.add('d-none');
     document.getElementById('userMenu').classList.remove('d-none');
     document.getElementById('menuNickname').textContent = data.nickname;
+    setTierBadge(data.tier || 'regular');
     MapModule.refreshSelfIcon();
     MapModule.startNearbyPoll();
   };
@@ -107,11 +136,12 @@
     document.getElementById('guestMenu').classList.remove('d-none');
     document.getElementById('userMenu').classList.add('d-none');
     document.getElementById('menuNickname').textContent = '—';
+    clearTierBadge();
     MapModule.refreshSelfIcon();
     hideOverlay();
   };
 
-  Auth.onGuestReady  = function() { MapModule.startNearbyPoll(); };
+  Auth.onGuestReady   = function() { MapModule.startNearbyPoll(); };
   Auth.onGuestExpired = function() { MapModule.stopNearbyPoll(); };
 
   // ============================================================
@@ -216,11 +246,10 @@
     document.getElementById('profileModalAge').textContent      = '…';
     document.getElementById('profileModalDist').textContent     = user.distanceM + ' m';
 
-    var iconMap = { m: '👆', f: '👆', o: '👆' };
+    var iconMap = { m: '👆', f: '👌' };
     document.getElementById('profileModalIcon').textContent =
       user.isRegistered ? (iconMap[user.sex] || '👆') : '✊';
 
-    // Hide message link until we confirm both are registered
     var msgLink = document.getElementById('profileModalMsgLink');
     msgLink.classList.add('d-none');
 
@@ -232,7 +261,6 @@
         document.getElementById('profileModalAge').textContent = profile.age || '—';
 
         if (Auth.isRegistered()) {
-          // Clone to remove old event listeners
           var newLink = msgLink.cloneNode(true);
           msgLink.parentNode.replaceChild(newLink, msgLink);
           newLink.classList.remove('d-none');
@@ -251,7 +279,7 @@
   };
 
   // ============================================================
-  // Profile page — edit all fields including email + password
+  // Profile page
   // ============================================================
 
   async function renderProfilePage() {
@@ -294,7 +322,7 @@
           <input class="form-control bg-black text-light border-secondary"
             id="pPassword" type="password" autocomplete="new-password" placeholder="••••••••" />
         </div>
-        <div class="row g-3 mb-4">
+        <div class="row g-3 mb-3">
           <div class="col-6">
             <label class="form-label text-secondary small">Age</label>
             <input type="number" class="form-control bg-black text-light border-secondary"
@@ -307,6 +335,12 @@
               <option value="f" ${me.sex==='f'?'selected':''}>Female</option>
             </select>
           </div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label text-secondary small">Account Tier</label><br>
+          <span class="badge ${(TIER_BADGE[me.tier||'regular']||TIER_BADGE.regular).cls} fs-6">
+            ${escHtml((TIER_BADGE[me.tier||'regular']||TIER_BADGE.regular).label)}
+          </span>
         </div>
         <div id="profileMsg" class="d-none mb-3"></div>
         <button class="btn btn-warning w-100 mb-2" id="profileSaveBtn">Save Changes</button>`;
@@ -324,7 +358,6 @@
         var msgEl = document.getElementById('profileMsg');
         try {
           await Api.updateMe(update);
-          // Keep in-memory auth state and localStorage in sync
           Auth.updateProfile({ nickname: update.nickname, sex: update.sex });
           msgEl.className = 'alert alert-success mb-3';
           msgEl.textContent = 'Saved!';
@@ -376,18 +409,17 @@
         return;
       }
 
-      var myId = getJwtSub();
+      var myId    = getJwtSub();
       var threads = {};
 
       msgs.forEach(function(m) {
-        var isOutgoing   = m.fromUserId === myId;
-        var partnerNick  = isOutgoing ? m.toNickname   : m.fromNickname;
-        var partnerId    = isOutgoing ? m.toUserId     : m.fromUserId;
-        var key          = partnerNick || partnerId;
+        var isOutgoing  = m.fromUserId === myId;
+        var partnerNick = isOutgoing ? m.toNickname  : m.fromNickname;
+        var partnerId   = isOutgoing ? m.toUserId    : m.fromUserId;
+        var key         = partnerNick || partnerId;
 
-        if (!threads[key] || new Date(m.sentAt) > new Date(threads[key].latest.sentAt)) {
+        if (!threads[key] || new Date(m.sentAt) > new Date(threads[key].latest.sentAt))
           threads[key] = { nickname: partnerNick || key, latest: m };
-        }
       });
 
       var html = Object.values(threads).map(function(t) {
@@ -444,8 +476,7 @@
                 placeholder="Say something… (144 chars, Ctrl+Enter to send)"></textarea>
               <div class="d-flex justify-content-between mt-1">
                 <span id="sendError" class="text-danger small d-none"></span>
-                <span id="charCount" class="ms-auto text-secondary"
-                      style="font-size:0.72rem">144</span>
+                <span id="charCount" class="ms-auto text-secondary" style="font-size:0.72rem">144</span>
               </div>
             </div>
             <button class="btn btn-warning" id="sendBtn">
@@ -458,7 +489,7 @@
     document.getElementById('backBtn').addEventListener('click', renderConversationList);
 
     document.getElementById('msgInput').addEventListener('input', function() {
-      var len = this.value.length;
+      var len     = this.value.length;
       var counter = document.getElementById('charCount');
       if (!counter) return;
       counter.textContent = 144 - len;

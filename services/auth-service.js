@@ -1,9 +1,6 @@
 // ============================================================
-// bOOmbOOm.NOW! — auth.js
+// bOOmbOOm.NOW! — auth-service.js
 // Standalone service. Handles guest tokens, register, login.
-// Every other service imports verifyToken / requireAnyToken
-// by making an HTTP call — but since JWT verification is
-// stateless, each service does it locally with the same secret.
 // ============================================================
 
 // ============================================================
@@ -17,25 +14,33 @@ const CFG = {
   JWT_EXPIRY_USER:  '7d',
   JWT_EXPIRY_GUEST: '15m',
   GUEST_TTL_SEC:    15 * 60,
+  DEFAULT_TIER:     'regular',
 };
 // ============================================================
 
-import express       from 'express';
+import express         from 'express';
 import { MongoClient } from 'mongodb';
-import jwt           from 'jsonwebtoken';
-import bcrypt        from 'bcryptjs';
+import jwt             from 'jsonwebtoken';
+import bcrypt          from 'bcryptjs';
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[auth] DB connected.');
 
-// Indexes should be created manually in MongoDB Atlas or via a one-time migration script.
-// Removed from startup to avoid disk space issues on low-storage instances.
-
-// --- JWT helpers (duplicated in each service — same secret) -
+// --- JWT helpers --------------------------------------------
 function issueUserToken(user) {
   return jwt.sign(
-    { sub: user._id.toString(), email: user.email, nickname: user.nickname, sex: user.sex, role: 'user' },
+    {
+      sub:      user._id.toString(),
+      email:    user.email,
+      nickname: user.nickname,
+      sex:      user.sex,
+      // Tier is baked into the signed token.
+      // A DB change alone cannot grant a higher tier —
+      // the user must re-authenticate to get a new token.
+      tier:     user.tier || CFG.DEFAULT_TIER,
+      role:     'user',
+    },
     CFG.JWT_SECRET,
     { expiresIn: CFG.JWT_EXPIRY_USER }
   );
@@ -43,7 +48,7 @@ function issueUserToken(user) {
 
 function issueGuestToken(guestId) {
   return jwt.sign(
-    { sub: guestId, role: 'guest' },
+    { sub: guestId, role: 'guest', tier: 'guest' },
     CFG.JWT_SECRET,
     { expiresIn: CFG.JWT_EXPIRY_GUEST }
   );
@@ -62,7 +67,6 @@ async function cleanupGuest(guestId) {
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
-// Verify Bearer token on every request
 app.use((req, res, next) => {
   if (req.path === '/auth/guest'    && req.method === 'POST') return next();
   if (req.path === '/auth/login'    && req.method === 'POST') return next();
@@ -124,15 +128,28 @@ app.post('/auth/register', async (req, res) => {
       passwordHash: hash,
       age,
       sex,
+      // Every new user starts as 'regular'.
+      // Tier is written here at creation — never at login.
+      tier:      CFG.DEFAULT_TIER,
       createdAt: new Date(),
     });
 
-    const user = { _id: result.insertedId, email, nickname, sex };
+    const user = {
+      _id:      result.insertedId,
+      email,
+      nickname,
+      sex,
+      tier:     CFG.DEFAULT_TIER,
+    };
 
-    // Clean up guest location + session docs
     await cleanupGuest(req.body.guestId);
 
-    res.status(201).json({ token: issueUserToken(user), nickname, sex });
+    res.status(201).json({
+      token:    issueUserToken(user),
+      nickname,
+      sex,
+      tier:     CFG.DEFAULT_TIER,
+    });
   } catch (e) {
     if (e.code === 11000) {
       const field = Object.keys(e.keyPattern || {})[0] || 'field';
@@ -158,10 +175,17 @@ app.post('/auth/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.passwordHash)))
       return res.status(401).json({ error: 'Invalid credentials.' });
 
-    // Clean up guest location + session docs so the fist icon disappears immediately
     await cleanupGuest(guestId);
 
-    res.json({ token: issueUserToken(user), nickname: user.nickname, sex: user.sex });
+    // Tier is read from DB here — the one moment DB tier matters.
+    // The signed JWT is the enforcement mechanism from this point on.
+    // Changing the DB value without re-login has zero effect.
+    res.json({
+      token:    issueUserToken(user),
+      nickname: user.nickname,
+      sex:      user.sex,
+      tier:     user.tier || CFG.DEFAULT_TIER,
+    });
   } catch (e) {
     console.error('[auth/login]', e);
     res.status(500).json({ error: 'Internal error.' });

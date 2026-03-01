@@ -30,36 +30,35 @@ async function apiFetch(path, options = {}) {
   if (!res.ok) {
     const err = new Error(data.error || `HTTP ${res.status}`);
     err.status = res.status;
-    err.data = data;
+    err.data   = data;
     throw err;
   }
 
   return data;
 }
 
-// ---- Auth --------------------------------------------------
-
 const Api = {
 
-  /** Request a guest token for a given UUID */
+  // ---- Auth -----------------------------------------------
+
   guestAuth(guestId) {
     return apiFetch('/auth/guest', {
       method: 'POST',
-      body: JSON.stringify({ guestId }),
+      body:   JSON.stringify({ guestId }),
     });
   },
 
   register({ email, nickname, password, age, sex }) {
     return apiFetch('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, nickname, password, age: Number(age), sex }),
+      body:   JSON.stringify({ email, nickname, password, age: Number(age), sex }),
     });
   },
 
   login({ login, password }) {
     return apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ login, password }),
+      body:   JSON.stringify({ login, password }),
     });
   },
 
@@ -72,7 +71,7 @@ const Api = {
   updateMe(fields) {
     return apiFetch('/users/me', {
       method: 'PUT',
-      body: JSON.stringify(fields),
+      body:   JSON.stringify(fields),
     });
   },
 
@@ -82,6 +81,12 @@ const Api = {
 
   getProfile(nickname) {
     return apiFetch(`/users/${encodeURIComponent(nickname)}/profile`);
+  },
+
+  // ---- Tiers ----------------------------------------------
+
+  getTiersInfo() {
+    return apiFetch('/tiers/info');
   },
 
   // ---- Favourites -----------------------------------------
@@ -107,7 +112,7 @@ const Api = {
   putLocation(lat, lon) {
     return apiFetch('/location', {
       method: 'PUT',
-      body: JSON.stringify({ lat, lon }),
+      body:   JSON.stringify({ lat, lon }),
     });
   },
 
@@ -128,14 +133,14 @@ const Api = {
   sendMessage(nickname, text) {
     return apiFetch(`/messages/${encodeURIComponent(nickname)}`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body:   JSON.stringify({ text }),
     });
   },
 
   deleteMessage(id) {
     return apiFetch(`/messages/${id}`, { method: 'DELETE' });
   },
+
 };
 
-// Expose globally (no bundler)
 window.Api = Api;
