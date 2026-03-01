@@ -1,26 +1,25 @@
 // ============================================================
 // bOOmbOOm.NOW! — users-service.js
-// Handles: profile get/update/delete + favourites (merged to
-// avoid spawning a second Railway instance).
+// Handles: profile get/update/delete + favourites.
+// Tier enforcement via HTTP call to tiers-service.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:             process.env.PORT       || 3002,
-  MONGO_URI:        process.env.MONGO_URI  || '',
-  DB_NAME:          process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET:       process.env.JWT_SECRET || 'change-me-in-production',
-  LOCATION_TTL_SEC: 10 * 60,
+  PORT:              process.env.PORT              || 3002,
+  MONGO_URI:         process.env.MONGO_URI         || '',
+  DB_NAME:           process.env.DB_NAME           || 'boomboom',
+  JWT_SECRET:        process.env.JWT_SECRET        || 'change-me-in-production',
+  LOCATION_TTL_SEC:  10 * 60,
+  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL || 'http://localhost:3005',
 };
 // ============================================================
 
 import express                   from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import jwt                       from 'jsonwebtoken';
-import { can, requireTier } from 'https://gitlab.com/aspera-non-spernit/bbn/-/raw/main/services/tiers.js';
-
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
@@ -30,6 +29,7 @@ console.log('[users] DB connected.');
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
+// --- Token verification -------------------------------------
 function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -48,6 +48,25 @@ function verifyToken(req, res, next, requireRegistered = false) {
 
 const requireUser = (req, res, next) => verifyToken(req, res, next, true);
 const requireAny  = (req, res, next) => verifyToken(req, res, next, false);
+
+// --- Tier enforcement via tiers-service ---------------------
+function requireTier(feature) {
+  return async (req, res, next) => {
+    try {
+      const response = await fetch(`${CFG.TIERS_SERVICE_URL}/tiers/check`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ tier: req.auth?.tier ?? 'guest', feature }),
+      });
+      const data = await response.json();
+      if (!response.ok) return res.status(response.status).json(data);
+      next();
+    } catch (e) {
+      console.error('[users] tiers-service unreachable', e.message);
+      res.status(502).json({ error: 'Tier service unavailable.' });
+    }
+  };
+}
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -134,7 +153,7 @@ app.delete('/users/me', requireUser, async (req, res) => {
   }
 });
 
-// GET /users/:nickname/profile — public profile for map modal
+// GET /users/:nickname/profile
 app.get('/users/:nickname/profile', requireAny, async (req, res) => {
   try {
     const user = await db.collection('users').findOne(
