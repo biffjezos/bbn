@@ -22,13 +22,18 @@
   window.addEventListener('unhandledrejection', function(e){ console.error('Promise rejected: '+e.reason); });
   document.addEventListener('DOMContentLoaded', function(){
     var div = document.createElement('div');
-    div.innerHTML = '<div id="dbgBox" style="position:fixed;bottom:0;left:0;right:0;max-height:40vh;background:#000;color:#0f0;font-size:11px;font-family:monospace;z-index:99999;overflow-y:auto;border-top:2px solid #0f0;padding:4px"><div style="display:flex;justify-content:space-between;padding:2px 4px"><strong>🐛 DEBUG</strong><button onclick="document.getElementById(\'dbgBox\').style.display=\'none\'">&#x2715;</button></div><pre id="dbgOut" style="margin:0;white-space:pre-wrap;word-break:break-all"></pre></div>';
+    div.innerHTML = '<div id="dbgBox" style="position:fixed;bottom:0;left:0;right:0;max-height:40vh;background:#000;color:#0f0;font-size:11px;font-family:monospace;z-index:99999;overflow-y:auto;border-top:2px solid #0f0;padding:4px"><div style="display:flex;justify-content:space-between;padding:2px 4px"><strong>🐛 DEBUG</strong><button onclick="document.getElementById(\'dbgBox\').style.display=\'none\'">✕</button></div><pre id="dbgOut" style="margin:0;white-space:pre-wrap;word-break:break-all"></pre></div>';
     document.body.appendChild(div);
     console.log('Debug ready — URL: ' + location.href);
   });
 })();
+// ------------------------------------------------------------
 
 (async function () {
+
+  // ============================================================
+  // Helpers
+  // ============================================================
 
   function escHtml(str) {
     return String(str || '')
@@ -211,7 +216,7 @@
     document.getElementById('profileModalAge').textContent      = '…';
     document.getElementById('profileModalDist').textContent     = user.distanceM + ' m';
 
-    var iconMap = { m: '👆', f: '👌' };
+    var iconMap = { m: '👆', f: '👌', o: '👆' };
     document.getElementById('profileModalIcon').textContent =
       user.isRegistered ? (iconMap[user.sex] || '👆') : '✊';
 
@@ -220,9 +225,10 @@
 
     modal.show();
 
-    if (user.isRegistered && user.nickname) {
+    if (user.isRegistered && user.userId) {
       try {
-        var profile = await Api.getProfile(user.nickname);
+        // userId for the API call — nickname is display only
+        var profile = await Api.getProfile(user.userId);
         document.getElementById('profileModalAge').textContent = profile.age || '—';
 
         if (Auth.isRegistered()) {
@@ -232,7 +238,8 @@
           newLink.addEventListener('click', function(e) {
             e.preventDefault();
             modal.hide();
-            renderThread(user.nickname);
+            // Pass userId for API, nickname for display
+            renderThread(user.userId, user.nickname || user.userId);
           });
         }
       } catch(e) {
@@ -248,7 +255,10 @@
   // ============================================================
 
   async function renderProfilePage() {
-    if (!Auth.isRegistered()) { getModal('loginModal').show(); return; }
+    if (!Auth.isRegistered()) {
+      getModal('loginModal').show();
+      return;
+    }
 
     showOverlay(`
       <div class="container py-3" style="max-width:480px">
@@ -264,8 +274,24 @@
     document.getElementById('backBtn').addEventListener('click', hideOverlay);
 
     try {
-      var me = await Api.getMe();
+      // Fetch profile and tier badge info in parallel
+      var results  = await Promise.all([Api.getMe(), Api.getTierInfo()]);
+      var me       = results[0];
+      var tierInfo = results[1].tiers || {};
+
+      var tier      = me.tier || 'regular';
+      var badge     = tierInfo[tier] || { label: tier, cls: 'secondary' };
+      // Bootstrap background utility — tiers service returns short cls ('warning'),
+      // we prefix it to form a full utility class ('bg-warning')
+      var badgeCls  = 'bg-' + badge.cls;
+      // Some tiers need dark text (e.g. bg-warning is yellow)
+      var textCls   = (badge.cls === 'warning' || badge.cls === 'info') ? ' text-dark' : '';
+
       document.getElementById('profileContent').innerHTML = `
+        <div class="mb-4 d-flex align-items-center gap-2">
+          <span class="text-secondary small">Account tier</span>
+          <span class="badge ${escHtml(badgeCls + textCls)} fs-6 px-3 py-2">${escHtml(badge.label)}</span>
+        </div>
         <div class="mb-3">
           <label class="form-label text-secondary small">Email</label>
           <input class="form-control bg-black text-light border-secondary"
@@ -295,6 +321,7 @@
             <select class="form-select bg-black text-light border-secondary" id="pSex">
               <option value="m" ${me.sex==='m'?'selected':''}>Male</option>
               <option value="f" ${me.sex==='f'?'selected':''}>Female</option>
+              <option value="o" ${me.sex==='o'?'selected':''}>Other</option>
             </select>
           </div>
         </div>
@@ -337,7 +364,10 @@
   // ============================================================
 
   async function renderConversationList() {
-    if (!Auth.isRegistered()) { getModal('loginModal').show(); return; }
+    if (!Auth.isRegistered()) {
+      getModal('loginModal').show();
+      return;
+    }
 
     showOverlay(`
       <div class="container py-3" style="max-width:580px">
@@ -362,20 +392,23 @@
         return;
       }
 
-      var myId    = getJwtSub();
+      var myId = getJwtSub();
       var threads = {};
 
       msgs.forEach(function(m) {
         var isOutgoing  = m.fromUserId === myId;
-        var partnerNick = isOutgoing ? m.toNickname  : m.fromNickname;
-        var partnerId   = isOutgoing ? m.toUserId    : m.fromUserId;
-        var key         = partnerNick || partnerId;
-        if (!threads[key] || new Date(m.sentAt) > new Date(threads[key].latest.sentAt))
-          threads[key] = { nickname: partnerNick || key, latest: m };
+        var partnerId   = isOutgoing ? m.toUserId     : m.fromUserId;
+        var partnerNick = isOutgoing ? m.toNickname   : m.fromNickname;
+
+        // Group by userId — nicknames are display only and may change
+        if (!threads[partnerId] || new Date(m.sentAt) > new Date(threads[partnerId].latest.sentAt)) {
+          threads[partnerId] = { userId: partnerId, nickname: partnerNick || partnerId, latest: m };
+        }
       });
 
       var html = Object.values(threads).map(function(t) {
-        return '<div class="conversation-card" data-nickname="' + escHtml(t.nickname) + '">' +
+        return '<div class="conversation-card" data-userid="' + escHtml(t.userId) +
+          '" data-nickname="' + escHtml(t.nickname) + '">' +
           '<div class="d-flex justify-content-between align-items-center">' +
           '<strong>' + escHtml(t.nickname) + '</strong>' +
           '<small class="text-secondary">' + timeAgo(t.latest.sentAt) + '</small></div>' +
@@ -384,8 +417,12 @@
       }).join('');
 
       document.getElementById('convList').innerHTML = html;
+
       document.querySelectorAll('.conversation-card').forEach(function(card) {
-        card.addEventListener('click', function() { renderThread(card.dataset.nickname); });
+        card.addEventListener('click', function() {
+          // userId for API, nickname for display header
+          renderThread(card.dataset.userid, card.dataset.nickname);
+        });
       });
 
     } catch (err) {
@@ -398,8 +435,11 @@
   // Message thread
   // ============================================================
 
-  async function renderThread(nickname) {
-    if (!Auth.isRegistered()) { getModal('loginModal').show(); return; }
+  async function renderThread(userId, displayName) {
+    if (!Auth.isRegistered()) {
+      getModal('loginModal').show();
+      return;
+    }
 
     showOverlay(`
       <div class="container py-3 d-flex flex-column"
@@ -408,7 +448,7 @@
           <button class="btn btn-link text-light p-0 me-3" id="backBtn">
             <i class="bi bi-arrow-left fs-5"></i>
           </button>
-          <h5 class="mb-0 text-warning">${escHtml(nickname)}</h5>
+          <h5 class="mb-0 text-warning">${escHtml(displayName)}</h5>
         </div>
         <div id="threadMsgs"
              class="flex-grow-1 d-flex flex-column gap-2 overflow-auto pb-2"
@@ -422,7 +462,8 @@
                 placeholder="Say something… (144 chars, Ctrl+Enter to send)"></textarea>
               <div class="d-flex justify-content-between mt-1">
                 <span id="sendError" class="text-danger small d-none"></span>
-                <span id="charCount" class="ms-auto text-secondary" style="font-size:0.72rem">144</span>
+                <span id="charCount" class="ms-auto text-secondary"
+                      style="font-size:0.72rem">144</span>
               </div>
             </div>
             <button class="btn btn-warning" id="sendBtn">
@@ -453,16 +494,22 @@
       var input = document.getElementById('msgInput');
       var text  = input ? input.value.trim() : '';
       if (!text) return;
+
       var errEl = document.getElementById('sendError');
       if (errEl) errEl.classList.add('d-none');
+
       try {
-        await Api.sendMessage(nickname, text);
+        // userId for the API call
+        await Api.sendMessage(userId, text);
         input.value = '';
         var counter = document.getElementById('charCount');
         if (counter) counter.textContent = '144';
         await loadMessages();
       } catch (err) {
-        if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
+        if (errEl) {
+          errEl.textContent = err.message;
+          errEl.classList.remove('d-none');
+        }
       }
     });
 
@@ -470,10 +517,12 @@
 
     async function loadMessages() {
       try {
-        var data      = await Api.getConversation(nickname);
+        // userId for the API call
+        var data      = await Api.getConversation(userId);
         var msgs      = data.messages || [];
         var container = document.getElementById('threadMsgs');
         if (!container) return;
+
         container.innerHTML = msgs.length === 0
           ? '<p class="text-secondary text-center mt-4">No messages yet. Say hi!</p>'
           : msgs.map(function(m) {
@@ -486,6 +535,7 @@
                 timeUntil(m.expiresAt) + '</div>' +
                 '</div></div>';
             }).join('');
+
         container.scrollTop = container.scrollHeight;
       } catch (err) {
         console.warn('[Thread] load error', err);

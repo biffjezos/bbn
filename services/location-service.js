@@ -1,40 +1,49 @@
 // ============================================================
-// bOOmbOOm.NOW! — location.js
-// Standalone service. Location push, nearby lookup, Haversine.
+// bOOmbOOm.NOW! — location-service.js
+// Standalone service. Location push, nearby lookup.
+// Uses MongoDB $nearSphere with 2dsphere index for radius queries.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:       process.env.PORT       || 3003,
-  MONGO_URI:  process.env.MONGO_URI  || '',
-  DB_NAME:    process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
+  PORT:             process.env.PORT             || 3003,
+  MONGO_URI:        process.env.MONGO_URI        || '',
+  DB_NAME:          process.env.DB_NAME          || 'boomboom',
+  JWT_SECRET:       process.env.JWT_SECRET       || 'change-me-in-production',
+  TIER_SERVICE_URL: process.env.TIER_SERVICE_URL || 'http://localhost:3005',
 
   UPDATE_INTERVAL_MS:         15_000,
   UPDATE_DISTANCE_M:          100,
   LOCATION_TTL_SEC:           10 * 60,
-  VICINITY_RADIUS_M:          100,
   MAX_VISIBLE_GUESTS:         5,
   MAX_VISIBLE_REGISTERED:     Infinity,
-  VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
+  VISIBLE_SELECTION_STRATEGY: 'random',  // 'nearest' (= natural $nearSphere order, no extra sort needed) | 'random' | 'newest'
 };
 // ============================================================
 
 import express           from 'express';
 import { MongoClient }   from 'mongodb';
 import jwt               from 'jsonwebtoken';
-import { can, getNearbyRadius } from 'https://gitlab.com/aspera-non-spernit/bbn/-/raw/main/services/tiers.js';
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[location] DB connected.');
 
-// Index removed from startup — create manually in MongoDB if needed:
-// db.locations.createIndex({ updatedAt: 1 }, { expireAfterSeconds: 600 })
+// --- Tier service helper ------------------------------------
+async function getTierRadius(tier) {
+  try {
+    const res  = await fetch(`${CFG.TIER_SERVICE_URL}/tiers/radius/${tier}`);
+    const data = await res.json();
+    return data.radiusM ?? 50;
+  } catch (e) {
+    console.warn('[location] Could not reach tiers service, defaulting to guest radius (50m):', e.message);
+    return 50;
+  }
+}
 
-// --- Haversine ----------------------------------------------
+// --- Haversine (still used for shouldUpdate check only) -----
 const EARTH_RADIUS_M = 6_371_000;
 const toRad = deg => deg * Math.PI / 180;
 
@@ -47,17 +56,19 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function filterByRadius(origin, users, radiusM) {
-  return users
-    .map(u => ({ ...u, distanceM: haversineDistance(origin.lat, origin.lon, u.lat, u.lon) }))
-    .filter(u => u.distanceM <= radiusM);
+function shouldUpdate(prev, next) {
+  if (!prev) return true;
+  const timePassed = Date.now() - new Date(prev.updatedAt).getTime() >= CFG.UPDATE_INTERVAL_MS;
+  const movedFar   = haversineDistance(prev.lat, prev.lon, next.lat, next.lon) >= CFG.UPDATE_DISTANCE_M;
+  return timePassed || movedFar;
 }
 
+// --- Selection strategy (applied after DB query) ------------
+// Only relevant when result count exceeds the tier's max visible cap.
+// Currently only guests are capped (MAX_VISIBLE_GUESTS = 5).
 function applyStrategy(users, maxCount, strategy) {
   if (maxCount === Infinity || users.length <= maxCount) return users;
   switch (strategy) {
-    case 'nearest':
-      return [...users].sort((a, b) => a.distanceM - b.distanceM).slice(0, maxCount);
     case 'newest':
       return [...users].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, maxCount);
     case 'random':
@@ -70,13 +81,6 @@ function applyStrategy(users, maxCount, strategy) {
       return s.slice(0, maxCount);
     }
   }
-}
-
-function shouldUpdate(prev, next) {
-  if (!prev) return true;
-  const timePassed = Date.now() - new Date(prev.updatedAt).getTime() >= CFG.UPDATE_INTERVAL_MS;
-  const movedFar   = haversineDistance(prev.lat, prev.lon, next.lat, next.lon) >= CFG.UPDATE_DISTANCE_M;
-  return timePassed || movedFar;
 }
 
 // --- Express ------------------------------------------------
@@ -124,6 +128,11 @@ app.put('/location', requireAny, async (req, res) => {
           userId:       id,
           lat,
           lon,
+          // GeoJSON Point — used by the 2dsphere index for $nearSphere queries
+          location: {
+            type:        'Point',
+            coordinates: [lon, lat],   // GeoJSON is [longitude, latitude]
+          },
           isRegistered: isUser,
           sex:          req.auth.sex      || null,
           nickname:     req.auth.nickname || null,
@@ -149,16 +158,31 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       return res.status(400).json({ error: 'lat and lon query params required.' });
 
     const callerId     = req.auth.sub;
+    const tier         = req.auth.tier || 'guest';
     const isRegistered = req.auth.role === 'user';
 
-    const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
-    const all      = await db.collection('locations').find({
+    // Fetch the caller's tier radius from the tiers service
+    const radiusM  = await getTierRadius(tier);
+    const cutoff   = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
+
+    // $nearSphere uses the 2dsphere index — results are returned nearest-first
+    // by MongoDB naturally; no additional sort is needed.
+    const nearby = await db.collection('locations').find({
       userId:    { $ne: callerId },
       updatedAt: { $gt: cutoff },
+      location: {
+        $nearSphere: {
+          $geometry: {
+            type:        'Point',
+            coordinates: [lon, lat],
+          },
+          $maxDistance: radiusM,
+        },
+      },
     }).toArray();
-    const inRadius = filterByRadius({ lat, lon }, all, CFG.VICINITY_RADIUS_M);
+
     const maxCount = isRegistered ? CFG.MAX_VISIBLE_REGISTERED : CFG.MAX_VISIBLE_GUESTS;
-    const visible  = applyStrategy(inRadius, maxCount, CFG.VISIBLE_SELECTION_STRATEGY);
+    const visible  = applyStrategy(nearby, maxCount, CFG.VISIBLE_SELECTION_STRATEGY);
 
     res.json({
       users: visible.map(u => ({
@@ -168,7 +192,8 @@ app.get('/location/nearby', requireAny, async (req, res) => {
         isRegistered: u.isRegistered,
         sex:          u.sex,
         nickname:     u.nickname,
-        distanceM:    Math.round(u.distanceM),
+        // $nearSphere doesn't return distanceM natively; compute it for the response
+        distanceM:    Math.round(haversineDistance(lat, lon, u.lat, u.lon)),
       })),
     });
   } catch (e) {
@@ -177,7 +202,7 @@ app.get('/location/nearby', requireAny, async (req, res) => {
   }
 });
 
-// GET /location/user/:userId — called internally by messages.js
+// GET /location/user/:userId — called internally by messages-service
 app.get('/location/user/:userId', requireAny, async (req, res) => {
   try {
     const loc = await db.collection('locations').findOne({ userId: req.params.userId });

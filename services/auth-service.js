@@ -14,7 +14,6 @@ const CFG = {
   JWT_EXPIRY_USER:  '7d',
   JWT_EXPIRY_GUEST: '15m',
   GUEST_TTL_SEC:    15 * 60,
-  DEFAULT_TIER:     'regular',
 };
 // ============================================================
 
@@ -28,6 +27,7 @@ const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[auth] DB connected.');
 
 // --- JWT helpers --------------------------------------------
+
 function issueUserToken(user) {
   return jwt.sign(
     {
@@ -35,11 +35,8 @@ function issueUserToken(user) {
       email:    user.email,
       nickname: user.nickname,
       sex:      user.sex,
-      // Tier is baked into the signed token.
-      // A DB change alone cannot grant a higher tier —
-      // the user must re-authenticate to get a new token.
-      tier:     user.tier || CFG.DEFAULT_TIER,
       role:     'user',
+      tier:     user.tier || 'regular',
     },
     CFG.JWT_SECRET,
     { expiresIn: CFG.JWT_EXPIRY_USER }
@@ -128,27 +125,26 @@ app.post('/auth/register', async (req, res) => {
       passwordHash: hash,
       age,
       sex,
-      // Every new user starts as 'regular'.
-      // Tier is written here at creation — never at login.
-      tier:      CFG.DEFAULT_TIER,
+      tier:      'regular',
       createdAt: new Date(),
     });
 
+    // Build the user object for token issuance — tier is always 'regular' at registration
     const user = {
       _id:      result.insertedId,
-      email,
-      nickname,
+      email:    email.toLowerCase().trim(),
+      nickname: nickname.trim(),
       sex,
-      tier:     CFG.DEFAULT_TIER,
+      tier:     'regular',
     };
 
     await cleanupGuest(req.body.guestId);
 
     res.status(201).json({
       token:    issueUserToken(user),
-      nickname,
-      sex,
-      tier:     CFG.DEFAULT_TIER,
+      nickname: user.nickname,
+      sex:      user.sex,
+      tier:     user.tier,
     });
   } catch (e) {
     if (e.code === 11000) {
@@ -177,14 +173,11 @@ app.post('/auth/login', async (req, res) => {
 
     await cleanupGuest(guestId);
 
-    // Tier is read from DB here — the one moment DB tier matters.
-    // The signed JWT is the enforcement mechanism from this point on.
-    // Changing the DB value without re-login has zero effect.
     res.json({
       token:    issueUserToken(user),
       nickname: user.nickname,
       sex:      user.sex,
-      tier:     user.tier || CFG.DEFAULT_TIER,
+      tier:     user.tier || 'regular',
     });
   } catch (e) {
     console.error('[auth/login]', e);

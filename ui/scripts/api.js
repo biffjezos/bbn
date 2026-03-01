@@ -30,35 +30,36 @@ async function apiFetch(path, options = {}) {
   if (!res.ok) {
     const err = new Error(data.error || `HTTP ${res.status}`);
     err.status = res.status;
-    err.data   = data;
+    err.data = data;
     throw err;
   }
 
   return data;
 }
 
+// ---- Auth --------------------------------------------------
+
 const Api = {
 
-  // ---- Auth -----------------------------------------------
-
+  /** Request a guest token for a given UUID */
   guestAuth(guestId) {
     return apiFetch('/auth/guest', {
       method: 'POST',
-      body:   JSON.stringify({ guestId }),
+      body: JSON.stringify({ guestId }),
     });
   },
 
   register({ email, nickname, password, age, sex }) {
     return apiFetch('/auth/register', {
       method: 'POST',
-      body:   JSON.stringify({ email, nickname, password, age: Number(age), sex }),
+      body: JSON.stringify({ email, nickname, password, age: Number(age), sex }),
     });
   },
 
   login({ login, password }) {
     return apiFetch('/auth/login', {
       method: 'POST',
-      body:   JSON.stringify({ login, password }),
+      body: JSON.stringify({ login, password }),
     });
   },
 
@@ -71,7 +72,7 @@ const Api = {
   updateMe(fields) {
     return apiFetch('/users/me', {
       method: 'PUT',
-      body:   JSON.stringify(fields),
+      body: JSON.stringify(fields),
     });
   },
 
@@ -79,32 +80,8 @@ const Api = {
     return apiFetch('/users/me', { method: 'DELETE' });
   },
 
-  getProfile(nickname) {
-    return apiFetch(`/users/${encodeURIComponent(nickname)}/profile`);
-  },
-
-  // ---- Tiers ----------------------------------------------
-
-  getTiersInfo() {
-    return apiFetch('/tiers/info');
-  },
-
-  // ---- Favourites -----------------------------------------
-
-  getFavourites() {
-    return apiFetch('/favourites');
-  },
-
-  addFavourite(userId) {
-    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, {
-      method: 'POST',
-    });
-  },
-
-  removeFavourite(userId) {
-    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, {
-      method: 'DELETE',
-    });
+  getProfile(userId) {
+    return apiFetch(`/users/${encodeURIComponent(userId)}/profile`);
   },
 
   // ---- Location -------------------------------------------
@@ -112,7 +89,7 @@ const Api = {
   putLocation(lat, lon) {
     return apiFetch('/location', {
       method: 'PUT',
-      body:   JSON.stringify({ lat, lon }),
+      body: JSON.stringify({ lat, lon }),
     });
   },
 
@@ -126,14 +103,14 @@ const Api = {
     return apiFetch('/messages');
   },
 
-  getConversation(nickname) {
-    return apiFetch(`/messages/${encodeURIComponent(nickname)}`);
+  getConversation(userId) {
+    return apiFetch(`/messages/${encodeURIComponent(userId)}`);
   },
 
-  sendMessage(nickname, text) {
-    return apiFetch(`/messages/${encodeURIComponent(nickname)}`, {
+  sendMessage(userId, text) {
+    return apiFetch(`/messages/${encodeURIComponent(userId)}`, {
       method: 'POST',
-      body:   JSON.stringify({ text }),
+      body: JSON.stringify({ text }),
     });
   },
 
@@ -141,6 +118,28 @@ const Api = {
     return apiFetch(`/messages/${id}`, { method: 'DELETE' });
   },
 
+  // ---- Favourites -----------------------------------------
+
+  getFavourites() {
+    return apiFetch('/favourites');
+  },
+
+  addFavourite(userId) {
+    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'POST' });
+  },
+
+  removeFavourite(userId) {
+    return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+  },
+
+  // ---- Tiers ----------------------------------------------
+
+  /** Returns { tiers: { guest: { label, cls }, regular: { label, cls }, premium: { label, cls } } } */
+  getTierInfo() {
+    return apiFetch('/tiers/info');
+  },
+
 };
 
+// Expose globally (no bundler)
 window.Api = Api;

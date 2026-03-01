@@ -1,108 +1,78 @@
 // ============================================================
 // bOOmbOOm.NOW! — migration-service.js
-// Standalone service. Runs DB migrations on demand.
-// Called by server.js on boot before accepting traffic.
+// Standalone migration runner. Called by server.js on boot
+// before the public gateway opens. Runs each migration exactly
+// once and records it in the _migrations collection.
+// Not exposed publicly — internal only.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:       process.env.MIGRATE_PORT  || 3099,
-  MONGO_URI:  process.env.MONGO_URI     || '',
-  DB_NAME:    process.env.DB_NAME       || 'boomboom',
+  PORT:      process.env.MIGRATION_PORT || 3099,
+  MONGO_URI: process.env.MONGO_URI      || '',
+  DB_NAME:   process.env.DB_NAME        || 'boomboom',
 };
 // ============================================================
 
-import express         from 'express';
-import { MongoClient } from 'mongodb';
+import express           from 'express';
+import { MongoClient }   from 'mongodb';
 
-// --- DB -----------------------------------------------------
-const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
-console.log('[migrations] DB connected.');
+const MIGRATIONS_COLLECTION = '_migrations';
 
 // ============================================================
 // MIGRATIONS
-// Each migration has a unique id and an idempotent up() fn.
-// Add new migrations at the bottom of the array only.
-// Never edit or remove existing migrations.
 // ============================================================
 const migrations = [
-
   {
     id: '001_indexes',
     async up(db) {
-      // users — unique email + nickname
       await db.collection('users').createIndex({ email: 1 },    { unique: true, background: true });
       await db.collection('users').createIndex({ nickname: 1 }, { unique: true, background: true });
-
-      // sessions — guest session lookup
       await db.collection('sessions').createIndex({ guestId: 1 }, { unique: true, background: true });
-
-      // locations — TTL index (10 min expiry)
-      await db.collection('locations').createIndex(
-        { updatedAt: 1 },
-        { expireAfterSeconds: 600, background: true }
-      );
-
-      // messages — TTL index (expires at field)
-      await db.collection('messages').createIndex(
-        { expiresAt: 1 },
-        { expireAfterSeconds: 0, background: true }
-      );
-
-      // favourites — unique owner+target pair
       await db.collection('favourites').createIndex(
         { ownerUserId: 1, favouriteUserId: 1 },
         { unique: true, background: true }
       );
+      await db.collection('locations').createIndex(
+        { updatedAt: 1 },
+        { expireAfterSeconds: 600, background: true }
+      );
+      await db.collection('messages').createIndex(
+        { expiresAt: 1 },
+        { expireAfterSeconds: 0, background: true }
+      );
     },
   },
-
   {
-    id: '002_user_tiers',
+    id: '002_user_tiers_backfill',
     async up(db) {
-      // Backfill all existing users that have no tier field with 'regular'
       await db.collection('users').updateMany(
         { tier: { $exists: false } },
         { $set: { tier: 'regular' } }
       );
     },
   },
-
-  // ── ADD NEW MIGRATIONS HERE ─────────────────────────────────
-  // {
-  //   id: '003_your_migration',
-  //   async up(db) { ... }
-  // },
-
+  {
+    id: '003_user_tiers_index',
+    async up(db) {
+      await db.collection('users').createIndex({ tier: 1 }, { background: true });
+    },
+  },
+  {
+    id: '004_locations_2dsphere',
+    async up(db) {
+      // Add a 2dsphere index on locations.location (GeoJSON Point).
+      // Location documents are TTL-ephemeral (10 min) so the collection
+      // is empty or near-empty at deploy time — index build is instant.
+      await db.collection('locations').createIndex(
+        { location: '2dsphere' },
+        { background: true }
+      );
+    },
+  },
 ];
-
-// ============================================================
-// RUNNER
-// ============================================================
-async function runMigrations() {
-  const col = db.collection('_migrations');
-  const applied = new Set(
-    (await col.find({}).toArray()).map(m => m.id)
-  );
-
-  let ran = 0;
-  for (const migration of migrations) {
-    if (applied.has(migration.id)) {
-      console.log(`[migrations] skip  ${migration.id}`);
-      continue;
-    }
-    console.log(`[migrations] run   ${migration.id} …`);
-    await migration.up(db);
-    await col.insertOne({ id: migration.id, appliedAt: new Date() });
-    console.log(`[migrations] done  ${migration.id}`);
-    ran++;
-  }
-
-  console.log(`[migrations] complete. ${ran} migration(s) applied.`);
-  return { ok: true, applied: ran };
-}
 
 // ============================================================
 // EXPRESS
@@ -112,17 +82,30 @@ app.use(express.json({ limit: '16kb' }));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// POST /migrate/run — called by server.js on boot
-app.post('/migrate/run', async (_req, res) => {
+app.post('/migrate/run', async (req, res) => {
+  let client;
   try {
-    const result = await runMigrations();
-    res.json(result);
+    client = await new MongoClient(CFG.MONGO_URI).connect();
+    const db  = client.db(CFG.DB_NAME);
+    const col = db.collection(MIGRATIONS_COLLECTION);
+
+    const applied    = await col.find({}).toArray();
+    const appliedIds = new Set(applied.map(m => m.id));
+    const pending    = migrations.filter(m => !appliedIds.has(m.id));
+
+    for (const migration of pending) {
+      await migration.up(db);
+      await col.insertOne({ id: migration.id, appliedAt: new Date() });
+      console.log(`[migrations] Applied: ${migration.id}`);
+    }
+
+    res.json({ ok: true, applied: pending.length });
   } catch (e) {
-    console.error('[migrations] ERROR', e);
+    console.error('[migrations] Error:', e);
     res.status(500).json({ ok: false, error: e.message });
+  } finally {
+    await client?.close();
   }
 });
-
-app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
 
 app.listen(CFG.PORT, () => console.log(`[migrations] Running on :${CFG.PORT}`));

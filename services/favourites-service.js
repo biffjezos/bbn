@@ -1,16 +1,18 @@
 // ============================================================
 // bOOmbOOm.NOW! — favourites-service.js
 // Standalone service. Add, remove, list favourite contacts.
+// Tier enforcement: premium required. Checked via tiers service.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:             process.env.PORT             || 3005,
+  PORT:             process.env.PORT             || 3006,
   MONGO_URI:        process.env.MONGO_URI        || '',
   DB_NAME:          process.env.DB_NAME          || 'boomboom',
   JWT_SECRET:       process.env.JWT_SECRET       || 'change-me-in-production',
+  TIER_SERVICE_URL: process.env.TIER_SERVICE_URL || 'http://localhost:3005',
   LOCATION_TTL_SEC: 10 * 60,   // must match location-service
 };
 // ============================================================
@@ -23,7 +25,6 @@ import jwt                       from 'jsonwebtoken';
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[favourites] DB connected.');
 
-// Unique index — one favourite entry per owner+target pair
 await db.collection('favourites').createIndex(
   { ownerUserId: 1, favouriteUserId: 1 },
   { unique: true, background: true }
@@ -33,6 +34,7 @@ await db.collection('favourites').createIndex(
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
+// Verify Bearer token — registered users only
 function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -48,10 +50,27 @@ function verifyToken(req, res, next) {
   }
 }
 
+// Tier check middleware — delegates to tiers service
+async function requirePremium(req, res, next) {
+  try {
+    const response = await fetch(`${CFG.TIER_SERVICE_URL}/tiers/check`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ tier: req.auth.tier, feature: 'favourites' }),
+    });
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json(data);
+    next();
+  } catch (e) {
+    console.error('[favourites] Tiers service unreachable:', e.message);
+    res.status(502).json({ error: 'Tier service unavailable.' });
+  }
+}
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // GET /favourites — list all favourites with live nickname + online status
-app.get('/favourites', verifyToken, async (req, res) => {
+app.get('/favourites', verifyToken, requirePremium, async (req, res) => {
   try {
     const entries = await db.collection('favourites')
       .find({ ownerUserId: req.auth.sub })
@@ -62,7 +81,6 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     const ids = entries.map(e => new ObjectId(e.favouriteUserId));
 
-    // Live nicknames from users collection
     const users = await db.collection('users')
       .find({ _id: { $in: ids } })
       .project({ _id: 1, nickname: 1, sex: 1 })
@@ -70,7 +88,6 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
 
-    // Online status — has a location doc updated within TTL
     const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
     const locations = await db.collection('locations')
       .find({ userId: { $in: entries.map(e => e.favouriteUserId) }, updatedAt: { $gt: cutoff } })
@@ -79,7 +96,6 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     const onlineSet = new Set(locations.map(l => l.userId));
 
-    // Build response — silently drop entries whose account no longer exists
     const favourites = entries
       .filter(e => userMap[e.favouriteUserId])
       .map(e => {
@@ -101,7 +117,7 @@ app.get('/favourites', verifyToken, async (req, res) => {
 });
 
 // POST /favourites/:userId — add a favourite
-app.post('/favourites/:userId', verifyToken, async (req, res) => {
+app.post('/favourites/:userId', verifyToken, requirePremium, async (req, res) => {
   try {
     const ownerUserId     = req.auth.sub;
     const favouriteUserId = req.params.userId;
@@ -109,7 +125,6 @@ app.post('/favourites/:userId', verifyToken, async (req, res) => {
     if (ownerUserId === favouriteUserId)
       return res.status(400).json({ error: 'Cannot favourite yourself.' });
 
-    // Validate target exists and is a registered user (not a guest)
     let target;
     try {
       target = await db.collection('users').findOne(
@@ -137,7 +152,7 @@ app.post('/favourites/:userId', verifyToken, async (req, res) => {
 });
 
 // DELETE /favourites/:userId — remove a favourite
-app.delete('/favourites/:userId', verifyToken, async (req, res) => {
+app.delete('/favourites/:userId', verifyToken, requirePremium, async (req, res) => {
   try {
     const result = await db.collection('favourites').deleteOne({
       ownerUserId:     req.auth.sub,
