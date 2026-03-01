@@ -56,7 +56,7 @@ async function requirePremium(req, res, next) {
     const response = await fetch(`${CFG.TIER_SERVICE_URL}/tiers/check`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ tier: req.auth.tier, feature: 'favourites' }),
+      body:    JSON.stringify({ tier: req.auth.tier, feature: 'manage_favourites' }),
     });
     const data = await response.json();
     if (!response.ok) return res.status(response.status).json(data);
