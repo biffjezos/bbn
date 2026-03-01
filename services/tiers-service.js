@@ -1,21 +1,22 @@
 // ============================================================
 // bOOmbOOm.NOW! — tiers-service.js
-// Standalone service. Serves tier rules and feature checks.
-// All other services call this via HTTP instead of importing.
+// Single source of truth for all feature/tier rules.
+// The gateway calls this before proxying any request.
+//
+// TO ADD A NEW FEATURE:
+//   1. Add an entry to FEATURES below with a minTier
+//   2. Add the route in server.js with the feature key
+//   That's it. The gateway enforces it automatically.
 // ============================================================
 
-// ============================================================
-// CONFIG
-// ============================================================
 const CFG = {
-  PORT: process.env.PORT || 3005,
+  PORT: process.env.PORT || 8080,
 };
-// ============================================================
 
 import express from 'express';
 
 // ============================================================
-// TIER RANKS
+// TIER RANKS — higher number = more access
 // ============================================================
 const TIERS = {
   guest:   0,
@@ -41,23 +42,43 @@ const FEATURES = {
     },
   },
 
+  // Message a user who is currently online (has active location)
   message_online: {
     minTier: 'regular',
   },
 
-  message_anyone: {
+  // Message a user who is offline (no active location doc)
+  message_offline: {
     minTier: 'premium',
   },
 
-  favourites: {
+  // Distance cap when messaging — premium has no limit
+  message_radius: {
+    minTier: 'regular',
+    radius: {
+      regular: 100,
+      premium: Infinity,
+    },
+  },
+
+  manage_favourites: {
     minTier: 'premium',
   },
 
   // ── ADD NEW FEATURES HERE ───────────────────────────────────
-  // my_new_feature: {
-  //   minTier: 'regular',
+  // search_users: {
+  //   minTier: 'premium',
   // },
 
+};
+
+// ============================================================
+// TIER BADGE — UI display config
+// ============================================================
+const TIER_BADGE = {
+  guest:   { label: 'Guest',   cls: 'secondary' },
+  regular: { label: 'Regular', cls: 'primary'   },
+  premium: { label: 'Premium', cls: 'warning'   },
 };
 
 // ============================================================
@@ -75,11 +96,9 @@ function getNearbyRadius(tier) {
   return FEATURES.see_nearby.radius[tier] ?? FEATURES.see_nearby.radius.guest;
 }
 
-const TIER_BADGE = {
-  guest:   { label: 'Guest',   cls: 'secondary' },
-  regular: { label: 'Regular', cls: 'primary'   },
-  premium: { label: 'Premium', cls: 'warning'   },
-};
+function getMessageRadius(tier) {
+  return FEATURES.message_radius.radius[tier] ?? FEATURES.message_radius.radius.regular;
+}
 
 // ============================================================
 // EXPRESS
@@ -95,30 +114,15 @@ app.get('/tiers/info', (_req, res) => {
 });
 
 // GET /tiers/features — full feature definitions
+// Note: Infinity is not valid JSON — serialised as null here.
+// Services should use /tiers/radius/message/:tier for numeric values.
 app.get('/tiers/features', (_req, res) => {
   res.json({ features: FEATURES });
 });
 
-// POST /tiers/can — check if a tier can use a feature
-// Body: { tier: 'regular', feature: 'favourites' }
-app.post('/tiers/can', (req, res) => {
-  const { tier, feature } = req.body;
-  if (!tier || !feature)
-    return res.status(400).json({ error: 'tier and feature required.' });
-  res.json({ allowed: can(tier, feature) });
-});
-
-// GET /tiers/radius/:tier — nearby radius for a tier
-app.get('/tiers/radius/:tier', (req, res) => {
-  const { tier } = req.params;
-  if (!(tier in TIERS))
-    return res.status(400).json({ error: 'Unknown tier.' });
-  res.json({ tier, radiusM: getNearbyRadius(tier) });
-});
-
-// POST /tiers/check — returns 403-shaped response if not allowed.
-// Used by services that want to delegate enforcement entirely.
-// Body: { tier: 'regular', feature: 'favourites' }
+// POST /tiers/check — primary enforcement endpoint used by gateway
+// Body: { tier: 'regular', feature: 'message_online' }
+// Returns 200 { allowed: true } or 403 with reason
 app.post('/tiers/check', (req, res) => {
   const { tier, feature } = req.body;
   if (!tier || !feature)
@@ -126,12 +130,31 @@ app.post('/tiers/check', (req, res) => {
 
   if (!can(tier, feature)) {
     return res.status(403).json({
-      error:    `This feature requires the '${FEATURES[feature]?.minTier}' tier or above.`,
+      error:    `This feature requires the '${FEATURES[feature]?.minTier ?? 'unknown'}' tier or above.`,
       yourTier: tier,
-      required: FEATURES[feature]?.minTier,
+      required: FEATURES[feature]?.minTier ?? null,
     });
   }
+
   res.json({ allowed: true });
+});
+
+// GET /tiers/radius/nearby/:tier — nearby radius for a tier
+app.get('/tiers/radius/nearby/:tier', (req, res) => {
+  const { tier } = req.params;
+  if (!(tier in TIERS))
+    return res.status(400).json({ error: 'Unknown tier.' });
+  res.json({ tier, radiusM: getNearbyRadius(tier) });
+});
+
+// GET /tiers/radius/message/:tier — message radius for a tier
+// Returns -1 to represent Infinity (JSON safe)
+app.get('/tiers/radius/message/:tier', (req, res) => {
+  const { tier } = req.params;
+  if (!(tier in TIERS))
+    return res.status(400).json({ error: 'Unknown tier.' });
+  const radiusM = getMessageRadius(tier);
+  res.json({ tier, radiusM: radiusM === Infinity ? -1 : radiusM });
 });
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
