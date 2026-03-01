@@ -28,7 +28,7 @@ console.log('[auth] DB connected.');
 
 // --- JWT helpers --------------------------------------------
 
-function issueUserToken(user) {
+function issueUserToken(user, expiresIn = CFG.JWT_EXPIRY_USER) {
   return jwt.sign(
     {
       sub:      user._id.toString(),
@@ -39,7 +39,7 @@ function issueUserToken(user) {
       tier:     user.tier || 'regular',
     },
     CFG.JWT_SECRET,
-    { expiresIn: CFG.JWT_EXPIRY_USER }
+    { expiresIn }
   );
 }
 
@@ -171,10 +171,29 @@ app.post('/auth/login', async (req, res) => {
 
     // Whitelist tier — unknown or forged DB values fall back to guest
     const VALID_TIERS = ['regular', 'premium'];
-    const tier = VALID_TIERS.includes(user.tier) ? user.tier : 'guest';
+    let tier = VALID_TIERS.includes(user.tier) ? user.tier : 'guest';
+
+    // Check premium expiry — downgrade and persist if expired
+    if (tier === 'premium' && user.tierExpiresAt) {
+      if (new Date() > new Date(user.tierExpiresAt)) {
+        tier = 'regular';
+        await db.collection('users').updateOne(
+          { _id: user._id },
+          { $set: { tier: 'regular' }, $unset: { tierExpiresAt: '' } }
+        );
+      }
+    }
+
+    // For premium: cap JWT expiry to tierExpiresAt so token dies with the subscription
+    let expiresIn = CFG.JWT_EXPIRY_USER;
+    if (tier === 'premium' && user.tierExpiresAt) {
+      const secondsUntilExpiry = Math.floor((new Date(user.tierExpiresAt) - new Date()) / 1000);
+      const sevenDaysInSeconds = 7 * 24 * 60 * 60;
+      expiresIn = Math.min(secondsUntilExpiry, sevenDaysInSeconds);
+    }
 
     res.json({
-      token:    issueUserToken({ ...user, tier }),
+      token:    issueUserToken({ ...user, tier }, expiresIn),
       nickname: user.nickname,
       sex:      user.sex,
       tier,
