@@ -56,10 +56,10 @@ const Api = {
     });
   },
 
-  login({ login, password }) {
+  login({ email, password }) {
     return apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ login, password }),
+      body: JSON.stringify({ email, password }),
     });
   },
 

@@ -72,6 +72,19 @@ const migrations = [
       );
     },
   },
+  {
+    id: '005_drop_nickname_unique_index',
+    async up(db) {
+      // Nicknames are display names only — duplicates are allowed.
+      // Only email is required to be unique for login.
+      try {
+        await db.collection('users').dropIndex('nickname_1');
+      } catch (e) {
+        // Index may not exist on fresh deployments — safe to ignore
+        if (e.codeName !== 'IndexNotFound') throw e;
+      }
+    },
+  },
 ];
 
 // ============================================================

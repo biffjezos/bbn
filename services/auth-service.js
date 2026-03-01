@@ -111,6 +111,8 @@ app.post('/auth/register', async (req, res) => {
 
     if (!email || !nickname || !password || !age || !sex)
       return res.status(400).json({ error: 'All fields required.' });
+    if (typeof nickname !== 'string' || nickname.trim().length < 2)
+      return res.status(400).json({ error: 'Nickname must be at least 2 characters.' });
     if (!['m', 'f'].includes(sex))
       return res.status(400).json({ error: "sex must be 'm' or 'f'." });
     if (typeof age !== 'number' || age < 18 || age > 120)
@@ -129,7 +131,6 @@ app.post('/auth/register', async (req, res) => {
       createdAt: new Date(),
     });
 
-    // Build the user object for token issuance — tier is always 'regular' at registration
     const user = {
       _id:      result.insertedId,
       email:    email.toLowerCase().trim(),
@@ -147,10 +148,9 @@ app.post('/auth/register', async (req, res) => {
       tier:     user.tier,
     });
   } catch (e) {
-    if (e.code === 11000) {
-      const field = Object.keys(e.keyPattern || {})[0] || 'field';
-      return res.status(409).json({ error: `${field} already in use.` });
-    }
+    // Only email has a unique index now — nickname duplicates are allowed
+    if (e.code === 11000)
+      return res.status(409).json({ error: 'Email already in use.' });
     console.error('[auth/register]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
@@ -159,29 +159,25 @@ app.post('/auth/register', async (req, res) => {
 // POST /auth/login
 app.post('/auth/login', async (req, res) => {
   try {
-    const { login, password, guestId } = req.body;
-    if (!login || !password)
-      return res.status(400).json({ error: 'login and password required.' });
+    const { email, password, guestId } = req.body;
+    if (!email || !password)
+      return res.status(400).json({ error: 'Email and password required.' });
 
-    const query = login.includes('@')
-      ? { email: login.toLowerCase().trim() }
-      : { nickname: login.trim() };
-
-    const user = await db.collection('users').findOne(query);
+    const user = await db.collection('users').findOne({ email: email.toLowerCase().trim() });
     if (!user || !(await bcrypt.compare(password, user.passwordHash)))
       return res.status(401).json({ error: 'Invalid credentials.' });
 
     await cleanupGuest(guestId);
 
-    // Whitelist tier — unknown/forged values fall back to guest
+    // Whitelist tier — unknown or forged DB values fall back to guest
     const VALID_TIERS = ['regular', 'premium'];
     const tier = VALID_TIERS.includes(user.tier) ? user.tier : 'guest';
-    
+
     res.json({
-      token:    issueUserToken(user),
+      token:    issueUserToken({ ...user, tier }),
       nickname: user.nickname,
       sex:      user.sex,
-      tier:     user.tier || 'regular',
+      tier,
     });
   } catch (e) {
     console.error('[auth/login]', e);

@@ -99,6 +99,13 @@
     document.getElementById('guestMenu').classList.add('d-none');
     document.getElementById('userMenu').classList.remove('d-none');
     document.getElementById('menuNickname').textContent = data.nickname;
+    // Show favourites nav link only for premium
+    var favLink = document.getElementById('navFavLink');
+    if (favLink) {
+      Auth.getTier() === 'premium'
+        ? favLink.classList.remove('d-none')
+        : favLink.classList.add('d-none');
+    }
     MapModule.refreshSelfIcon();
     MapModule.startNearbyPoll();
   };
@@ -128,6 +135,8 @@
 
     if (!email || !nickname || !password || !age || !sex)
       return showError('registerError', 'All fields are required.');
+    if (nickname.length < 2)
+      return showError('registerError', 'Nickname must be at least 2 characters.');
 
     try {
       await Auth.register({ email, nickname, password, age, sex });
@@ -143,14 +152,14 @@
 
   document.getElementById('loginSubmitBtn').addEventListener('click', async function() {
     hideError('loginError');
-    var login    = document.getElementById('loginLogin').value.trim();
+    var email    = document.getElementById('loginEmail').value.trim();
     var password = document.getElementById('loginPassword').value;
 
-    if (!login || !password)
-      return showError('loginError', 'Both fields required.');
+    if (!email || !password)
+      return showError('loginError', 'Email and password are required.');
 
     try {
-      await Auth.login({ login, password });
+      await Auth.login({ email, password });
       getModal('loginModal').hide();
     } catch (err) {
       showError('loginError', err.message);
@@ -204,6 +213,13 @@
     renderConversationList();
   });
 
+  document.getElementById('navFavLink').addEventListener('click', function(e) {
+    e.preventDefault();
+    var oc = bootstrap.Offcanvas.getInstance(document.getElementById('appMenu'));
+    if (oc) oc.hide();
+    renderFavourites();
+  });
+
   // ============================================================
   // Map pin click — show user profile modal
   // ============================================================
@@ -220,28 +236,56 @@
     document.getElementById('profileModalIcon').textContent =
       user.isRegistered ? (iconMap[user.sex] || '👆') : '✊';
 
+    // Hide both action buttons until we know tier and registration status
     var msgLink = document.getElementById('profileModalMsgLink');
+    var favLink = document.getElementById('profileModalFavLink');
     msgLink.classList.add('d-none');
+    favLink.classList.add('d-none');
 
     modal.show();
 
     if (user.isRegistered && user.userId) {
       try {
-        // userId for the API call — nickname is display only
         var profile = await Api.getProfile(user.userId);
         document.getElementById('profileModalAge').textContent = profile.age || '—';
 
-        if (Auth.isRegistered()) {
-          var newLink = msgLink.cloneNode(true);
-          msgLink.parentNode.replaceChild(newLink, msgLink);
-          newLink.classList.remove('d-none');
-          newLink.addEventListener('click', function(e) {
+        var tier = Auth.getTier();
+
+        // Message button — regular and premium only
+        if (Auth.isRegistered() && (tier === 'regular' || tier === 'premium')) {
+          var newMsgLink = msgLink.cloneNode(true);
+          msgLink.parentNode.replaceChild(newMsgLink, msgLink);
+          newMsgLink.classList.remove('d-none');
+          newMsgLink.addEventListener('click', function(e) {
             e.preventDefault();
             modal.hide();
-            // Pass userId for API, nickname for display
             renderThread(user.userId, user.nickname || user.userId);
           });
         }
+
+        // Favourites button — premium only
+        if (Auth.isRegistered() && tier === 'premium') {
+          var newFavLink = favLink.cloneNode(true);
+          favLink.parentNode.replaceChild(newFavLink, favLink);
+          newFavLink.classList.remove('d-none');
+          newFavLink.addEventListener('click', async function(e) {
+            e.preventDefault();
+            try {
+              await Api.addFavourite(user.userId);
+              newFavLink.innerHTML = '<i class="bi bi-star-fill me-2"></i>Added to Favourites';
+              newFavLink.classList.add('disabled');
+            } catch (err) {
+              // 409 means already in favourites — reflect that in the UI
+              if (err.status === 409) {
+                newFavLink.innerHTML = '<i class="bi bi-star-fill me-2"></i>Already in Favourites';
+                newFavLink.classList.add('disabled');
+              } else {
+                newFavLink.textContent = 'Error: ' + err.message;
+              }
+            }
+          });
+        }
+
       } catch(e) {
         document.getElementById('profileModalAge').textContent = '—';
       }
@@ -544,6 +588,80 @@
 
     await loadMessages();
     window._threadTimer = setInterval(loadMessages, 5000);
+  }
+
+  // ============================================================
+  // Favourites page (premium only)
+  // ============================================================
+
+  async function renderFavourites() {
+    if (!Auth.isRegistered() || Auth.getTier() !== 'premium') {
+      getModal('loginModal').show();
+      return;
+    }
+
+    showOverlay(`
+      <div class="container py-3" style="max-width:580px">
+        <div class="d-flex align-items-center mb-4">
+          <button class="btn btn-link text-light p-0 me-3" id="backBtn">
+            <i class="bi bi-arrow-left fs-5"></i>
+          </button>
+          <h4 class="mb-0 text-warning">Favourites</h4>
+        </div>
+        <div id="favList"><p class="text-secondary">Loading…</p></div>
+      </div>`);
+
+    document.getElementById('backBtn').addEventListener('click', hideOverlay);
+
+    try {
+      var data  = await Api.getFavourites();
+      var favs  = data.favourites || [];
+
+      if (favs.length === 0) {
+        document.getElementById('favList').innerHTML =
+          '<p class="text-secondary">No favourites yet.<br>Tap a user on the map and add them.</p>';
+        return;
+      }
+
+      var html = favs.map(function(f) {
+        var onlineBadge = f.online
+          ? '<span class="badge bg-success ms-2">online</span>'
+          : '<span class="badge bg-secondary ms-2">offline</span>';
+        return '<div class="d-flex align-items-center justify-content-between py-2 border-bottom border-secondary">' +
+          '<div>' +
+          '<strong>' + escHtml(f.nickname) + '</strong>' + onlineBadge +
+          '</div>' +
+          '<div class="d-flex gap-2">' +
+          '<button class="btn btn-sm btn-warning fav-msg-btn" data-userid="' + escHtml(f.userId) + '" data-nickname="' + escHtml(f.nickname) + '">' +
+          '<i class="bi bi-chat-dots"></i></button>' +
+          '<button class="btn btn-sm btn-outline-danger fav-remove-btn" data-userid="' + escHtml(f.userId) + '">' +
+          '<i class="bi bi-star-fill"></i></button>' +
+          '</div></div>';
+      }).join('');
+
+      document.getElementById('favList').innerHTML = html;
+
+      document.querySelectorAll('.fav-msg-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          renderThread(btn.dataset.userid, btn.dataset.nickname);
+        });
+      });
+
+      document.querySelectorAll('.fav-remove-btn').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          try {
+            await Api.removeFavourite(btn.dataset.userid);
+            renderFavourites();
+          } catch (err) {
+            alert('Error: ' + err.message);
+          }
+        });
+      });
+
+    } catch (err) {
+      document.getElementById('favList').innerHTML =
+        '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
+    }
   }
 
   // ============================================================

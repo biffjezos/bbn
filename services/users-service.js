@@ -102,7 +102,6 @@ app.put('/users/me', requireUser, async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
-    if (e.code === 11000) return res.status(409).json({ error: 'Nickname already in use.' });
     console.error('[users/me PUT]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
