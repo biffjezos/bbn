@@ -6,7 +6,7 @@ title: boom boom by hammeley.info
 baseurl: ""
 url: "https://hammeley.info"
 
-api_url: "https://hmmly-boom.up.railway.app/api"
+api_url: "https://boom.up.railway.app/api"
 exclude:
   - README.md
   - Gemfile
