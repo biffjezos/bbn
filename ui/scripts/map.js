@@ -101,29 +101,26 @@
     }
     setStatus('locating…', 'locating');
 
-    let t1failed = false;
-    let t2failed = false;
-    function checkFallback() {
-      if (t1failed && t2failed && !myPos) tryIpFallback();
-    }
-
-    // Tier 1: low accuracy — fast, works on desktop/laptop via Wi-Fi
+    // Step 1 — low accuracy, fast, works on desktop via Wi-Fi/IP
     navigator.geolocation.getCurrentPosition(
-      pos => onPosition(pos),
-      _err => { t1failed = true; checkFallback(); },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
-    );
-
-    // Tier 2: high accuracy continuous watch — GPS on mobile
-    // Its error alone does NOT trigger fallback — wait for Tier 1 too
-    navigator.geolocation.watchPosition(
-      pos => onPosition(pos),
-      err => {
-        console.warn('[Map] geo watch error:', err.code, err.message);
-        t2failed = true;
-        checkFallback();
+      pos => {
+        onPosition(pos);
+        // Step 1 succeeded — now start a high-accuracy watch to refine (mobile GPS)
+        navigator.geolocation.watchPosition(
+          pos => onPosition(pos),
+          _err => { /* GPS unavailable — already have a fix, ignore silently */ },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+        );
       },
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+      _err => {
+        // Step 1 failed — try high accuracy once, then IP fallback
+        navigator.geolocation.getCurrentPosition(
+          pos => onPosition(pos),
+          _err2 => tryIpFallback(),
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
     );
   }
 
