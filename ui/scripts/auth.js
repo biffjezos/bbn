@@ -3,20 +3,22 @@
 // Manages tokens, guest UUID, session countdown.
 // ============================================================
 
-const STORAGE_TOKEN_KEY   = 'bbm_token';
-const STORAGE_GUEST_KEY   = 'bbm_guest_id';
-const STORAGE_NICK_KEY    = 'bbm_nickname';
-const STORAGE_SEX_KEY     = 'bbm_sex';
-const GUEST_TTL_MS        = 15 * 60 * 1000; // must match server CONFIG
+const STORAGE_TOKEN_KEY = 'bbm_token';
+const STORAGE_GUEST_KEY = 'bbm_guest_id';
+const STORAGE_NICK_KEY  = 'bbm_nickname';
+const STORAGE_SEX_KEY   = 'bbm_sex';
+// Key to persist the guest session expiry across page reloads
+const STORAGE_GUEST_EXP = 'bbm_guest_exp';
+const GUEST_TTL_MS      = 15 * 60 * 1000; // must match server CONFIG
+const GUEST_CLEANUP_MS  = 60 * 60 * 1000; // 1 hour — then fresh session allowed
 
 const Auth = (() => {
 
-  let _token       = null;
-  let _guestId     = null;
-  let _nickname    = null;
-  let _sex         = null;
-  let _isUser      = false;
-  let _guestExpiry = null;
+  let _token             = null;
+  let _guestId           = null;
+  let _nickname          = null;
+  let _sex               = null;
+  let _isUser            = false;
   let _countdownInterval = null;
 
   // ---- Internal helpers ------------------------------------
@@ -25,9 +27,7 @@ const Auth = (() => {
     try {
       const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
       return JSON.parse(atob(base64));
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   function isTokenExpired(token) {
@@ -46,25 +46,20 @@ const Auth = (() => {
     localStorage.removeItem(STORAGE_TOKEN_KEY);
     localStorage.removeItem(STORAGE_NICK_KEY);
     localStorage.removeItem(STORAGE_SEX_KEY);
+    // Do NOT remove guest keys here — guest session persists across logout
   }
 
   function generateUUID() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      var r = Math.random() * 16 | 0;
-      var v = c === 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
   }
 
   function getOrCreateGuestId() {
     let id = localStorage.getItem(STORAGE_GUEST_KEY);
-    if (!id) {
-      id = generateUUID();
-      localStorage.setItem(STORAGE_GUEST_KEY, id);
-    }
+    if (!id) { id = generateUUID(); localStorage.setItem(STORAGE_GUEST_KEY, id); }
     return id;
   }
 
@@ -76,11 +71,13 @@ const Auth = (() => {
     if (!el || !timer) return;
     el.classList.remove('d-none');
     if (_countdownInterval) clearInterval(_countdownInterval);
+
     _countdownInterval = setInterval(() => {
       const remaining = expiryMs - Date.now();
       if (remaining <= 0) {
         clearInterval(_countdownInterval);
         timer.textContent = '0:00';
+        el.classList.add('d-none');
         Auth.onGuestExpired?.();
         return;
       }
@@ -92,8 +89,7 @@ const Auth = (() => {
 
   function stopCountdown() {
     if (_countdownInterval) clearInterval(_countdownInterval);
-    const el = document.getElementById('guestCountdown');
-    el?.classList.add('d-none');
+    document.getElementById('guestCountdown')?.classList.add('d-none');
   }
 
   // ---- Public API ------------------------------------------
@@ -101,6 +97,7 @@ const Auth = (() => {
   return {
 
     async init() {
+      // 1. Try to restore a valid user token
       const stored = localStorage.getItem(STORAGE_TOKEN_KEY);
       if (stored && !isTokenExpired(stored)) {
         _token    = stored;
@@ -112,17 +109,50 @@ const Auth = (() => {
       } else if (stored) {
         clearStorage();
       }
+
+      // 2. No valid user token — handle guest session
       await Auth.initGuest();
     },
 
     async initGuest() {
       _guestId = getOrCreateGuestId();
+      const now = Date.now();
+
+      // Check if we already have a persisted guest expiry
+      const storedExp = parseInt(localStorage.getItem(STORAGE_GUEST_EXP) || '0', 10);
+
+      if (storedExp > now) {
+        // Existing session still valid — reuse it, resume countdown
+        try {
+          const data = await window.Api.guestAuth(_guestId);
+          _token  = data.token;
+          _isUser = false;
+          // Resume from the STORED expiry, not a fresh 15 minutes
+          startCountdown(storedExp);
+          Auth.onGuestReady?.();
+        } catch (err) {
+          console.warn('[Auth] Guest token refresh failed', err);
+          Auth.onGuestExpired?.();
+        }
+        return;
+      }
+
+      if (storedExp && storedExp <= now && (now - storedExp) < GUEST_CLEANUP_MS) {
+        // Session expired but within cleanup window — block access
+        _token  = null;
+        _isUser = false;
+        Auth.onGuestExpired?.();
+        return;
+      }
+
+      // No session or past cleanup window — start a fresh guest session
       try {
         const data = await window.Api.guestAuth(_guestId);
-        _token       = data.token;
-        _isUser      = false;
-        _guestExpiry = Date.now() + GUEST_TTL_MS;
-        startCountdown(_guestExpiry);
+        _token  = data.token;
+        _isUser = false;
+        const expiryMs = now + GUEST_TTL_MS;
+        localStorage.setItem(STORAGE_GUEST_EXP, String(expiryMs));
+        startCountdown(expiryMs);
         Auth.onGuestReady?.();
       } catch (err) {
         console.warn('[Auth] Guest token failed', err);
@@ -138,6 +168,8 @@ const Auth = (() => {
       _isUser   = true;
       saveToStorage();
       stopCountdown();
+      // Clear guest expiry — guest session consumed on login
+      localStorage.removeItem(STORAGE_GUEST_EXP);
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
       return data;
     },
@@ -150,12 +182,11 @@ const Auth = (() => {
       _isUser   = true;
       saveToStorage();
       stopCountdown();
+      localStorage.removeItem(STORAGE_GUEST_EXP);
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
       return data;
     },
 
-    // Call this after a successful PUT /users/me so sex + nickname
-    // stay in sync in memory and localStorage without needing a re-login.
     updateProfile(fields) {
       if (fields.sex      !== undefined) { _sex      = fields.sex;      localStorage.setItem(STORAGE_SEX_KEY,  _sex);      }
       if (fields.nickname !== undefined) { _nickname = fields.nickname; localStorage.setItem(STORAGE_NICK_KEY, _nickname); }
@@ -167,8 +198,8 @@ const Auth = (() => {
       _nickname = null;
       _sex      = null;
       _isUser   = false;
-      Auth.initGuest();
       Auth.onLogout?.();
+      Auth.initGuest();
     },
 
     async deleteAccount() {
@@ -178,23 +209,25 @@ const Auth = (() => {
       _nickname = null;
       _sex      = null;
       _isUser   = false;
-      Auth.initGuest();
       Auth.onLogout?.();
+      Auth.initGuest();
     },
 
-    // Decode tier directly from the JWT payload — no network call needed.
-    // JWT is signed not encrypted, reading the payload client-side is safe.
     getTier() {
       if (!_token) return 'guest';
-      const payload = parseJwt(_token);
-      return payload?.tier || 'guest';
+      return parseJwt(_token)?.tier || 'guest';
     },
 
-    getToken()     { return _token; },
+    // getProfile() — convenience object for app.js compatibility
+    getProfile() {
+      return { nickname: _nickname, sex: _sex };
+    },
+
+    getToken()     { return _token;    },
     getNickname()  { return _nickname; },
-    getSex()       { return _sex; },
-    isRegistered() { return _isUser; },
-    getGuestId()   { return _guestId; },
+    getSex()       { return _sex;      },
+    isRegistered() { return _isUser;   },
+    getGuestId()   { return _guestId;  },
 
     onLogin:        null,
     onLogout:       null,
