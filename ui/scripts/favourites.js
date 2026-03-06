@@ -18,9 +18,7 @@ function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 
 function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
 
 function loadingHtml(text = 'Loading…') {
-  return `<div class="bbm-loading">
-    <div class="spinner-border spinner-border-sm me-2" role="status"></div>${escHtml(text)}
-  </div>`;
+  return `<div class="bbm-loading"><p>${escHtml(text)}</p></div>`;
 }
 
 export async function renderFavourites() {

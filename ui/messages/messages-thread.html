@@ -49,5 +49,6 @@ permalink: /messages/thread/
 
 <script type="module">
 import { renderThread } from '{{ "/scripts/pages/messages.js" | relative_url }}';
-if (window.__bbmReady) { renderThread(); } else { document.addEventListener('bbm:ready', () => renderThread()); };
+await window.__authReady;
+renderThread();
 </script>

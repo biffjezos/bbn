@@ -28,5 +28,6 @@ permalink: /profile/
 
 <script type="module">
 import { renderMyProfile } from '{{ "/scripts/pages/profile.js" | relative_url }}';
-if (window.__bbmReady) { renderMyProfile(); } else { document.addEventListener('bbm:ready', () => renderMyProfile()); };
+await window.__authReady;
+renderMyProfile();
 </script>

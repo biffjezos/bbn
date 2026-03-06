@@ -1,16 +1,14 @@
 // ============================================================
 // bOOmbOOm.NOW! — Auth State
-// Manages tokens, guest UUID, session countdown.
 // ============================================================
 
 const STORAGE_TOKEN_KEY = 'bbm_token';
 const STORAGE_GUEST_KEY = 'bbm_guest_id';
 const STORAGE_NICK_KEY  = 'bbm_nickname';
 const STORAGE_SEX_KEY   = 'bbm_sex';
-// Key to persist the guest session expiry across page reloads
 const STORAGE_GUEST_EXP = 'bbm_guest_exp';
-const GUEST_TTL_MS      = 15 * 60 * 1000; // must match server CONFIG
-const GUEST_CLEANUP_MS  = 60 * 60 * 1000; // 1 hour — then fresh session allowed
+const GUEST_TTL_MS      = 15 * 60 * 1000;
+const GUEST_CLEANUP_MS  = 60 * 60 * 1000; // 1 hour
 
 const Auth = (() => {
 
@@ -21,19 +19,16 @@ const Auth = (() => {
   let _isUser            = false;
   let _countdownInterval = null;
 
-  // ---- Internal helpers ------------------------------------
-
   function parseJwt(token) {
     try {
-      const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      return JSON.parse(atob(base64));
+      return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
     } catch { return null; }
   }
 
   function isTokenExpired(token) {
-    const payload = parseJwt(token);
-    if (!payload || !payload.exp) return true;
-    return Date.now() / 1000 >= payload.exp;
+    const p = parseJwt(token);
+    if (!p?.exp) return true;
+    return Date.now() / 1000 >= p.exp;
   }
 
   function saveToStorage() {
@@ -42,28 +37,26 @@ const Auth = (() => {
     if (_sex)      localStorage.setItem(STORAGE_SEX_KEY,   _sex);
   }
 
-  function clearStorage() {
+  function clearUserStorage() {
     localStorage.removeItem(STORAGE_TOKEN_KEY);
     localStorage.removeItem(STORAGE_NICK_KEY);
     localStorage.removeItem(STORAGE_SEX_KEY);
-    // Do NOT remove guest keys here — guest session persists across logout
-  }
-
-  function generateUUID() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
+    // Keep guest keys — guest session is independent of user account
   }
 
   function getOrCreateGuestId() {
     let id = localStorage.getItem(STORAGE_GUEST_KEY);
-    if (!id) { id = generateUUID(); localStorage.setItem(STORAGE_GUEST_KEY, id); }
+    if (!id) {
+      id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random()*16|0;
+            return (c==='x'?r:(r&0x3|0x8)).toString(16);
+          });
+      localStorage.setItem(STORAGE_GUEST_KEY, id);
+    }
     return id;
   }
-
-  // ---- Countdown display -----------------------------------
 
   function startCountdown(expiryMs) {
     const el    = document.getElementById('guestCountdown');
@@ -71,18 +64,17 @@ const Auth = (() => {
     if (!el || !timer) return;
     el.classList.remove('d-none');
     if (_countdownInterval) clearInterval(_countdownInterval);
-
     _countdownInterval = setInterval(() => {
-      const remaining = expiryMs - Date.now();
-      if (remaining <= 0) {
+      const rem = expiryMs - Date.now();
+      if (rem <= 0) {
         clearInterval(_countdownInterval);
         timer.textContent = '0:00';
         el.classList.add('d-none');
         Auth.onGuestExpired?.();
         return;
       }
-      const m = Math.floor(remaining / 60000);
-      const s = Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0');
+      const m = Math.floor(rem / 60000);
+      const s = Math.floor((rem % 60000) / 1000).toString().padStart(2,'0');
       timer.textContent = `${m}:${s}`;
     }, 1000);
   }
@@ -92,12 +84,9 @@ const Auth = (() => {
     document.getElementById('guestCountdown')?.classList.add('d-none');
   }
 
-  // ---- Public API ------------------------------------------
-
   return {
 
     async init() {
-      // 1. Try to restore a valid user token
       const stored = localStorage.getItem(STORAGE_TOKEN_KEY);
       if (stored && !isTokenExpired(stored)) {
         _token    = stored;
@@ -106,53 +95,43 @@ const Auth = (() => {
         _isUser   = true;
         Auth.onLogin?.({ nickname: _nickname, sex: _sex });
         return;
-      } else if (stored) {
-        clearStorage();
       }
-
-      // 2. No valid user token — handle guest session
+      if (stored) clearUserStorage();
       await Auth.initGuest();
     },
 
     async initGuest() {
       _guestId = getOrCreateGuestId();
       const now = Date.now();
-
-      // Check if we already have a persisted guest expiry
       const storedExp = parseInt(localStorage.getItem(STORAGE_GUEST_EXP) || '0', 10);
 
-      if (storedExp > now) {
-        // Existing session still valid — reuse it, resume countdown
-        try {
-          const data = await window.Api.guestAuth(_guestId);
-          _token  = data.token;
-          _isUser = false;
-          // Resume from the STORED expiry, not a fresh 15 minutes
-          startCountdown(storedExp);
-          Auth.onGuestReady?.();
-        } catch (err) {
-          console.warn('[Auth] Guest token refresh failed', err);
-          Auth.onGuestExpired?.();
-        }
-        return;
-      }
-
+      // Session expired but within cleanup window — block, no new token
       if (storedExp && storedExp <= now && (now - storedExp) < GUEST_CLEANUP_MS) {
-        // Session expired but within cleanup window — block access
         _token  = null;
         _isUser = false;
         Auth.onGuestExpired?.();
         return;
       }
 
-      // No session or past cleanup window — start a fresh guest session
+      // Past cleanup window or no session — reset
+      if (storedExp && (now - storedExp) >= GUEST_CLEANUP_MS) {
+        localStorage.removeItem(STORAGE_GUEST_EXP);
+      }
+
       try {
         const data = await window.Api.guestAuth(_guestId);
         _token  = data.token;
         _isUser = false;
-        const expiryMs = now + GUEST_TTL_MS;
-        localStorage.setItem(STORAGE_GUEST_EXP, String(expiryMs));
-        startCountdown(expiryMs);
+
+        if (storedExp && storedExp > now) {
+          // Existing valid session — resume countdown at correct remaining time
+          startCountdown(storedExp);
+        } else {
+          // Fresh session
+          const expiryMs = now + GUEST_TTL_MS;
+          localStorage.setItem(STORAGE_GUEST_EXP, String(expiryMs));
+          startCountdown(expiryMs);
+        }
         Auth.onGuestReady?.();
       } catch (err) {
         console.warn('[Auth] Guest token failed', err);
@@ -168,7 +147,6 @@ const Auth = (() => {
       _isUser   = true;
       saveToStorage();
       stopCountdown();
-      // Clear guest expiry — guest session consumed on login
       localStorage.removeItem(STORAGE_GUEST_EXP);
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
       return data;
@@ -193,41 +171,30 @@ const Auth = (() => {
     },
 
     logout() {
-      clearStorage();
-      _token    = null;
-      _nickname = null;
-      _sex      = null;
-      _isUser   = false;
+      clearUserStorage();
+      _token = _nickname = _sex = null;
+      _isUser = false;
       Auth.onLogout?.();
       Auth.initGuest();
     },
 
     async deleteAccount() {
       await window.Api.deleteMe();
-      clearStorage();
-      _token    = null;
-      _nickname = null;
-      _sex      = null;
-      _isUser   = false;
+      clearUserStorage();
+      _token = _nickname = _sex = null;
+      _isUser = false;
       Auth.onLogout?.();
       Auth.initGuest();
     },
 
-    getTier() {
-      if (!_token) return 'guest';
-      return parseJwt(_token)?.tier || 'guest';
-    },
-
-    // getProfile() — convenience object for app.js compatibility
-    getProfile() {
-      return { nickname: _nickname, sex: _sex };
-    },
-
+    getTier()      { return parseJwt(_token)?.tier || 'guest'; },
     getToken()     { return _token;    },
     getNickname()  { return _nickname; },
     getSex()       { return _sex;      },
     isRegistered() { return _isUser;   },
     getGuestId()   { return _guestId;  },
+    // Convenience object — used by app.js and page modules
+    getProfile()   { return { nickname: _nickname, sex: _sex }; },
 
     onLogin:        null,
     onLogout:       null,

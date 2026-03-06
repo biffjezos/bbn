@@ -71,11 +71,14 @@
   // ── Auth hooks — set BEFORE Auth.init() ──────────────────
   Auth.onLogin = function () {
     applyAuthState(true);
+    // Immediately update self marker icon to sex-specific emoji
     window.MapModule?.refreshMarkers();
   };
 
   Auth.onLogout = function () {
     applyAuthState(false);
+    // Revert self marker to guest (yellow fist)
+    window.MapModule?.refreshMarkers();
     const prot = ['/messages', '/favourites', '/profile'];
     if (prot.some(p => location.pathname.startsWith(p))) window.location.href = '/';
   };
@@ -204,8 +207,9 @@
   $('fabCentre')?.addEventListener('click', () => window.MapModule?.centreOnSelf());
 
   // ── Init ─────────────────────────────────────────────────
-  // Set hooks first, then init — Auth.init() calls onLogin/onGuestReady/onGuestExpired
-  await Auth.init();
+  // Auth.init() was already called in the layout (window.__authReady).
+  // Just await it here to ensure it has resolved before we build the UI.
+  await window.__authReady;
 
   // Sync UI to whatever state Auth.init() resolved to
   applyAuthState(Auth.isRegistered());

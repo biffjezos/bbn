@@ -101,21 +101,29 @@
     }
     setStatus('locating…', 'locating');
 
-    // Tier 1: quick coarse fix (works on laptop via Wi-Fi positioning)
+    let t1failed = false;
+    let t2failed = false;
+    function checkFallback() {
+      if (t1failed && t2failed && !myPos) tryIpFallback();
+    }
+
+    // Tier 1: low accuracy — fast, works on desktop/laptop via Wi-Fi
     navigator.geolocation.getCurrentPosition(
       pos => onPosition(pos),
-      ()  => { /* silent — watchPosition or IP fallback handles it */ },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      _err => { t1failed = true; checkFallback(); },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
     );
 
-    // Tier 2: continuous high-accuracy watch (GPS on mobile)
+    // Tier 2: high accuracy continuous watch — GPS on mobile
+    // Its error alone does NOT trigger fallback — wait for Tier 1 too
     navigator.geolocation.watchPosition(
       pos => onPosition(pos),
       err => {
-        console.warn('[Map] watchPosition error:', err.message);
-        if (!myPos) tryIpFallback();
+        console.warn('[Map] geo watch error:', err.code, err.message);
+        t2failed = true;
+        checkFallback();
       },
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
     );
   }
 
