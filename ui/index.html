@@ -1,16 +1,13 @@
 ---
 layout: default
-title: bOOmbOOm.NOW!
+title: ""
 permalink: /
 ---
 
-<!-- The map fills the viewport. All content is injected by JS. -->
-<!-- This page intentionally has no static body content. -->
+<!-- Full-screen map — fills viewport below navbar -->
+<div id="map"></div>
 
-<!-- Page overlay container — profile & conversation pages render here -->
-<div id="pageOverlay"></div>
-
-<!-- API base URL — injected at build time via Jekyll environment variable -->
-<script>
-  window.BOOMBOOM_API_URL = '{{ site.api_url | default: "https://bbn-e86d0c.gitlab.io/api" }}';
-</script>
+<!-- Floating action button — centre map on my position -->
+<button class="bbm-fab" id="fabCentre" title="Centre on me" aria-label="Centre map on my location">
+  <i class="bi bi-crosshair2"></i>
+</button>

@@ -1,0 +1,53 @@
+---
+layout: default
+title: "Message Thread"
+permalink: /messages/thread/
+---
+
+<!-- Thread layout — fills remaining height below navbar -->
+<div class="bbm-thread-wrap" id="threadWrap">
+
+  <!-- Header with back + partner name -->
+  <div class="bbm-thread-header">
+    <a href="{{ '/messages/' | relative_url }}" class="btn btn-bbm-ghost btn-sm px-2 py-1">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <div class="heading-serif" id="threadDisplayName" style="font-size:1.1rem">—</div>
+      <div class="text-faint" id="threadSubtitle" style="font-size:0.75rem"></div>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="bbm-thread-msgs" id="threadMsgs">
+    <div class="bbm-loading">Loading messages…</div>
+  </div>
+
+  <!-- Compose -->
+  <div class="bbm-thread-compose">
+    <div class="d-flex gap-2 align-items-end">
+      <div class="flex-grow-1">
+        <textarea
+          id="msgInput"
+          class="form-control bbm-compose-input"
+          rows="2"
+          maxlength="144"
+          placeholder="Say something… · Ctrl+Enter to send"
+        ></textarea>
+        <div class="d-flex justify-content-between mt-1 px-1">
+          <span id="sendError" class="text-danger small d-none"></span>
+          <span id="charCount" class="ms-auto text-faint" style="font-size:0.72rem">144</span>
+        </div>
+      </div>
+      <button class="btn btn-bbm-pink px-3" id="sendBtn" style="height:2.75rem">
+        <i class="bi bi-send-fill"></i>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { renderThread } from '{{ "/scripts/pages/messages.js" | relative_url }}';
+document.addEventListener('bbm:ready', () => renderThread());
+</script>

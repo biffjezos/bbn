@@ -1,241 +1,192 @@
 // ============================================================
-// bOOmbOOm.NOW! — Map Module
+// bOOmbOOm.NOW! — map.js
+// Only runs when #map exists (index.html)
 // ============================================================
 
-const MapModule = (() => {
+(function () {
+  if (!document.getElementById('map')) return;
 
-  const CFG = {
-    TILE_URL:           'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    TILE_ATTR:          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    DEFAULT_ZOOM:       16,
-    NEARBY_POLL_MS:     8000,
-    LOC_INTERVAL_MS:    15000,
-    LOC_DIST_M:         100,
-    UPDATE_INTERVAL_MS: 15000,
-  };
+  let map        = null;
+  let selfMarker = null;
+  let markers    = {};      // userId → L.marker
+  let watchId    = null;
+  let myPos      = null;
+  let sessionId  = null;
 
-  const ICONS = {
-    self_m:  { emoji: '👆', cls: 'self male'   },
-    self_f:  { emoji: '👌', cls: 'self female' },
-    self_g:  { emoji: '✊', cls: 'self guest'  },
-    user_m:  { emoji: '👆', cls: 'male'        },
-    user_f:  { emoji: '👌', cls: 'female'      },
-    guest:   { emoji: '✊', cls: 'guest'       },
-  };
+  const TILE_URL   = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  const TILE_ATTR  = '&copy; OpenStreetMap contributors &copy; CARTO';
+  const POLL_MS    = 5000;
 
-  let _map            = null;
-  let _selfMarker     = null;
-  let _userMarkers    = {};
-  let _selfLat        = null;
-  let _selfLon        = null;
-  let _prevLat        = null;
-  let _prevLon        = null;
-  let _prevUpdateTime = 0;
-  let _pollTimer      = null;
-  let _geoAvailable   = 'geolocation' in navigator;
-  // Tracks whether the user has manually zoomed or panned.
-  // Once true, we stop overriding their map view on position updates.
-  let _userInteracted = false;
-  // Tracks whether we have received the very first position fix.
-  // The first fix always centres + zooms the map regardless of interaction.
-  let _firstFix       = true;
+  // ── Init map ────────────────────────────────────────────
+  function initMap(lat, lng) {
+    if (map) return;
 
-  // ---- Marker factory --------------------------------------
-
-  function makeIcon(type) {
-    const def = ICONS[type] || ICONS.guest;
-    return L.divIcon({
-      html:        `<div class="bbm-marker ${def.cls}">${def.emoji}</div>`,
-      className:   '',
-      iconSize:    [44, 44],
-      iconAnchor:  [22, 22],
-      popupAnchor: [0, -24],
+    map = L.map('map', {
+      center: [lat, lng],
+      zoom: 17,
+      zoomControl: true,
     });
+
+    L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
+
+    placeSelfMarker(lat, lng);
+    setStatus('live', 'live');
+    startPolling();
   }
 
-  function iconTypeFor(isRegistered, sex) {
-    if (!isRegistered) return 'guest';
-    return sex === 'f' ? 'user_f' : 'user_m';
-  }
+  // ── Self marker ─────────────────────────────────────────
+  function placeSelfMarker(lat, lng) {
+    const profile   = window.Auth?.getProfile() || {};
+    const sex       = profile.sex || null;
+    const cls       = 'bbm-marker self ' + (sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
+    const icon      = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '📍';
 
-  function selfIconType() {
-    const sex = window.Auth?.getSex?.();
-    if (sex === 'f') return 'self_f';
-    if (sex === 'm') return 'self_m';
-    return 'self_g';
-  }
+    const el = document.createElement('div');
+    el.className = cls;
+    el.textContent = icon;
+    el.title = 'You';
 
-  // ---- Status bar ------------------------------------------
+    const leafIcon = L.divIcon({ html: el, className: '', iconSize: [46, 46], iconAnchor: [23, 23] });
 
-  function setStatus(state, text) {
-    const dot  = document.getElementById('statusDot');
-    const span = document.getElementById('statusText');
-    if (dot)  dot.className   = `bi bi-circle-fill ${state}`;
-    if (span) span.textContent = text;
-  }
-
-  // ---- Map init --------------------------------------------
-
-  function initMap(lat, lon) {
-    if (_map) return;
-    _map = L.map('map', {
-      center:             [lat, lon],
-      zoom:               CFG.DEFAULT_ZOOM,
-      zoomControl:        true,
-      attributionControl: true,
-    });
-    L.tileLayer(CFG.TILE_URL, { attribution: CFG.TILE_ATTR, maxZoom: 19 }).addTo(_map);
-    setTimeout(() => _map.invalidateSize(), 100);
-
-    // Mark user interaction on any zoom or drag so subsequent
-    // position fixes don't override their chosen view.
-    _map.on('zoomstart', () => { _userInteracted = true; });
-    _map.on('dragstart',  () => { _userInteracted = true; });
-  }
-
-  function initMapNow() {
-    initMap((Math.random() * 140) - 70, (Math.random() * 360) - 180);
-  }
-
-  // ---- Self marker -----------------------------------------
-
-  function placeSelfMarker(lat, lon) {
-    const icon = makeIcon(selfIconType());
-    if (_selfMarker) {
-      _selfMarker.setLatLng([lat, lon]).setIcon(icon);
+    if (selfMarker) {
+      selfMarker.setLatLng([lat, lng]);
     } else {
-      _selfMarker = L.marker([lat, lon], { icon, zIndexOffset: 1000 }).addTo(_map);
+      selfMarker = L.marker([lat, lng], { icon: leafIcon, zIndexOffset: 1000 }).addTo(map);
     }
   }
 
-  // ---- Nearby users ----------------------------------------
+  // ── Other user markers ───────────────────────────────────
+  function renderMarkers(users) {
+    const seen = new Set();
 
-  function haversineM(lat1, lon1, lat2, lon2) {
-    const R   = 6371000;
-    const toR = d => d * Math.PI / 180;
-    const dLat = toR(lat2 - lat1);
-    const dLon = toR(lon2 - lon1);
-    const a = Math.sin(dLat/2)**2 + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    users.forEach(u => {
+      seen.add(u.userId);
+
+      const cls   = 'bbm-marker ' + (u.sex === 'f' ? 'female' : u.sex === 'm' ? 'male' : 'guest');
+      const emoji = u.sex === 'f' ? '👌' : u.sex === 'm' ? '👆' : '👤';
+
+      if (markers[u.userId]) {
+        markers[u.userId].setLatLng([u.lat, u.lng]);
+        return;
+      }
+
+      const el = document.createElement('div');
+      el.className = cls;
+      el.textContent = emoji;
+      el.title = u.nickname || 'User';
+
+      const leafIcon = L.divIcon({ html: el, className: '', iconSize: [38, 38], iconAnchor: [19, 19] });
+      const m = L.marker([u.lat, u.lng], { icon: leafIcon }).addTo(map);
+
+      m.on('click', () => window.openPinModal?.(u));
+      markers[u.userId] = m;
+    });
+
+    // Remove stale markers
+    Object.keys(markers).forEach(uid => {
+      if (!seen.has(uid)) {
+        map.removeLayer(markers[uid]);
+        delete markers[uid];
+      }
+    });
   }
 
-  async function refreshNearby() {
-    if (_selfLat === null) return;
-    try {
-      const { users = [] } = await window.Api.getNearby(_selfLat, _selfLon);
-      const seen = new Set();
+  // ── Geolocation ─────────────────────────────────────────
+  function startWatch() {
+    if (!('geolocation' in navigator)) {
+      setStatus('location unavailable', 'off');
+      return;
+    }
 
-      for (const u of users) {
-        seen.add(u.userId);
-        const icon = makeIcon(iconTypeFor(u.isRegistered, u.sex));
-        if (_userMarkers[u.userId]) {
-          _userMarkers[u.userId].setLatLng([u.lat, u.lon]).setIcon(icon);
+    setStatus('locating…', 'locating');
+
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        myPos = { lat, lng };
+
+        if (!map) {
+          initMap(lat, lng);
         } else {
-          _userMarkers[u.userId] = L.marker([u.lat, u.lon], { icon })
-            .addTo(_map)
-            .on('click', () => MapModule.onUserClick(u));
+          placeSelfMarker(lat, lng);
+        }
+
+        pushLocation(lat, lng);
+      },
+      err => {
+        console.warn('[Map] Geo error', err.message);
+        setStatus('location blocked', 'off');
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    );
+  }
+
+  // ── POST location to backend ─────────────────────────────
+  async function pushLocation(lat, lng) {
+    try {
+      const data = await window.Api.updateLocation(lat, lng);
+      if (data.sessionId && !sessionId) {
+        sessionId = data.sessionId;
+        const secs = data.guestTtlSeconds;
+        if (secs && !window.Auth?.isRegistered()) {
+          window.startGuestCountdown?.(secs);
         }
       }
-
-      for (const [uid, marker] of Object.entries(_userMarkers)) {
-        if (!seen.has(uid)) { marker.remove(); delete _userMarkers[uid]; }
-      }
-    } catch (err) {
-      console.warn('[Map] refreshNearby error', err);
-    }
+    } catch { /* silent */ }
   }
 
-  // ---- Location push ---------------------------------------
+  // ── Poll nearby users ────────────────────────────────────
+  let pollTimer = null;
 
-  function shouldPush(lat, lon) {
-    if (_prevLat === null) return true;
-    return (Date.now() - _prevUpdateTime >= CFG.LOC_INTERVAL_MS) ||
-           (haversineM(_prevLat, _prevLon, lat, lon) >= CFG.LOC_DIST_M);
+  function startPolling() {
+    if (pollTimer) return;
+    poll();
+    pollTimer = setInterval(poll, POLL_MS);
   }
 
-  async function pushLocation(lat, lon) {
-    if (!shouldPush(lat, lon)) return;
+  async function poll() {
+    if (!myPos) return;
     try {
-      await window.Api.putLocation(lat, lon);
-      _prevLat = lat; _prevLon = lon; _prevUpdateTime = Date.now();
-    } catch (err) {
-      console.warn('[Map] pushLocation error', err);
+      const { users = [] } = await window.Api.getNearby();
+      renderMarkers(users);
+    } catch { /* silent */ }
+  }
+
+  // ── Refresh markers (called on login) ───────────────────
+  function refreshMarkers() {
+    // Re-draw self marker with new profile sex
+    if (selfMarker && myPos) placeSelfMarker(myPos.lat, myPos.lng);
+    poll();
+  }
+
+  // ── Centre on self ───────────────────────────────────────
+  function centreOnSelf() {
+    if (map && myPos) {
+      map.setView([myPos.lat, myPos.lng], 17, { animate: true });
     }
   }
 
-  // ---- Geolocation -----------------------------------------
-
-  function onPosition(pos) {
-    const { latitude: lat, longitude: lon } = pos.coords;
-    _selfLat = lat;
-    _selfLon = lon;
-
-    if (_firstFix) {
-      // First position fix — always centre and zoom to user.
-      _map.setView([lat, lon], CFG.DEFAULT_ZOOM);
-      _firstFix = false;
-    } else if (!_userInteracted) {
-      // Subsequent fixes — only pan (keep user's zoom level)
-      // if the user hasn't manually interacted with the map.
-      _map.panTo([lat, lon]);
-    }
-    // If _userInteracted is true, we only update the marker
-    // position — the viewport is left entirely alone.
-
-    placeSelfMarker(lat, lon);
-    setStatus('active', 'live');
-    pushLocation(lat, lon);
-  }
-
-  function onGeoError(err) {
-    console.warn('[Map] Geolocation error', err.code, err.message);
-    setStatus('locating', 'searching…');
-  }
-
-  function startWatching() {
-    if (!_geoAvailable) { onGeoError({ code: 0, message: 'not supported' }); return; }
-    const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 };
-    if (navigator.geolocation.watchPosition) {
-      navigator.geolocation.watchPosition(onPosition, onGeoError, opts);
-    } else {
-      navigator.geolocation.getCurrentPosition(onPosition, onGeoError, opts);
-      setInterval(() => navigator.geolocation.getCurrentPosition(onPosition, onGeoError, opts), CFG.UPDATE_INTERVAL_MS);
+  // ── Guest expired ────────────────────────────────────────
+  function onGuestExpired() {
+    setStatus('session expired', 'off');
+    if (map) {
+      markers && Object.values(markers).forEach(m => map.removeLayer(m));
+      markers = {};
     }
   }
 
-  function startNearbyPoll() {
-    if (_pollTimer) clearInterval(_pollTimer);
-    _pollTimer = setInterval(refreshNearby, CFG.NEARBY_POLL_MS);
-    refreshNearby();
+  // ── Status helper (delegates to app.js) ─────────────────
+  function setStatus(text, state) {
+    const dot  = document.getElementById('statusDot');
+    const span = document.getElementById('statusText');
+    if (dot)  { dot.className  = 'bbm-status-dot' + (state ? ' ' + state : ''); }
+    if (span) { span.textContent = text; }
   }
 
-  function stopNearbyPoll() {
-    if (_pollTimer) clearInterval(_pollTimer);
-    _pollTimer = null;
-    for (const m of Object.values(_userMarkers)) m.remove();
-    _userMarkers = {};
-  }
+  // ── Expose API ───────────────────────────────────────────
+  window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired };
 
-  // ---- Public API ------------------------------------------
-
-  return {
-    init() {
-      setStatus('locating', 'locating…');
-      initMapNow();
-      startWatching();
-      startNearbyPoll();
-    },
-
-    refreshSelfIcon() {
-      if (_selfMarker) _selfMarker.setIcon(makeIcon(selfIconType()));
-    },
-
-    stopNearbyPoll,
-    startNearbyPoll,
-    getSelfPosition() { return { lat: _selfLat, lon: _selfLon }; },
-    onUserClick: null,
-  };
+  // ── Start ────────────────────────────────────────────────
+  startWatch();
 
 })();
-
-window.MapModule = MapModule;

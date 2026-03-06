@@ -1,0 +1,82 @@
+<!-- ============================================================
+     MODAL — Map Pin
+     Minimal: nickname · age · sex · link to full profile
+     ============================================================ -->
+<div class="modal fade" id="pinModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:320px">
+    <div class="modal-content">
+
+      <div class="modal-header border-0 pb-0">
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0 pb-2 text-center">
+
+        <!-- Avatar -->
+        <div class="pin-avatar" id="pinAvatar">
+          <span id="pinAvatarIcon">👤</span>
+        </div>
+
+        <!-- Name -->
+        <h5 class="heading-serif mb-1" id="pinNickname" style="font-size:1.3rem">—</h5>
+
+        <!-- Meta row -->
+        <p class="text-muted-bb mb-3" style="font-size:0.85rem">
+          <span id="pinAge">—</span>
+          <span class="mx-1 text-faint">·</span>
+          <span id="pinSex">—</span>
+          <span class="mx-1 text-faint">·</span>
+          <span id="pinDist">—</span>
+        </p>
+
+        <!-- Actions — only shown for registered users viewing registered targets -->
+        <div id="pinActions" class="d-flex flex-column gap-2 d-none">
+          <a href="#" id="pinProfileLink" class="btn btn-bbm-primary w-100">
+            <i class="bi bi-person me-2"></i>View Profile
+          </a>
+        </div>
+
+      </div>
+
+      <div class="modal-footer border-0 pt-0">
+        <!-- Guest prompt -->
+        <div id="pinGuestPrompt" class="w-100 text-center d-none">
+          <p class="text-muted-bb small mb-2">Register to message people nearby.</p>
+          <button
+            class="btn btn-bbm-primary btn-sm w-100"
+            data-bs-dismiss="modal"
+            data-bs-toggle="modal"
+            data-bs-target="#registerModal"
+          >
+            Create Account
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Delete account confirm (global, triggered from offcanvas) -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+    <div class="modal-content" style="border-color: rgba(192,57,43,0.4) !important">
+      <div class="modal-header" style="border-bottom-color: rgba(192,57,43,0.3) !important">
+        <h5 class="modal-title" style="-webkit-text-fill-color: #ff8a80; background: none; color: #ff8a80">
+          Delete Account
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted-bb mb-0">
+          This will permanently delete your account, messages and favourites.
+          <strong class="text-pink"> This cannot be undone.</strong>
+        </p>
+      </div>
+      <div class="modal-footer" style="border-top-color: rgba(192,57,43,0.3) !important">
+        <button type="button" class="btn btn-bbm-ghost" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-bbm-danger" id="confirmDeleteBtn">Yes, delete everything</button>
+      </div>
+    </div>
+  </div>
+</div>

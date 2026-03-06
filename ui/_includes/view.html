@@ -1,0 +1,14 @@
+---
+layout: default
+title: "Profile"
+permalink: /profile/view/
+---
+
+<div class="bbm-page bbm-fullbleed" id="pubProfilePage">
+  <div class="bbm-loading">Loading…</div>
+</div>
+
+<script type="module">
+import { renderPublicProfile } from '{{ "/scripts/pages/profile.js" | relative_url }}';
+document.addEventListener('bbm:ready', () => renderPublicProfile());
+</script>
