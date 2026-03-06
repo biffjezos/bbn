@@ -35,7 +35,9 @@ async function renderFavourites() {
   wrap.innerHTML = loadingHtml('Loading favourites…');
 
   try {
+    console.log('[Favourites] Fetching /favourites');
     const { favourites = [] } = await window.Api.getFavourites();
+    console.log('[Favourites] Got', favourites.length, 'favourites');
 
     if (favourites.length === 0) {
       wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-star"></i>

@@ -54,6 +54,7 @@ async function renderConversationList() {
   }
 
   wrap.innerHTML = loadingHtml('Loading conversations…');
+  console.log('[Messages] Fetching conversations, isRegistered:', isRegistered());
 
   try {
     const { messages = [] } = await window.Api.getConversations();

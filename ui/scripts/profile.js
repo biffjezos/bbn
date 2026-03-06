@@ -32,6 +32,8 @@ async function renderMyProfile() {
   const wrap = document.getElementById('profileFormWrap');
   if (!wrap) return;
 
+  console.log('[Profile] renderMyProfile called, isRegistered:', isRegistered(), 'token:', !!window.Auth?.getToken?.());
+
   if (!isRegistered()) {
     wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-person-circle"></i>
       <p>Log in to manage your profile.</p>
@@ -41,20 +43,18 @@ async function renderMyProfile() {
 
   wrap.innerHTML = loadingHtml('Loading profile…');
 
-  // Load current values — try Auth.getProfile(), fall back to /users/me API, fall back to JWT
+  // Always fetch from API — authoritative source
   let current = {};
   try {
+    console.log('[Profile] Fetching /users/me');
+    current = await window.Api.getMe();
+    console.log('[Profile] Got profile:', JSON.stringify(current));
+  } catch (err) {
+    console.warn('[Profile] getMe failed:', err.message, '— falling back to JWT/localStorage');
     const p = window.Auth?.getProfile?.();
-    if (p && (p.nickname || p.sex)) {
-      current = p;
-    } else {
-      const me = await window.Api.getMe();
-      current = me;
-    }
-  } catch {
     current = {
-      nickname: getJwtField('nickname'),
-      sex:      getJwtField('sex'),
+      nickname: p?.nickname || getJwtField('nickname'),
+      sex:      p?.sex      || getJwtField('sex'),
       age:      getJwtField('age'),
     };
   }
