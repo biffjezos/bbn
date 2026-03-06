@@ -8,22 +8,58 @@
 
   let map        = null;
   let selfMarker = null;
-  let markers    = {};      // userId → L.marker
-  let watchId    = null;
+  let markers    = {};
   let myPos      = null;
   let sessionId  = null;
+  let pollTimer  = null;
 
-  const TILE_URL   = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-  const TILE_ATTR  = '&copy; OpenStreetMap contributors &copy; CARTO';
-  const POLL_MS    = 5000;
+  const TILE_URL  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  const TILE_ATTR = '&copy; OpenStreetMap contributors &copy; CARTO';
+  const POLL_MS   = 5000;
+  const DEFAULT_ZOOM = 17;
 
-  // ── Init map ────────────────────────────────────────────
+  // ── Emoji + CSS class by sex ─────────────────────────────
+  // Guest/unknown → yellow fist 👊
+  // Male          → light-blue pointing finger 👆
+  // Female        → pink ok hand 👌
+  function markerEmoji(sex) {
+    if (sex === 'f') return '👌';
+    if (sex === 'm') return '👆';
+    return '👊';
+  }
+
+  function markerClass(sex) {
+    if (sex === 'f') return 'female';
+    if (sex === 'm') return 'male';
+    return 'guest';
+  }
+
+  // ── Build Leaflet divIcon HTML string ────────────────────
+  function buildIconHtml(sex, isSelf) {
+    const cls   = 'bbm-marker' + (isSelf ? ' self' : '') + ' ' + markerClass(sex);
+    const emoji = markerEmoji(sex);
+    const title = isSelf ? 'You' : '';
+    return `<div class="${cls}" title="${title}" style="display:flex;align-items:center;justify-content:center;">${emoji}</div>`;
+  }
+
+  function makeLeafIcon(sex, isSelf) {
+    const size   = isSelf ? 46 : 38;
+    const anchor = isSelf ? 23 : 19;
+    return L.divIcon({
+      html:       buildIconHtml(sex, isSelf),
+      className:  '',
+      iconSize:   [size, size],
+      iconAnchor: [anchor, anchor],
+    });
+  }
+
+  // ── Init map ─────────────────────────────────────────────
   function initMap(lat, lng) {
     if (map) return;
 
     map = L.map('map', {
-      center: [lat, lng],
-      zoom: 17,
+      center:      [lat, lng],
+      zoom:        DEFAULT_ZOOM,
       zoomControl: true,
     });
 
@@ -34,24 +70,19 @@
     startPolling();
   }
 
-  // ── Self marker ─────────────────────────────────────────
+  // ── Self marker ──────────────────────────────────────────
   function placeSelfMarker(lat, lng) {
-    const profile   = window.Auth?.getProfile() || {};
-    const sex       = profile.sex || null;
-    const cls       = 'bbm-marker self ' + (sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
-    const icon      = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '📍';
-
-    const el = document.createElement('div');
-    el.className = cls;
-    el.textContent = icon;
-    el.title = 'You';
-
-    const leafIcon = L.divIcon({ html: el, className: '', iconSize: [46, 46], iconAnchor: [23, 23] });
+    const sex = window.Auth?.getProfile?.()?.sex || null;
 
     if (selfMarker) {
+      // Update both position AND icon (sex may have changed after login)
       selfMarker.setLatLng([lat, lng]);
+      selfMarker.setIcon(makeLeafIcon(sex, true));
     } else {
-      selfMarker = L.marker([lat, lng], { icon: leafIcon, zIndexOffset: 1000 }).addTo(map);
+      selfMarker = L.marker([lat, lng], {
+        icon:          makeLeafIcon(sex, true),
+        zIndexOffset:  1000,
+      }).addTo(map);
     }
   }
 
@@ -62,21 +93,14 @@
     users.forEach(u => {
       seen.add(u.userId);
 
-      const cls   = 'bbm-marker ' + (u.sex === 'f' ? 'female' : u.sex === 'm' ? 'male' : 'guest');
-      const emoji = u.sex === 'f' ? '👌' : u.sex === 'm' ? '👆' : '👤';
-
       if (markers[u.userId]) {
         markers[u.userId].setLatLng([u.lat, u.lng]);
         return;
       }
 
-      const el = document.createElement('div');
-      el.className = cls;
-      el.textContent = emoji;
-      el.title = u.nickname || 'User';
-
-      const leafIcon = L.divIcon({ html: el, className: '', iconSize: [38, 38], iconAnchor: [19, 19] });
-      const m = L.marker([u.lat, u.lng], { icon: leafIcon }).addTo(map);
+      const m = L.marker([u.lat, u.lng], {
+        icon: makeLeafIcon(u.sex, false),
+      }).addTo(map);
 
       m.on('click', () => window.openPinModal?.(u));
       markers[u.userId] = m;
@@ -91,41 +115,83 @@
     });
   }
 
-  // ── Geolocation ─────────────────────────────────────────
+  // ── Geolocation ──────────────────────────────────────────
+  // Strategy:
+  //   1. Try getCurrentPosition (low accuracy) immediately — fast, works on
+  //      laptops without GPS using Wi-Fi/IP. Initialises the map right away.
+  //   2. Then start watchPosition (high accuracy) for GPS devices / mobile.
+  //      Updates position as it refines.
+  //   3. If both fail, fall back to IP-based location via ipapi.co.
+
   function startWatch() {
     if (!('geolocation' in navigator)) {
       setStatus('location unavailable', 'off');
+      tryIpFallback();
       return;
     }
 
     setStatus('locating…', 'locating');
 
-    watchId = navigator.geolocation.watchPosition(
-      pos => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        myPos = { lat, lng };
+    // Step 1 — quick coarse fix (works on laptop via Wi-Fi)
+    navigator.geolocation.getCurrentPosition(
+      pos => onPosition(pos),
+      ()  => { /* ignore — watchPosition or IP fallback will handle */ },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
 
-        if (!map) {
-          initMap(lat, lng);
-        } else {
-          placeSelfMarker(lat, lng);
+    // Step 2 — continuous watch (high accuracy for GPS devices)
+    navigator.geolocation.watchPosition(
+      pos  => onPosition(pos),
+      err  => {
+        console.warn('[Map] watchPosition error:', err.message);
+        // Only show error if we still have no position at all
+        if (!myPos) {
+          setStatus('location blocked', 'off');
+          tryIpFallback();
         }
-
-        pushLocation(lat, lng);
-      },
-      err => {
-        console.warn('[Map] Geo error', err.message);
-        setStatus('location blocked', 'off');
       },
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
     );
   }
 
-  // ── POST location to backend ─────────────────────────────
+  function onPosition(pos) {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    myPos = { lat, lng };
+
+    if (!map) {
+      initMap(lat, lng);
+    } else {
+      placeSelfMarker(lat, lng);
+      map.setView([lat, lng], DEFAULT_ZOOM);
+    }
+
+    pushLocation(lat, lng);
+  }
+
+  // Step 3 — IP geolocation fallback (no GPS, no Wi-Fi location)
+  async function tryIpFallback() {
+    try {
+      setStatus('locating via IP…', 'locating');
+      const r    = await fetch('https://ipapi.co/json/');
+      const data = await r.json();
+      if (data.latitude && data.longitude) {
+        const fakPos = { coords: { latitude: data.latitude, longitude: data.longitude } };
+        onPosition(fakPos);
+        setStatus('IP location (approximate)', 'live');
+      }
+    } catch {
+      setStatus('location unavailable', 'off');
+      // Still init map at a world-view so the page isn't blank
+      if (!map) initMap(51.505, -0.09); // London fallback
+    }
+  }
+
+  // ── Push location to backend ─────────────────────────────
   async function pushLocation(lat, lng) {
     try {
       const data = await window.Api.putLocation(lat, lng);
-      if (data.sessionId && !sessionId) {
+      if (data?.sessionId && !sessionId) {
         sessionId = data.sessionId;
         const secs = data.guestTtlSeconds;
         if (secs && !window.Auth?.isRegistered()) {
@@ -136,8 +202,6 @@
   }
 
   // ── Poll nearby users ────────────────────────────────────
-  let pollTimer = null;
-
   function startPolling() {
     if (pollTimer) return;
     poll();
@@ -152,9 +216,8 @@
     } catch { /* silent */ }
   }
 
-  // ── Refresh markers (called on login) ───────────────────
+  // ── Refresh markers after login (sex may have changed) ───
   function refreshMarkers() {
-    // Re-draw self marker with new profile sex
     if (selfMarker && myPos) placeSelfMarker(myPos.lat, myPos.lng);
     poll();
   }
@@ -162,28 +225,26 @@
   // ── Centre on self ───────────────────────────────────────
   function centreOnSelf() {
     if (map && myPos) {
-      map.setView([myPos.lat, myPos.lng], 17, { animate: true });
+      map.setView([myPos.lat, myPos.lng], DEFAULT_ZOOM, { animate: true });
     }
   }
 
-  // ── Guest expired ────────────────────────────────────────
+  // ── Guest session expired ────────────────────────────────
   function onGuestExpired() {
     setStatus('session expired', 'off');
-    if (map) {
-      markers && Object.values(markers).forEach(m => map.removeLayer(m));
-      markers = {};
-    }
+    Object.values(markers).forEach(m => map?.removeLayer(m));
+    markers = {};
   }
 
-  // ── Status helper (delegates to app.js) ─────────────────
+  // ── Status helper ────────────────────────────────────────
   function setStatus(text, state) {
     const dot  = document.getElementById('statusDot');
     const span = document.getElementById('statusText');
-    if (dot)  { dot.className  = 'bbm-status-dot' + (state ? ' ' + state : ''); }
-    if (span) { span.textContent = text; }
+    if (dot)  dot.className   = 'bbm-status-dot' + (state ? ' ' + state : '');
+    if (span) span.textContent = text;
   }
 
-  // ── Expose API ───────────────────────────────────────────
+  // ── Expose ───────────────────────────────────────────────
   window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired };
 
   // ── Start ────────────────────────────────────────────────
