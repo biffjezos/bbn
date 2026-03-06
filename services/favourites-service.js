@@ -1,16 +1,15 @@
 // ============================================================
 // bOOmbOOm.NOW! — favourites-service.js
 // Standalone service. Add, remove, list favourite contacts.
-// Available to all registered users.
 // ============================================================
 
 // ============================================================
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:             process.env.PORT             || 8080,
+  PORT:             process.env.PORT             || 3006,
   MONGO_URI:        process.env.MONGO_URI        || '',
-  DB_NAME:          process.env.DB_NAME          || 'boomboom',
+  DB_NAME:          process.env.DB_NAME          || 'test',
   JWT_SECRET:       process.env.JWT_SECRET       || 'change-me-in-production',
   LOCATION_TTL_SEC: 10 * 60,   // must match location-service
 };
@@ -33,6 +32,7 @@ await db.collection('favourites').createIndex(
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
+// Verify Bearer token — registered users only
 function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -48,6 +48,7 @@ function verifyToken(req, res, next) {
   }
 }
 
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // GET /favourites — list all favourites with live nickname + online status
@@ -62,7 +63,6 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     const ids = entries.map(e => new ObjectId(e.favouriteUserId));
 
-    // Live nicknames and sex from users collection
     const users = await db.collection('users')
       .find({ _id: { $in: ids } })
       .project({ _id: 1, nickname: 1, sex: 1 })
@@ -70,19 +70,14 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
 
-    // Online status — has a location doc updated within TTL
     const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
     const locations = await db.collection('locations')
-      .find({
-        userId:    { $in: entries.map(e => e.favouriteUserId) },
-        updatedAt: { $gt: cutoff },
-      })
+      .find({ userId: { $in: entries.map(e => e.favouriteUserId) }, updatedAt: { $gt: cutoff } })
       .project({ userId: 1 })
       .toArray();
 
     const onlineSet = new Set(locations.map(l => l.userId));
 
-    // Silently drop entries whose account no longer exists
     const favourites = entries
       .filter(e => userMap[e.favouriteUserId])
       .map(e => {
