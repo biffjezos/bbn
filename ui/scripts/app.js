@@ -26,61 +26,57 @@
 // ------------------------------------------------------------
 
 // ============================================================
-// bOOmbOOm.NOW! — app.js
-// Wires Auth hooks → UI, navbar, offcanvas, modals, FAB
-// auth.js owns all token + guest session logic.
+// bOOmbOOm.NOW! — app.js  (plain script, NOT a module)
+// Runs synchronously after auth.js loads.
+// Sets Auth hooks, then triggers Auth.init().
+// Also wires modals, offcanvas, FAB after DOMContentLoaded.
 // ============================================================
 
-(async function () {
+(function () {
 
   function $(id) { return document.getElementById(id); }
 
-  // ── Status badge ─────────────────────────────────────────
+  // ── Status badge ──────────────────────────────────────────
   function setStatus(text, state) {
-    const dot  = $('statusDot');
-    const span = $('statusText');
+    var dot  = $('statusDot');
+    var span = $('statusText');
     if (dot)  dot.className    = 'bbm-status-dot' + (state ? ' ' + state : '');
     if (span) span.textContent = text;
   }
 
   // ── Desktop nav links ─────────────────────────────────────
   function buildDesktopNav(isReg) {
-    const el = $('navLinksDesktop');
+    var el = $('navLinksDesktop');
     if (!el) return;
-    const p = location.pathname;
+    var p = location.pathname;
     if (!isReg) {
-      el.innerHTML = `
-        <button class="btn btn-bbm-ghost btn-sm"
-          data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>
-        <button class="btn btn-bbm-primary btn-sm"
-          data-bs-toggle="modal" data-bs-target="#registerModal">Sign Up</button>`;
+      el.innerHTML =
+        '<button class="btn btn-bbm-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>' +
+        '<button class="btn btn-bbm-primary btn-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Sign Up</button>';
     } else {
-      el.innerHTML = `
-        <a href="/messages/"   class="nav-link ${p.startsWith('/messages/')  ? 'active' : ''}">
-          <i class="bi bi-chat-dots me-1"></i>Messages</a>
-        <a href="/favourites/" class="nav-link ${p.startsWith('/favourites/') ? 'active' : ''}">
-          <i class="bi bi-star me-1"></i>Favourites</a>
-        <a href="/profile/"    class="nav-link ${p.startsWith('/profile/')    ? 'active' : ''}">
-          <i class="bi bi-person-circle me-1"></i>Profile</a>`;
+      el.innerHTML =
+        '<a href="/messages/"   class="nav-link ' + (p.startsWith('/messages/')   ? 'active' : '') + '"><i class="bi bi-chat-dots me-1"></i>Messages</a>' +
+        '<a href="/favourites/" class="nav-link ' + (p.startsWith('/favourites/') ? 'active' : '') + '"><i class="bi bi-star me-1"></i>Favourites</a>' +
+        '<a href="/profile/"    class="nav-link ' + (p.startsWith('/profile/')    ? 'active' : '') + '"><i class="bi bi-person-circle me-1"></i>Profile</a>';
     }
   }
 
   // ── Offcanvas state ───────────────────────────────────────
   function syncOffcanvas(isReg) {
-    const guestMenu = $('guestMenu');
-    const userMenu  = $('userMenu');
+    var guestMenu = $('guestMenu');
+    var userMenu  = $('userMenu');
     if (!guestMenu || !userMenu) return;
     if (isReg) {
       guestMenu.classList.add('d-none');
       userMenu.classList.remove('d-none');
-      const nickEl = $('menuNickname');
+      var nickEl  = $('menuNickname');
       if (nickEl) {
-        const profile = Auth.getProfile();
+        var profile = Auth.getProfile();
         nickEl.textContent = profile.nickname || '—';
-        const color = profile.sex === 'f' ? 'var(--bbm-pink-light)'
-                    : profile.sex === 'm' ? 'var(--bbm-blue-light)'
-                    : 'var(--bbm-text)';
-        nickEl.style.cssText = `-webkit-text-fill-color:${color};color:${color};background:none`;
+        var color = profile.sex === 'f' ? 'var(--bbm-pink-light)'
+                  : profile.sex === 'm' ? 'var(--bbm-blue-light)'
+                  : 'var(--bbm-text)';
+        nickEl.style.cssText = '-webkit-text-fill-color:' + color + ';color:' + color + ';background:none';
       }
     } else {
       guestMenu.classList.remove('d-none');
@@ -88,161 +84,185 @@
     }
   }
 
-  // ── Apply auth state ──────────────────────────────────────
   function applyAuthState(isReg) {
     buildDesktopNav(isReg);
     syncOffcanvas(isReg);
-    // Don't touch status here — map.js owns it on the map page
+    // map.js owns the status bar
   }
 
-  // ── Auth hooks — set BEFORE Auth.init() ──────────────────
+  // ── Auth hooks — set NOW, before Auth.init() runs ─────────
   Auth.onLogin = function () {
     applyAuthState(true);
-    // Immediately update self marker icon to sex-specific emoji
-    window.MapModule?.refreshMarkers();
+    window.MapModule && window.MapModule.refreshMarkers();
   };
 
   Auth.onLogout = function () {
     applyAuthState(false);
-    // Revert self marker to guest (yellow fist)
-    window.MapModule?.refreshMarkers();
-    const prot = ['/messages', '/favourites', '/profile'];
-    if (prot.some(p => location.pathname.startsWith(p))) window.location.href = '/';
+    window.MapModule && window.MapModule.refreshMarkers();
+    var prot = ['/messages', '/favourites', '/profile'];
+    if (prot.some(function(p) { return location.pathname.startsWith(p); })) {
+      window.location.href = '/';
+    }
   };
 
-  Auth.onGuestReady   = function () { /* map.js owns the status bar */ };
+  Auth.onGuestReady   = function () { /* map.js owns status */ };
   Auth.onGuestExpired = function () {
     setStatus('session expired', 'off');
-    window.MapModule?.onGuestExpired();
+    window.MapModule && window.MapModule.onGuestExpired();
   };
 
-  // ── Login modal ───────────────────────────────────────────
-  $('loginSubmitBtn')?.addEventListener('click', async () => {
-    const email    = $('loginEmail')?.value.trim();
-    const password = $('loginPassword')?.value;
-    const errEl    = $('loginError');
-    errEl?.classList.add('d-none');
+  // ── Kick off Auth.init() now — hooks are ready ────────────
+  window.__authReady = Auth.init();
 
-    if (!email || !password) {
-      if (errEl) { errEl.textContent = 'Please enter your email and password.'; errEl.classList.remove('d-none'); }
-      return;
+  // ── Wire UI interactions after DOM is ready ───────────────
+  document.addEventListener('DOMContentLoaded', function () {
+
+    // Login modal
+    var loginBtn = $('loginSubmitBtn');
+    if (loginBtn) {
+      loginBtn.addEventListener('click', async function () {
+        var email    = $('loginEmail') ? $('loginEmail').value.trim() : '';
+        var password = $('loginPassword') ? $('loginPassword').value : '';
+        var errEl    = $('loginError');
+        if (errEl) errEl.classList.add('d-none');
+
+        if (!email || !password) {
+          if (errEl) { errEl.textContent = 'Please enter your email and password.'; errEl.classList.remove('d-none'); }
+          return;
+        }
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Logging in…';
+        try {
+          await Auth.login({ email: email, password: password });
+          var modal = bootstrap.Modal.getInstance($('loginModal'));
+          if (modal) modal.hide();
+        } catch (err) {
+          if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
+        } finally {
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Log In';
+        }
+      });
+
+      ['loginEmail', 'loginPassword'].forEach(function(id) {
+        var el = $(id);
+        if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') loginBtn.click(); });
+      });
     }
 
-    const btn = $('loginSubmitBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Logging in…';
+    // Register modal
+    var regBtn = $('regSubmitBtn');
+    if (regBtn) {
+      regBtn.addEventListener('click', async function () {
+        var email    = $('regEmail')    ? $('regEmail').value.trim()    : '';
+        var nickname = $('regNickname') ? $('regNickname').value.trim() : '';
+        var password = $('regPassword') ? $('regPassword').value        : '';
+        var age      = $('regAge')      ? parseInt($('regAge').value, 10) : 0;
+        var sex      = $('regSex')      ? $('regSex').value              : '';
+        var errEl    = $('registerError');
+        if (errEl) errEl.classList.add('d-none');
 
-    try {
-      await Auth.login({ email, password });
-      bootstrap.Modal.getInstance($('loginModal'))?.hide();
-    } catch (err) {
-      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Log In';
-    }
-  });
-
-  [$('loginEmail'), $('loginPassword')].forEach(el => {
-    el?.addEventListener('keydown', e => { if (e.key === 'Enter') $('loginSubmitBtn')?.click(); });
-  });
-
-  // ── Register modal ────────────────────────────────────────
-  $('regSubmitBtn')?.addEventListener('click', async () => {
-    const email    = $('regEmail')?.value.trim();
-    const nickname = $('regNickname')?.value.trim();
-    const password = $('regPassword')?.value;
-    const age      = parseInt($('regAge')?.value, 10);
-    const sex      = $('regSex')?.value;
-    const errEl    = $('registerError');
-    errEl?.classList.add('d-none');
-
-    if (!email || !nickname || !password || !age || !sex) {
-      if (errEl) { errEl.textContent = 'All fields are required.'; errEl.classList.remove('d-none'); }
-      return;
-    }
-    if (nickname.length < 2) {
-      if (errEl) { errEl.textContent = 'Nickname must be at least 2 characters.'; errEl.classList.remove('d-none'); }
-      return;
+        if (!email || !nickname || !password || !age || !sex) {
+          if (errEl) { errEl.textContent = 'All fields are required.'; errEl.classList.remove('d-none'); }
+          return;
+        }
+        if (nickname.length < 2) {
+          if (errEl) { errEl.textContent = 'Nickname must be at least 2 characters.'; errEl.classList.remove('d-none'); }
+          return;
+        }
+        regBtn.disabled = true;
+        regBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating account…';
+        try {
+          await Auth.register({ email: email, nickname: nickname, password: password, age: age, sex: sex });
+          var modal = bootstrap.Modal.getInstance($('registerModal'));
+          if (modal) modal.hide();
+        } catch (err) {
+          if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
+        } finally {
+          regBtn.disabled = false;
+          regBtn.textContent = 'Create Account';
+        }
+      });
     }
 
-    const btn = $('regSubmitBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating account…';
-
-    try {
-      await Auth.register({ email, nickname, password, age, sex });
-      bootstrap.Modal.getInstance($('registerModal'))?.hide();
-    } catch (err) {
-      if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Create Account';
-    }
-  });
-
-  // ── Offcanvas buttons ─────────────────────────────────────
-  $('logoutBtn')?.addEventListener('click', () => {
-    bootstrap.Offcanvas.getInstance($('appMenu'))?.hide();
-    Auth.logout();
-  });
-
-  $('deleteAccountBtn')?.addEventListener('click', () => {
-    bootstrap.Offcanvas.getInstance($('appMenu'))?.hide();
-    new bootstrap.Modal($('deleteConfirmModal')).show();
-  });
-
-  $('confirmDeleteBtn')?.addEventListener('click', async () => {
-    try {
-      await Auth.deleteAccount();
-      bootstrap.Modal.getInstance($('deleteConfirmModal'))?.hide();
-    } catch (err) {
-      alert('Error deleting account: ' + err.message);
-    }
-  });
-
-  // ── Pin modal — populated by map.js ──────────────────────
-  window.openPinModal = function (user) {
-    const { userId, nickname, age, sex, distanceM, isRegistered: targetIsReg } = user;
-
-    const avatarEl = $('pinAvatar');
-    if (avatarEl) avatarEl.className = 'pin-avatar ' + (sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
-
-    const iconEl = $('pinAvatarIcon');
-    if (iconEl) iconEl.textContent = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊';
-
-    if ($('pinNickname')) $('pinNickname').textContent = nickname || 'Anonymous';
-    if ($('pinAge'))      $('pinAge').textContent      = age ? `${age} yrs` : '—';
-    if ($('pinSex'))      $('pinSex').textContent      = sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—';
-    if ($('pinDist'))     $('pinDist').textContent     = distanceM != null
-      ? distanceM < 1000 ? `${Math.round(distanceM)}m away` : `${(distanceM / 1000).toFixed(1)}km away`
-      : '';
-
-    const viewerIsReg = Auth.isRegistered();
-    $('pinActions')?.classList.toggle('d-none', !viewerIsReg || !targetIsReg);
-    $('pinGuestPrompt')?.classList.toggle('d-none', viewerIsReg);
-
-    const profileLink = $('pinProfileLink');
-    if (viewerIsReg && targetIsReg && profileLink && userId) {
-      profileLink.href = `/profile/view/?uid=${encodeURIComponent(userId)}&name=${encodeURIComponent(nickname || '')}`;
+    // Logout
+    var logoutBtn = $('logoutBtn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', function () {
+        var oc = bootstrap.Offcanvas.getInstance($('appMenu'));
+        if (oc) oc.hide();
+        Auth.logout();
+      });
     }
 
-    new bootstrap.Modal($('pinModal')).show();
-  };
+    // Delete account
+    var deleteBtn = $('deleteAccountBtn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', function () {
+        var oc = bootstrap.Offcanvas.getInstance($('appMenu'));
+        if (oc) oc.hide();
+        new bootstrap.Modal($('deleteConfirmModal')).show();
+      });
+    }
 
-  // ── FAB ───────────────────────────────────────────────────
-  $('fabCentre')?.addEventListener('click', () => window.MapModule?.centreOnSelf());
+    var confirmDeleteBtn = $('confirmDeleteBtn');
+    if (confirmDeleteBtn) {
+      confirmDeleteBtn.addEventListener('click', async function () {
+        try {
+          await Auth.deleteAccount();
+          var modal = bootstrap.Modal.getInstance($('deleteConfirmModal'));
+          if (modal) modal.hide();
+        } catch (err) {
+          alert('Error deleting account: ' + err.message);
+        }
+      });
+    }
 
-  // ── Init ─────────────────────────────────────────────────
-  // Auth.init() was already called in the layout (window.__authReady).
-  // Just await it here to ensure it has resolved before we build the UI.
-  await window.__authReady;
+    // Pin modal
+    window.openPinModal = function (user) {
+      var userId      = user.userId;
+      var nickname    = user.nickname;
+      var age         = user.age;
+      var sex         = user.sex;
+      var distanceM   = user.distanceM;
+      var targetIsReg = user.isRegistered;
 
-  // Sync UI to whatever state Auth.init() resolved to
-  applyAuthState(Auth.isRegistered());
+      var avatarEl = $('pinAvatar');
+      if (avatarEl) avatarEl.className = 'pin-avatar ' + (sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
+      var iconEl = $('pinAvatarIcon');
+      if (iconEl) iconEl.textContent = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊';
+      if ($('pinNickname')) $('pinNickname').textContent = nickname || 'Anonymous';
+      if ($('pinAge'))      $('pinAge').textContent      = age ? age + ' yrs' : '—';
+      if ($('pinSex'))      $('pinSex').textContent      = sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—';
+      if ($('pinDist'))     $('pinDist').textContent     = distanceM != null
+        ? (distanceM < 1000 ? Math.round(distanceM) + 'm away' : (distanceM / 1000).toFixed(1) + 'km away')
+        : '';
 
-  // Signal page modules — auth state is stable
-  window.__bbmReady = true;
-  document.dispatchEvent(new Event('bbm:ready'));
+      var viewerIsReg = Auth.isRegistered();
+      var pinActions  = $('pinActions');
+      var pinGuest    = $('pinGuestPrompt');
+      if (pinActions) pinActions.classList.toggle('d-none', !viewerIsReg || !targetIsReg);
+      if (pinGuest)   pinGuest.classList.toggle('d-none', viewerIsReg);
+
+      var profileLink = $('pinProfileLink');
+      if (viewerIsReg && targetIsReg && profileLink && userId) {
+        profileLink.href = '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+      }
+
+      new bootstrap.Modal($('pinModal')).show();
+    };
+
+    // FAB
+    var fab = $('fabCentre');
+    if (fab) fab.addEventListener('click', function () {
+      window.MapModule && window.MapModule.centreOnSelf();
+    });
+
+    // Apply UI state now that DOM exists
+    window.__authReady.then(function () {
+      applyAuthState(Auth.isRegistered());
+    });
+
+  }); // DOMContentLoaded
 
 })();

@@ -21,35 +21,44 @@
 {% include modal-register.html %}
 {% include modal-pin.html %}
 
-<!-- API base URL from Jekyll config -->
 <script>
   window.BOOMBOOM_API_URL = '{{ site.api_url | default: "https://hmmly-boom.up.railway.app/api" }}';
 </script>
 
-<!-- Third-party libs first — map.js and app.js depend on them -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
 
-<!-- api.js and auth.js are plain scripts — they set window.Api and window.Auth synchronously -->
+<!-- api.js → Auth available as global -->
 <script src="{{ '/scripts/api.js'  | relative_url }}"></script>
 <script src="{{ '/scripts/auth.js' | relative_url }}"></script>
 
-<!--
-  Auth is now available. Kick off Auth.init() immediately and store the
-  promise on window.  Every page script — including ES modules — does:
-      await window.__authReady;
-  This guarantees the token is loaded and Auth.isRegistered() is correct
-  before any API call is made, regardless of module evaluation order.
--->
+<!-- app.js — plain script, sets Auth hooks then calls Auth.init() -->
+<script src="{{ '/scripts/app.js'  | relative_url }}"></script>
+
+<!-- Redirect guests away from protected pages before any content renders -->
 <script>
-  window.__authReady = Auth.init();
+  (function () {
+    var PROTECTED = ['/messages', '/favourites', '/profile'];
+    var path = window.location.pathname;
+    if (!PROTECTED.some(function(p) { return path.startsWith(p); })) return;
+
+    var token = localStorage.getItem('bbm_token');
+    var valid = false;
+    if (token) {
+      try {
+        var payload = JSON.parse(atob(token.split('.')[1]));
+        valid = payload.role === 'user' && (payload.exp * 1000) > Date.now();
+      } catch (e) {}
+    }
+    if (!valid) {
+      window.location.replace('/');
+      throw new Error('Guest redirect.');
+    }
+  })();
 </script>
 
-<!-- map.js is a plain IIFE — runs synchronously, uses window.Auth/Api -->
+<!-- map.js — plain IIFE, only runs if #map exists -->
 <script src="{{ '/scripts/map.js' | relative_url }}"></script>
-
-<!-- app.js wires UI hooks; it also awaits window.__authReady -->
-<script type="module" src="{{ '/scripts/app.js' | relative_url }}"></script>
 
 {% if page.extra_js %}
 {% for js in page.extra_js %}
