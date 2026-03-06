@@ -15,7 +15,6 @@ const CFG = {
   LOC_SERVICE_URL:       process.env.LOC_SERVICE_URL       || 'http://loc',
   MSG_SERVICE_URL:       process.env.MSG_SERVICE_URL       || 'http://msg',
   FAV_SERVICE_URL:       process.env.FAV_SERVICE_URL       || 'http://fav',
-  TIER_SERVICE_URL:      process.env.TIER_SERVICE_URL      || 'http://tiers',
   MIGRATION_SERVICE_URL: process.env.MIGRATION_SERVICE_URL || 'http://migrations',
 };
 // ============================================================
@@ -85,9 +84,6 @@ app.delete('/api/messages/:id',       (req, res) => proxy(req, res, `${CFG.MSG_S
 app.get   ('/api/favourites',         (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));
 app.post  ('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
 app.delete('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
-
-// --- Tiers --------------------------------------------------
-app.get('/api/tiers/info', (req, res) => proxy(req, res, `${CFG.TIER_SERVICE_URL}/tiers/info`));
 
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));

@@ -132,13 +132,6 @@ const Api = {
     return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'DELETE' });
   },
 
-  // ---- Tiers ----------------------------------------------
-
-  /** Returns { tiers: { guest: { label, cls }, regular: { label, cls }, premium: { label, cls } } } */
-  getTierInfo() {
-    return apiFetch('/tiers/info');
-  },
-
 };
 
 // Expose globally (no bundler)

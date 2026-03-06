@@ -12,7 +12,7 @@ Any visitor gets a guest token automatically on page load. The frontend generate
 
 - Token lifetime: **15 minutes**
 - Identified by UUID — not tied to any account
-- Allows: seeing the map, seeing nearby users (50m radius)
+- Allows: seeing the map, seeing nearby users (50 m radius)
 - Does not allow: messaging, favourites
 
 When a guest registers or logs in, their guest location and session documents are deleted from the database immediately so their guest icon disappears from the map.
@@ -31,7 +31,7 @@ POST /api/auth/guest
 **Response:**
 ```json
 {
-  "token": "eyJ...",
+  "token":     "eyJ…",
   "expiresIn": 900000
 }
 ```
@@ -64,12 +64,12 @@ POST /api/auth/register
 - `sex` must be `"m"` or `"f"`
 - `age` must be a number between 18 and 120
 - `password` minimum 8 characters
-- `email` and `nickname` must be unique
+- `email` must be unique; `nickname` is a display name — duplicates are allowed
 
 **Response:**
 ```json
 {
-  "token":    "eyJ...",
+  "token":    "eyJ…",
   "nickname": "username",
   "sex":      "m",
   "tier":     "regular"
@@ -80,7 +80,7 @@ POST /api/auth/register
 
 ## Login
 
-Reads the user's `tier` from the database and bakes it into the JWT. This is the only moment the database tier value is consulted — the token is the enforcement mechanism from this point on.
+Login is by **email and password only**. The user's `tier` is read from the database at login time and baked into the JWT. Unknown or missing tier values fall back to `"regular"`.
 
 ### Endpoint
 
@@ -91,7 +91,7 @@ POST /api/auth/login
 **Body:**
 ```json
 {
-  "login":    "username or email",
+  "email":    "user@example.com",
   "password": "yourpassword",
   "guestId":  "uuid-string"
 }
@@ -102,7 +102,7 @@ POST /api/auth/login
 **Response:**
 ```json
 {
-  "token":    "eyJ...",
+  "token":    "eyJ…",
   "nickname": "username",
   "sex":      "m",
   "tier":     "regular"
@@ -119,7 +119,7 @@ All tokens contain:
 {
   "sub":      "userId or guestUUID",
   "role":     "user | guest",
-  "tier":     "guest | regular | premium",
+  "tier":     "regular | premium | guest",
   "email":    "user@example.com",
   "nickname": "username",
   "sex":      "m | f",
@@ -132,6 +132,8 @@ Guest tokens only contain `sub`, `role`, `tier`, `iat`, `exp`.
 
 User tokens expire after **7 days**. Guest tokens expire after **15 minutes**.
 
+> **Note:** `tier` is present in the JWT and kept in sync but is not currently used to gate any features — all registered users have equal access. A proper ABAC system will be introduced in a future iteration.
+
 ---
 
 ## Token Storage (Frontend)
@@ -140,8 +142,6 @@ Tokens are stored in `localStorage` under the key `bbm_token`. On page load, `au
 
 ---
 
-## Tier and JWT Security
+## Nickname
 
-The `tier` field in the JWT is signed with `JWT_SECRET`. Changing the tier value in MongoDB has no effect on an active session — the user must log out and back in to receive a new token reflecting the updated tier.
-
-See `docs/tiers.md` for full details on the tier system.
+Nickname is a **display name only**. It is not unique — multiple users may share the same nickname. All internal service communication (messages, favourites, profiles) uses the unique `userId` (`sub` in the JWT). Nicknames are only used to display a human-readable label in the UI.

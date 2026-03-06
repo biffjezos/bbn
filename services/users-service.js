@@ -81,8 +81,8 @@ app.put('/users/me', requireUser, async (req, res) => {
 
     if (update.age && (update.age < 18 || update.age > 120))
       return res.status(400).json({ error: 'Age must be 18-120.' });
-    if (update.sex && !['m', 'f', 'o'].includes(update.sex))
-      return res.status(400).json({ error: "sex must be 'm', 'f', or 'o'." });
+    if (update.sex && !['m', 'f'].includes(update.sex))
+      return res.status(400).json({ error: "sex must be 'm' or 'f'." });
 
     await db.collection('users').updateOne(
       { _id: new ObjectId(req.auth.sub) },

@@ -1,22 +1,22 @@
 # Ruby / Jekyll
-frontend/vendor/
-frontend/.jekyll-cache/
-frontend/_site/
+ui/vendor/
+ui/.jekyll-cache/
+ui/_site/
 public/
 
-# Node / Bun
-middleware/node_modules/
-middleware/bun.lockb
+# Node / services — not deployed via CI, managed separately (Railway)
+services/node_modules/
+services/*.lockb
+services/.env
+
+# Root-level env files — NEVER commit secrets
+.env
+.env.local
 *.log
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Env files — NEVER commit secrets
-.env
-.env.local
-middleware/.env
 
 # IDE
 .vscode/

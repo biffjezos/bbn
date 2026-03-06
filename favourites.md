@@ -2,9 +2,9 @@
 
 ## Overview
 
-Favourites allow a premium user to maintain a list of registered users they want to keep track of. The list shows live online status for each favourited user. Favourites are managed by `users-service.js`.
+Favourites allow a registered user to maintain a list of other registered users they want to keep track of. The list shows live online status for each favourited user. Favourites are managed by `favourites-service.js`.
 
-**Tier required: Premium.**
+**Available to all registered users.**
 
 ---
 
@@ -22,20 +22,18 @@ When fetching the favourites list, the service:
 
 ## List Favourites
 
-Returns all favourites for the current user with live nickname and online status.
-
 ```
 GET /api/favourites
 ```
 
-**Auth:** Registered user token required. **Tier: Premium.**
+**Auth:** Registered user token required.
 
 **Response:**
 ```json
 {
   "favourites": [
     {
-      "userId":   "64abc...",
+      "userId":   "64abc…",
       "nickname": "username",
       "sex":      "f",
       "online":   true,
@@ -51,13 +49,11 @@ GET /api/favourites
 
 ## Add a Favourite
 
-Adds a user to the current user's favourites list by their user ID.
-
 ```
 POST /api/favourites/:userId
 ```
 
-**Auth:** Registered user token required. **Tier: Premium.**
+**Auth:** Registered user token required.
 
 **Validation:**
 - Cannot favourite yourself
@@ -73,13 +69,11 @@ POST /api/favourites/:userId
 
 ## Remove a Favourite
 
-Removes a user from the current user's favourites list.
-
 ```
 DELETE /api/favourites/:userId
 ```
 
-**Auth:** Registered user token required. **Tier: Premium.**
+**Auth:** Registered user token required.
 
 **Response:**
 ```json

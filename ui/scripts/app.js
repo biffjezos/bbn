@@ -99,13 +99,9 @@
     document.getElementById('guestMenu').classList.add('d-none');
     document.getElementById('userMenu').classList.remove('d-none');
     document.getElementById('menuNickname').textContent = data.nickname;
-    // Show favourites nav link only for premium
+    // Favourites available to all registered users
     var favLink = document.getElementById('navFavLink');
-    if (favLink) {
-      Auth.getTier() === 'premium'
-        ? favLink.classList.remove('d-none')
-        : favLink.classList.add('d-none');
-    }
+    if (favLink) favLink.classList.remove('d-none');
     MapModule.refreshSelfIcon();
     MapModule.startNearbyPoll();
   };
@@ -114,6 +110,8 @@
     document.getElementById('guestMenu').classList.remove('d-none');
     document.getElementById('userMenu').classList.add('d-none');
     document.getElementById('menuNickname').textContent = '—';
+    var favLink = document.getElementById('navFavLink');
+    if (favLink) favLink.classList.add('d-none');
     MapModule.refreshSelfIcon();
     hideOverlay();
   };
@@ -232,11 +230,10 @@
     document.getElementById('profileModalAge').textContent      = '…';
     document.getElementById('profileModalDist').textContent     = user.distanceM + ' m';
 
-    var iconMap = { m: '👆', f: '👌', o: '👆' };
+    var sexIcons = { m: '👆', f: '👌' };
     document.getElementById('profileModalIcon').textContent =
-      user.isRegistered ? (iconMap[user.sex] || '👆') : '✊';
+      user.isRegistered ? (sexIcons[user.sex] || '👤') : '✊';
 
-    // Hide both action buttons until we know tier and registration status
     var msgLink = document.getElementById('profileModalMsgLink');
     var favLink = document.getElementById('profileModalFavLink');
     msgLink.classList.add('d-none');
@@ -249,10 +246,8 @@
         var profile = await Api.getProfile(user.userId);
         document.getElementById('profileModalAge').textContent = profile.age || '—';
 
-        var tier = Auth.getTier();
-
-        // Message button — regular and premium only
-        if (Auth.isRegistered() && (tier === 'regular' || tier === 'premium')) {
+        if (Auth.isRegistered()) {
+          // Message button — all registered users
           var newMsgLink = msgLink.cloneNode(true);
           msgLink.parentNode.replaceChild(newMsgLink, msgLink);
           newMsgLink.classList.remove('d-none');
@@ -261,10 +256,8 @@
             modal.hide();
             renderThread(user.userId, user.nickname || user.userId);
           });
-        }
 
-        // Favourites button — premium only
-        if (Auth.isRegistered() && tier === 'premium') {
+          // Favourites button — all registered users
           var newFavLink = favLink.cloneNode(true);
           favLink.parentNode.replaceChild(newFavLink, favLink);
           newFavLink.classList.remove('d-none');
@@ -275,7 +268,6 @@
               newFavLink.innerHTML = '<i class="bi bi-star-fill me-2"></i>Added to Favourites';
               newFavLink.classList.add('disabled');
             } catch (err) {
-              // 409 means already in favourites — reflect that in the UI
               if (err.status === 409) {
                 newFavLink.innerHTML = '<i class="bi bi-star-fill me-2"></i>Already in Favourites';
                 newFavLink.classList.add('disabled');
@@ -318,38 +310,25 @@
     document.getElementById('backBtn').addEventListener('click', hideOverlay);
 
     try {
-      // Fetch profile and tier badge info in parallel
-      var results  = await Promise.all([Api.getMe(), Api.getTierInfo()]);
-      var me       = results[0];
-      var tierInfo = results[1].tiers || {};
-
-      var tier      = me.tier || 'regular';
-      var badge     = tierInfo[tier] || { label: tier, cls: 'secondary' };
-      // Bootstrap background utility — tiers service returns short cls ('warning'),
-      // we prefix it to form a full utility class ('bg-warning')
-      var badgeCls  = 'bg-' + badge.cls;
-      // Some tiers need dark text (e.g. bg-warning is yellow)
-      var textCls   = (badge.cls === 'warning' || badge.cls === 'info') ? ' text-dark' : '';
+      var me = await Api.getMe();
 
       document.getElementById('profileContent').innerHTML = `
-        <div class="mb-4 d-flex align-items-center gap-2">
-          <span class="text-secondary small">Account tier</span>
-          <span class="badge ${escHtml(badgeCls + textCls)} fs-6 px-3 py-2">${escHtml(badge.label)}</span>
-        </div>
         <div class="mb-3">
           <label class="form-label text-secondary small">Email</label>
           <input class="form-control bg-black text-light border-secondary"
             id="pEmail" type="email" value="${escHtml(me.email)}" autocomplete="email" />
         </div>
         <div class="mb-3">
-          <label class="form-label text-secondary small">Nickname</label>
+          <label class="form-label text-secondary small">Nickname
+            <span class="text-secondary fw-normal"> — display name, duplicates allowed</span>
+          </label>
           <input class="form-control bg-black text-light border-secondary"
-            id="pNickname" value="${escHtml(me.nickname)}" maxlength="32" />
+            id="pNickname" value="${escHtml(me.nickname)}" minlength="2" maxlength="32" />
         </div>
         <div class="mb-3">
           <label class="form-label text-secondary small">
             New Password
-            <span class="text-secondary" style="font-weight:normal"> — leave blank to keep current</span>
+            <span class="text-secondary fw-normal"> — leave blank to keep current</span>
           </label>
           <input class="form-control bg-black text-light border-secondary"
             id="pPassword" type="password" autocomplete="new-password" placeholder="••••••••" />
@@ -365,7 +344,6 @@
             <select class="form-select bg-black text-light border-secondary" id="pSex">
               <option value="m" ${me.sex==='m'?'selected':''}>Male</option>
               <option value="f" ${me.sex==='f'?'selected':''}>Female</option>
-              <option value="o" ${me.sex==='o'?'selected':''}>Other</option>
             </select>
           </div>
         </div>
@@ -385,6 +363,7 @@
         var msgEl = document.getElementById('profileMsg');
         try {
           await Api.updateMe(update);
+          // Keep in-memory auth state in sync
           Auth.updateProfile({ nickname: update.nickname, sex: update.sex });
           msgEl.className = 'alert alert-success mb-3';
           msgEl.textContent = 'Saved!';
@@ -437,21 +416,32 @@
       }
 
       var myId = getJwtSub();
+
+      // Group messages into threads by partner userId
       var threads = {};
-
       msgs.forEach(function(m) {
-        var isOutgoing  = m.fromUserId === myId;
-        var partnerId   = isOutgoing ? m.toUserId     : m.fromUserId;
-        var partnerNick = isOutgoing ? m.toNickname   : m.fromNickname;
-
-        // Group by userId — nicknames are display only and may change
+        var isOutgoing = m.fromUserId === myId;
+        var partnerId  = isOutgoing ? m.toUserId : m.fromUserId;
         if (!threads[partnerId] || new Date(m.sentAt) > new Date(threads[partnerId].latest.sentAt)) {
-          threads[partnerId] = { userId: partnerId, nickname: partnerNick || partnerId, latest: m };
+          threads[partnerId] = { userId: partnerId, latest: m };
         }
       });
 
+      // Resolve nicknames for all partner userIds from their public profiles
+      var partnerIds = Object.keys(threads);
+      var profileResults = await Promise.allSettled(
+        partnerIds.map(function(uid) { return Api.getProfile(uid); })
+      );
+      partnerIds.forEach(function(uid, i) {
+        var result = profileResults[i];
+        threads[uid].nickname = (result.status === 'fulfilled' && result.value.nickname)
+          ? result.value.nickname
+          : uid;  // fall back to userId if profile fetch fails
+      });
+
       var html = Object.values(threads).map(function(t) {
-        return '<div class="conversation-card" data-userid="' + escHtml(t.userId) +
+        return '<div class="conversation-card border-bottom border-secondary py-2 px-1" ' +
+          'style="cursor:pointer" data-userid="' + escHtml(t.userId) +
           '" data-nickname="' + escHtml(t.nickname) + '">' +
           '<div class="d-flex justify-content-between align-items-center">' +
           '<strong>' + escHtml(t.nickname) + '</strong>' +
@@ -464,7 +454,6 @@
 
       document.querySelectorAll('.conversation-card').forEach(function(card) {
         card.addEventListener('click', function() {
-          // userId for API, nickname for display header
           renderThread(card.dataset.userid, card.dataset.nickname);
         });
       });
@@ -476,7 +465,7 @@
   }
 
   // ============================================================
-  // Message thread
+  // Message thread  — userId for all API calls, displayName for header
   // ============================================================
 
   async function renderThread(userId, displayName) {
@@ -520,7 +509,7 @@
     document.getElementById('backBtn').addEventListener('click', renderConversationList);
 
     document.getElementById('msgInput').addEventListener('input', function() {
-      var len = this.value.length;
+      var len     = this.value.length;
       var counter = document.getElementById('charCount');
       if (!counter) return;
       counter.textContent = 144 - len;
@@ -543,7 +532,6 @@
       if (errEl) errEl.classList.add('d-none');
 
       try {
-        // userId for the API call
         await Api.sendMessage(userId, text);
         input.value = '';
         var counter = document.getElementById('charCount');
@@ -561,7 +549,6 @@
 
     async function loadMessages() {
       try {
-        // userId for the API call
         var data      = await Api.getConversation(userId);
         var msgs      = data.messages || [];
         var container = document.getElementById('threadMsgs');
@@ -591,11 +578,11 @@
   }
 
   // ============================================================
-  // Favourites page (premium only)
+  // Favourites page — available to all registered users
   // ============================================================
 
   async function renderFavourites() {
-    if (!Auth.isRegistered() || Auth.getTier() !== 'premium') {
+    if (!Auth.isRegistered()) {
       getModal('loginModal').show();
       return;
     }
@@ -614,8 +601,8 @@
     document.getElementById('backBtn').addEventListener('click', hideOverlay);
 
     try {
-      var data  = await Api.getFavourites();
-      var favs  = data.favourites || [];
+      var data = await Api.getFavourites();
+      var favs = data.favourites || [];
 
       if (favs.length === 0) {
         document.getElementById('favList').innerHTML =
@@ -632,10 +619,15 @@
           '<strong>' + escHtml(f.nickname) + '</strong>' + onlineBadge +
           '</div>' +
           '<div class="d-flex gap-2">' +
-          '<button class="btn btn-sm btn-warning fav-msg-btn" data-userid="' + escHtml(f.userId) + '" data-nickname="' + escHtml(f.nickname) + '">' +
-          '<i class="bi bi-chat-dots"></i></button>' +
-          '<button class="btn btn-sm btn-outline-danger fav-remove-btn" data-userid="' + escHtml(f.userId) + '">' +
-          '<i class="bi bi-star-fill"></i></button>' +
+          '<button class="btn btn-sm btn-warning fav-msg-btn" ' +
+            'data-userid="' + escHtml(f.userId) + '" ' +
+            'data-nickname="' + escHtml(f.nickname) + '" ' +
+            'title="Message">' +
+            '<i class="bi bi-chat-dots"></i></button>' +
+          '<button class="btn btn-sm btn-outline-danger fav-remove-btn" ' +
+            'data-userid="' + escHtml(f.userId) + '" ' +
+            'title="Remove from favourites">' +
+            '<i class="bi bi-star-fill"></i></button>' +
           '</div></div>';
       }).join('');
 

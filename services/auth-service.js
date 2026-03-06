@@ -7,7 +7,7 @@
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:             process.env.PORT       || 3001,
+  PORT:             process.env.PORT       || 8080,
   MONGO_URI:        process.env.MONGO_URI  || '',
   DB_NAME:          process.env.DB_NAME    || 'boomboom',
   JWT_SECRET:       process.env.JWT_SECRET || 'change-me-in-production',
@@ -28,7 +28,7 @@ console.log('[auth] DB connected.');
 
 // --- JWT helpers --------------------------------------------
 
-function issueUserToken(user, expiresIn = CFG.JWT_EXPIRY_USER) {
+function issueUserToken(user) {
   return jwt.sign(
     {
       sub:      user._id.toString(),
@@ -39,7 +39,7 @@ function issueUserToken(user, expiresIn = CFG.JWT_EXPIRY_USER) {
       tier:     user.tier || 'regular',
     },
     CFG.JWT_SECRET,
-    { expiresIn }
+    { expiresIn: CFG.JWT_EXPIRY_USER }
   );
 }
 
@@ -51,7 +51,7 @@ function issueGuestToken(guestId) {
   );
 }
 
-// --- Helper: clean up guest location + session docs ---------
+// --- Helper: clean up guest location + session on login/register -
 async function cleanupGuest(guestId) {
   if (!guestId || typeof guestId !== 'string') return;
   await Promise.all([
@@ -64,6 +64,7 @@ async function cleanupGuest(guestId) {
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
+// Auth middleware — skipped for the three public endpoints
 app.use((req, res, next) => {
   if (req.path === '/auth/guest'    && req.method === 'POST') return next();
   if (req.path === '/auth/login'    && req.method === 'POST') return next();
@@ -148,7 +149,6 @@ app.post('/auth/register', async (req, res) => {
       tier:     user.tier,
     });
   } catch (e) {
-    // Only email has a unique index now — nickname duplicates are allowed
     if (e.code === 11000)
       return res.status(409).json({ error: 'Email already in use.' });
     console.error('[auth/register]', e);
@@ -156,44 +156,27 @@ app.post('/auth/register', async (req, res) => {
   }
 });
 
-// POST /auth/login
+// POST /auth/login — email + password only
 app.post('/auth/login', async (req, res) => {
   try {
     const { email, password, guestId } = req.body;
     if (!email || !password)
       return res.status(400).json({ error: 'Email and password required.' });
 
-    const user = await db.collection('users').findOne({ email: email.toLowerCase().trim() });
+    const user = await db.collection('users').findOne({
+      email: email.toLowerCase().trim(),
+    });
     if (!user || !(await bcrypt.compare(password, user.passwordHash)))
       return res.status(401).json({ error: 'Invalid credentials.' });
 
     await cleanupGuest(guestId);
 
-    // Whitelist tier — unknown or forged DB values fall back to guest
+    // Whitelist tier — unknown or missing values fall back to 'regular'
     const VALID_TIERS = ['regular', 'premium'];
-    let tier = VALID_TIERS.includes(user.tier) ? user.tier : 'guest';
-
-    // Check premium expiry — downgrade and persist if expired
-    if (tier === 'premium' && user.tierExpiresAt) {
-      if (new Date() > new Date(user.tierExpiresAt)) {
-        tier = 'regular';
-        await db.collection('users').updateOne(
-          { _id: user._id },
-          { $set: { tier: 'regular' }, $unset: { tierExpiresAt: '' } }
-        );
-      }
-    }
-
-    // For premium: cap JWT expiry to tierExpiresAt so token dies with the subscription
-    let expiresIn = CFG.JWT_EXPIRY_USER;
-    if (tier === 'premium' && user.tierExpiresAt) {
-      const secondsUntilExpiry = Math.floor((new Date(user.tierExpiresAt) - new Date()) / 1000);
-      const sevenDaysInSeconds = 7 * 24 * 60 * 60;
-      expiresIn = Math.min(secondsUntilExpiry, sevenDaysInSeconds);
-    }
+    const tier = VALID_TIERS.includes(user.tier) ? user.tier : 'regular';
 
     res.json({
-      token:    issueUserToken({ ...user, tier }, expiresIn),
+      token:    issueUserToken({ ...user, tier }),
       nickname: user.nickname,
       sex:      user.sex,
       tier,

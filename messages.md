@@ -2,7 +2,9 @@
 
 ## Overview
 
-Messaging is handled by `messages-service.js`. All messaging requires a registered user account. Messages expire automatically after 4 hours. Sending a message requires both users to be physically within 100 metres of each other at the time of sending.
+Messaging is handled by `messages-service.js`. All messaging requires a registered user account. All registered users have equal messaging access. Messages expire automatically after 4 hours. Sending a message requires both users to be physically within 100 metres of each other at the time of sending.
+
+All API endpoints address users by **userId**, not nickname. Nicknames are resolved for display in the UI only.
 
 ---
 
@@ -29,7 +31,7 @@ GET /api/messages
 {
   "messages": [
     {
-      "_id":        "64abc...",
+      "_id":        "64abc…",
       "fromUserId": "string",
       "toUserId":   "string",
       "text":       "Hey!",
@@ -39,43 +41,29 @@ GET /api/messages
   ]
 }
 ```
+
+> The UI resolves display nicknames by calling `GET /api/users/:userId/profile` for each unique partner userId.
 
 ---
 
 ## Get Thread
 
-Returns all active messages between the current user and one other user by nickname, sorted oldest first (for display in a chat view).
+Returns all active messages between the current user and one other user by **userId**, sorted oldest first.
 
 ```
-GET /api/messages/:nickname
+GET /api/messages/:userId
 ```
 
 **Auth:** Registered user token required.
-
-**Response:**
-```json
-{
-  "messages": [
-    {
-      "_id":        "64abc...",
-      "fromUserId": "string",
-      "toUserId":   "string",
-      "text":       "Hey!",
-      "sentAt":     "2024-01-01T12:00:00.000Z",
-      "expiresAt":  "2024-01-01T16:00:00.000Z"
-    }
-  ]
-}
-```
 
 ---
 
 ## Send a Message
 
-Sends a message to a user by nickname. Proximity is enforced — see above.
+Sends a message to a user by their **userId**. Proximity is enforced — see above.
 
 ```
-POST /api/messages/:nickname
+POST /api/messages/:userId
 ```
 
 **Auth:** Registered user token required.
@@ -95,7 +83,7 @@ POST /api/messages/:nickname
 **Response on success:**
 ```json
 {
-  "_id":       "64abc...",
+  "_id":       "64abc…",
   "expiresAt": "2024-01-01T16:00:00.000Z"
 }
 ```
@@ -125,15 +113,11 @@ DELETE /api/messages/:id
 { "ok": true }
 ```
 
-Returns 404 if the message does not exist or was sent by someone else.
-
 ---
 
 ## Message Expiry
 
-Messages expire 4 hours after they are sent. Expiry is enforced by a MongoDB TTL index on the `expiresAt` field. Expired messages are deleted automatically by MongoDB — no cleanup job is needed.
-
-The UI shows a countdown to expiry on each message bubble.
+Messages expire 4 hours after they are sent via a MongoDB TTL index on `expiresAt`. The UI shows a countdown to expiry on each message bubble.
 
 ---
 
@@ -154,10 +138,8 @@ The UI shows a countdown to expiry on each message bubble.
 
 ## Configuration
 
-All values are in `messages-service.js` CFG:
-
 | Key | Default | Description |
-|---|---|---|
+|-----|---------|-------------|
 | `MESSAGE_MAX_CHARS` | 144 | Maximum message length in characters |
 | `MESSAGE_TTL_MS` | 14400000 | Message lifetime in milliseconds (4 hours) |
-| `MESSAGE_PROXIMITY_M` | 100 | Maximum distance between sender and recipient in metres |
+| `MESSAGE_PROXIMITY_M` | 100 | Maximum distance between sender and recipient |
