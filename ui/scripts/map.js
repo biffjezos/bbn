@@ -19,35 +19,27 @@
   const DEFAULT_ZOOM = 17;
 
   // ── Emoji + CSS class by sex ─────────────────────────────
-  // Guest/unknown → yellow fist 👊
-  // Male          → light-blue pointing finger 👆
-  // Female        → pink ok hand 👌
   function markerEmoji(sex) {
     if (sex === 'f') return '👌';
     if (sex === 'm') return '👆';
     return '👊';
   }
-
   function markerClass(sex) {
     if (sex === 'f') return 'female';
     if (sex === 'm') return 'male';
     return 'guest';
   }
 
-  // ── Build Leaflet divIcon HTML string ────────────────────
-  function buildIconHtml(sex, isSelf) {
+  // ── Build Leaflet divIcon as HTML string ─────────────────
+  function makeLeafIcon(sex, isSelf) {
     const cls   = 'bbm-marker' + (isSelf ? ' self' : '') + ' ' + markerClass(sex);
     const emoji = markerEmoji(sex);
     const title = isSelf ? 'You' : '';
-    return `<div class="${cls}" title="${title}" style="display:flex;align-items:center;justify-content:center;">${emoji}</div>`;
-  }
-
-  function makeLeafIcon(sex, isSelf) {
-    const size   = isSelf ? 46 : 38;
+    const size  = isSelf ? 46 : 38;
     const anchor = isSelf ? 23 : 19;
     return L.divIcon({
-      html:       buildIconHtml(sex, isSelf),
-      className:  '',
+      html:      `<div class="${cls}" title="${title}">${emoji}</div>`,
+      className: '',
       iconSize:   [size, size],
       iconAnchor: [anchor, anchor],
     });
@@ -56,32 +48,26 @@
   // ── Init map ─────────────────────────────────────────────
   function initMap(lat, lng) {
     if (map) return;
-
-    map = L.map('map', {
-      center:      [lat, lng],
-      zoom:        DEFAULT_ZOOM,
-      zoomControl: true,
-    });
-
+    map = L.map('map', { center: [lat, lng], zoom: DEFAULT_ZOOM, zoomControl: true });
     L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
-
     placeSelfMarker(lat, lng);
     setStatus('live', 'live');
     startPolling();
   }
 
-  // ── Self marker ──────────────────────────────────────────
+  // ── Self marker — always re-reads sex from Auth ──────────
   function placeSelfMarker(lat, lng) {
-    const sex = window.Auth?.getProfile?.()?.sex || null;
+    // Read sex fresh every call — it changes after login
+    const profile = window.Auth?.getProfile?.() || {};
+    const sex = profile.sex || null;
 
     if (selfMarker) {
-      // Update both position AND icon (sex may have changed after login)
       selfMarker.setLatLng([lat, lng]);
       selfMarker.setIcon(makeLeafIcon(sex, true));
     } else {
       selfMarker = L.marker([lat, lng], {
-        icon:          makeLeafIcon(sex, true),
-        zIndexOffset:  1000,
+        icon: makeLeafIcon(sex, true),
+        zIndexOffset: 1000,
       }).addTo(map);
     }
   }
@@ -89,66 +75,45 @@
   // ── Other user markers ───────────────────────────────────
   function renderMarkers(users) {
     const seen = new Set();
-
     users.forEach(u => {
       seen.add(u.userId);
-
       if (markers[u.userId]) {
-        markers[u.userId].setLatLng([u.lat, u.lng]);
+        markers[u.userId].setLatLng([u.lat, u.lon ?? u.lng]);
         return;
       }
-
-      const m = L.marker([u.lat, u.lng], {
+      const m = L.marker([u.lat, u.lon ?? u.lng], {
         icon: makeLeafIcon(u.sex, false),
       }).addTo(map);
-
       m.on('click', () => window.openPinModal?.(u));
       markers[u.userId] = m;
     });
-
-    // Remove stale markers
     Object.keys(markers).forEach(uid => {
-      if (!seen.has(uid)) {
-        map.removeLayer(markers[uid]);
-        delete markers[uid];
-      }
+      if (!seen.has(uid)) { map.removeLayer(markers[uid]); delete markers[uid]; }
     });
   }
 
-  // ── Geolocation ──────────────────────────────────────────
-  // Strategy:
-  //   1. Try getCurrentPosition (low accuracy) immediately — fast, works on
-  //      laptops without GPS using Wi-Fi/IP. Initialises the map right away.
-  //   2. Then start watchPosition (high accuracy) for GPS devices / mobile.
-  //      Updates position as it refines.
-  //   3. If both fail, fall back to IP-based location via ipapi.co.
-
+  // ── Geolocation — 3-tier strategy ────────────────────────
   function startWatch() {
     if (!('geolocation' in navigator)) {
       setStatus('location unavailable', 'off');
       tryIpFallback();
       return;
     }
-
     setStatus('locating…', 'locating');
 
-    // Step 1 — quick coarse fix (works on laptop via Wi-Fi)
+    // Tier 1: quick coarse fix (works on laptop via Wi-Fi positioning)
     navigator.geolocation.getCurrentPosition(
       pos => onPosition(pos),
-      ()  => { /* ignore — watchPosition or IP fallback will handle */ },
+      ()  => { /* silent — watchPosition or IP fallback handles it */ },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     );
 
-    // Step 2 — continuous watch (high accuracy for GPS devices)
+    // Tier 2: continuous high-accuracy watch (GPS on mobile)
     navigator.geolocation.watchPosition(
-      pos  => onPosition(pos),
-      err  => {
+      pos => onPosition(pos),
+      err => {
         console.warn('[Map] watchPosition error:', err.message);
-        // Only show error if we still have no position at all
-        if (!myPos) {
-          setStatus('location blocked', 'off');
-          tryIpFallback();
-        }
+        if (!myPos) tryIpFallback();
       },
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
     );
@@ -163,45 +128,51 @@
       initMap(lat, lng);
     } else {
       placeSelfMarker(lat, lng);
-      map.setView([lat, lng], DEFAULT_ZOOM);
     }
-
     pushLocation(lat, lng);
   }
 
-  // Step 3 — IP geolocation fallback (no GPS, no Wi-Fi location)
+  // Tier 3: IP geolocation fallback
   async function tryIpFallback() {
     try {
       setStatus('locating via IP…', 'locating');
       const r    = await fetch('https://ipapi.co/json/');
       const data = await r.json();
       if (data.latitude && data.longitude) {
-        const fakPos = { coords: { latitude: data.latitude, longitude: data.longitude } };
-        onPosition(fakPos);
+        onPosition({ coords: { latitude: data.latitude, longitude: data.longitude } });
         setStatus('IP location (approximate)', 'live');
       }
     } catch {
       setStatus('location unavailable', 'off');
-      // Still init map at a world-view so the page isn't blank
-      if (!map) initMap(51.505, -0.09); // London fallback
+      if (!map) initMap(51.505, -0.09); // London fallback — at least show a map
     }
   }
 
   // ── Push location to backend ─────────────────────────────
   async function pushLocation(lat, lng) {
     try {
+      // Pass guestId for session tracking if guest
+      const body = { lat, lon: lng };
+      if (!window.Auth?.isRegistered()) {
+        const gid = window.Auth?.getGuestId?.();
+        if (gid) body.guestId = gid;
+      }
       const data = await window.Api.putLocation(lat, lng);
       if (data?.sessionId && !sessionId) {
         sessionId = data.sessionId;
-        const secs = data.guestTtlSeconds;
-        if (secs && !window.Auth?.isRegistered()) {
-          window.startGuestCountdown?.(secs);
+      }
+      // Start countdown only once, using JWT expiry time
+      if (!window._guestCountdownStarted && !window.Auth?.isRegistered()) {
+        const ttl = window.Auth?.getGuestTtlRemaining?.();
+        if (ttl && ttl > 0) {
+          window._guestCountdownStarted = true;
+          window.startGuestCountdown?.(ttl);
         }
       }
     } catch { /* silent */ }
   }
 
-  // ── Poll nearby users ────────────────────────────────────
+  // ── Poll nearby users — passes current coords ─────────────
   function startPolling() {
     if (pollTimer) return;
     poll();
@@ -211,43 +182,42 @@
   async function poll() {
     if (!myPos) return;
     try {
-      const { users = [] } = await window.Api.getNearby();
+      // CRITICAL: pass lat/lon so the gateway can forward them
+      const { users = [] } = await window.Api.getNearby(myPos.lat, myPos.lng);
       renderMarkers(users);
-    } catch { /* silent */ }
+    } catch (e) {
+      console.warn('[Map] poll error:', e.message);
+    }
   }
 
-  // ── Refresh markers after login (sex may have changed) ───
+  // ── Refresh markers after login ───────────────────────────
   function refreshMarkers() {
     if (selfMarker && myPos) placeSelfMarker(myPos.lat, myPos.lng);
     poll();
   }
 
-  // ── Centre on self ───────────────────────────────────────
+  // ── Centre on self ────────────────────────────────────────
   function centreOnSelf() {
-    if (map && myPos) {
-      map.setView([myPos.lat, myPos.lng], DEFAULT_ZOOM, { animate: true });
-    }
+    if (map && myPos) map.setView([myPos.lat, myPos.lng], DEFAULT_ZOOM, { animate: true });
   }
 
-  // ── Guest session expired ────────────────────────────────
+  // ── Guest session expired ─────────────────────────────────
   function onGuestExpired() {
     setStatus('session expired', 'off');
     Object.values(markers).forEach(m => map?.removeLayer(m));
     markers = {};
+    if (selfMarker) { map?.removeLayer(selfMarker); selfMarker = null; }
   }
 
-  // ── Status helper ────────────────────────────────────────
+  // ── Status helper ─────────────────────────────────────────
   function setStatus(text, state) {
     const dot  = document.getElementById('statusDot');
     const span = document.getElementById('statusText');
-    if (dot)  dot.className   = 'bbm-status-dot' + (state ? ' ' + state : '');
+    if (dot)  dot.className    = 'bbm-status-dot' + (state ? ' ' + state : '');
     if (span) span.textContent = text;
   }
 
-  // ── Expose ───────────────────────────────────────────────
   window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired };
-
-  // ── Start ────────────────────────────────────────────────
   startWatch();
 
 })();

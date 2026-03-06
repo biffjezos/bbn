@@ -31,5 +31,5 @@ permalink: /messages/
 
 <script type="module">
 import { renderConversationList } from '{{ "/scripts/pages/messages.js" | relative_url }}';
-document.addEventListener('bbm:ready', () => renderConversationList());
+if (window.__bbmReady) { renderConversationList(); } else { document.addEventListener('bbm:ready', () => renderConversationList()); };
 </script>

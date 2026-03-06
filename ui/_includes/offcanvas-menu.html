@@ -1,81 +1,65 @@
 <!-- ============================================================
      OFFCANVAS MENU
-     Guest state · Logged-in state · Danger zone
      ============================================================ -->
-<div
-  class="offcanvas offcanvas-end"
-  tabindex="-1"
-  id="appMenu"
-  aria-labelledby="appMenuLabel"
->
-  <div class="offcanvas-header">
-    <span class="offcanvas-title" id="appMenuLabel">bOOmbOOm.NOW!</span>
-    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-  </div>
-
-  <div class="offcanvas-body d-flex flex-column px-4">
-
-    <!-- ── GUEST STATE ──────────────────────────── -->
-    <div id="guestMenu">
-      <p class="text-muted-bb small mb-4" style="line-height:1.6">
-        You're browsing as a guest.<br>
-        Register to message people nearby.
-      </p>
-      <button
-        class="btn btn-bbm-primary w-100 mb-2"
-        data-bs-toggle="modal"
-        data-bs-target="#registerModal"
-        data-bs-dismiss="offcanvas"
-      >
-        <i class="bi bi-person-plus me-2"></i>Create Account
-      </button>
-      <button
-        class="btn btn-bbm-ghost w-100"
-        data-bs-toggle="modal"
-        data-bs-target="#loginModal"
-        data-bs-dismiss="offcanvas"
-      >
-        <i class="bi bi-box-arrow-in-right me-2"></i>Log In
-      </button>
-    </div>
-
-    <!-- ── REGISTERED USER STATE ────────────────── -->
-    <div id="userMenu" class="d-none">
-
-      <!-- Identity -->
-      <div class="mb-4 pb-3" style="border-bottom: 1px solid var(--bbm-border)">
-        <p class="text-faint mb-1" style="font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase">Logged in as</p>
-        <p class="offcanvas-menu-nick mb-0" id="menuNickname">—</p>
+     <div class="offcanvas offcanvas-end" tabindex="-1" id="appMenu" aria-labelledby="appMenuLabel">
+      <div class="offcanvas-header">
+        <span class="offcanvas-title" id="appMenuLabel">bOOmbOOm.NOW!</span>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
       </div>
-
-      <!-- Navigation -->
-      <nav class="mb-4">
-        <a href="{{ '/' | relative_url }}" class="offcanvas-nav-link" data-bs-dismiss="offcanvas">
-          <i class="bi bi-map"></i> Map
-        </a>
-        <a href="{{ '/messages/' | relative_url }}" class="offcanvas-nav-link" id="navConvLink" data-bs-dismiss="offcanvas">
-          <i class="bi bi-chat-dots"></i> Conversations
-        </a>
-        <a href="{{ '/favourites/' | relative_url }}" class="offcanvas-nav-link" id="navFavLink" data-bs-dismiss="offcanvas">
-          <i class="bi bi-star"></i> Favourites
-        </a>
-        <a href="{{ '/profile/' | relative_url }}" class="offcanvas-nav-link" id="navProfileLink" data-bs-dismiss="offcanvas">
-          <i class="bi bi-person-circle"></i> My Profile
-        </a>
-      </nav>
-
-      <!-- Danger zone -->
-      <div class="mt-auto pt-3" style="border-top: 1px solid var(--bbm-border)">
-        <button class="btn btn-bbm-ghost w-100 mb-2 text-start" id="logoutBtn">
-          <i class="bi bi-box-arrow-right me-2"></i>Log Out
-        </button>
-        <button class="btn btn-bbm-danger w-100 text-start" id="deleteAccountBtn">
-          <i class="bi bi-trash3 me-2"></i>Delete Account
-        </button>
+    
+      <div class="offcanvas-body d-flex flex-column px-4">
+    
+        <!-- ── GUEST STATE ──────────────────────────────────── -->
+        <div id="guestMenu">
+          <p class="text-muted-bb small mb-4" style="line-height:1.6">
+            You're browsing as a guest.<br>
+            Register to message people nearby.
+          </p>
+          <button class="btn btn-bbm-primary w-100 mb-2"
+            data-bs-toggle="modal" data-bs-target="#registerModal" data-bs-dismiss="offcanvas">
+            <i class="bi bi-person-plus me-2"></i>Create Account
+          </button>
+          <button class="btn btn-bbm-ghost w-100"
+            data-bs-toggle="modal" data-bs-target="#loginModal" data-bs-dismiss="offcanvas">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Log In
+          </button>
+        </div>
+    
+        <!-- ── REGISTERED USER STATE ──────────────────────── -->
+        <div id="userMenu" class="d-none">
+    
+          <!-- Identity — nickname coloured by sex -->
+          <div class="mb-4 pb-3" style="border-bottom:1px solid var(--bbm-border)">
+            <p class="text-faint mb-1" style="font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase">Logged in as</p>
+            <p class="offcanvas-menu-nick mb-0" id="menuNickname">—</p>
+          </div>
+    
+          <!-- Navigation -->
+          <nav class="mb-4">
+            <a href="{{ '/' | relative_url }}" class="offcanvas-nav-link" data-bs-dismiss="offcanvas">
+              <i class="bi bi-map"></i> Map
+            </a>
+            <a href="{{ '/messages/' | relative_url }}" class="offcanvas-nav-link" data-bs-dismiss="offcanvas">
+              <i class="bi bi-chat-dots"></i> Conversations
+            </a>
+            <a href="{{ '/favourites/' | relative_url }}" class="offcanvas-nav-link" data-bs-dismiss="offcanvas">
+              <i class="bi bi-star"></i> Favourites
+            </a>
+            <a href="{{ '/profile/' | relative_url }}" class="offcanvas-nav-link" data-bs-dismiss="offcanvas">
+              <i class="bi bi-person-circle"></i> My Profile
+            </a>
+          </nav>
+    
+          <!-- Danger zone -->
+          <div class="mt-auto pt-3" style="border-top:1px solid var(--bbm-border)">
+            <button class="btn btn-bbm-ghost w-100 mb-2 text-start" id="logoutBtn">
+              <i class="bi bi-box-arrow-right me-2"></i>Log Out
+            </button>
+            <button class="btn btn-bbm-danger w-100 text-start" id="deleteAccountBtn">
+              <i class="bi bi-trash3 me-2"></i>Delete Account
+            </button>
+          </div>
+    
+        </div>
       </div>
-
     </div>
-    <!-- /userMenu -->
-
-  </div>
-</div>

@@ -1,43 +1,43 @@
 <!-- ============================================================
      NAVBAR
-     Brand · Status badge · Hamburger (offcanvas trigger)
+     Brand collapses to "b" icon below sm breakpoint.
+     Status + countdown always visible. Hamburger always right.
      ============================================================ -->
-<nav class="navbar fixed-top" id="mainNav">
-  <div class="container-fluid">
-
-    <!-- Brand -->
-    <a class="navbar-brand" href="{{ '/' | relative_url }}">
-      bOOmbOOm<span style="opacity:0.7">.NOW!</span>
-    </a>
-
-    <!-- Location / session status -->
-    <span class="bbm-status ms-3 me-auto" id="statusBadge">
-      <span class="bbm-status-dot" id="statusDot"></span>
-      <span id="statusText">locating…</span>
-    </span>
-
-    <!-- Guest session countdown (hidden for registered users) -->
-    <span id="guestCountdown" class="d-none me-3">
-      <i class="bi bi-clock me-1" style="font-size:0.7rem"></i>
-      <span id="countdownTimer">15:00</span>
-    </span>
-
-    <!-- Nav links — visible md+ -->
-    <div class="d-none d-md-flex align-items-center gap-1 me-2" id="navLinksDesktop">
-      <!-- injected by app.js based on auth state -->
-    </div>
-
-    <!-- Hamburger — always visible -->
-    <button
-      class="navbar-toggler"
-      type="button"
-      data-bs-toggle="offcanvas"
-      data-bs-target="#appMenu"
-      aria-controls="appMenu"
-      aria-label="Menu"
-    >
-      <span class="navbar-toggler-icon"></span>
-    </button>
-
-  </div>
-</nav>
+     <nav class="navbar fixed-top" id="mainNav">
+      <div class="container-fluid flex-nowrap gap-2">
+    
+        <!-- Brand — full text on sm+, single letter on xs -->
+        <a class="navbar-brand flex-shrink-0" href="{{ '/' | relative_url }}">
+          <span class="d-none d-sm-inline">bOOmbOOm<span class="brand-now">.NOW!</span></span>
+          <span class="d-inline d-sm-none brand-icon">b</span>
+        </a>
+    
+        <!-- Status badge — shrinks, never wraps -->
+        <span class="bbm-status flex-shrink-1 text-truncate me-auto" id="statusBadge" style="min-width:0">
+          <span class="bbm-status-dot" id="statusDot"></span>
+          <span id="statusText" class="d-none d-md-inline">locating…</span>
+        </span>
+    
+        <!-- Guest session countdown -->
+        <span id="guestCountdown" class="d-none flex-shrink-0" style="font-size:0.72rem;color:var(--bbm-text-muted);white-space:nowrap">
+          <i class="bi bi-clock" style="font-size:0.7rem"></i>
+          <span id="countdownTimer">15:00</span>
+        </span>
+    
+        <!-- Nav links — visible md+ -->
+        <div class="d-none d-md-flex align-items-center gap-1 flex-shrink-0" id="navLinksDesktop"></div>
+    
+        <!-- Hamburger — always visible, never pushed to next line -->
+        <button
+          class="navbar-toggler flex-shrink-0"
+          type="button"
+          data-bs-toggle="offcanvas"
+          data-bs-target="#appMenu"
+          aria-controls="appMenu"
+          aria-label="Menu"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+    
+      </div>
+    </nav>
