@@ -24,5 +24,5 @@ permalink: /favourites/
 
 <script type="module">
 import { renderFavourites } from '{{ "/scripts/pages/favourites.js" | relative_url }}';
-document.addEventListener('bbm:ready', () => renderFavourites());
+if (window.__bbmReady) { renderFavourites(); } else { document.addEventListener('bbm:ready', () => renderFavourites()); };
 </script>

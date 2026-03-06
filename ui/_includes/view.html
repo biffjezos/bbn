@@ -10,5 +10,5 @@ permalink: /profile/view/
 
 <script type="module">
 import { renderPublicProfile } from '{{ "/scripts/pages/profile.js" | relative_url }}';
-document.addEventListener('bbm:ready', () => renderPublicProfile());
+if (window.__bbmReady) { renderPublicProfile(); } else { document.addEventListener('bbm:ready', () => renderPublicProfile()); };
 </script>
