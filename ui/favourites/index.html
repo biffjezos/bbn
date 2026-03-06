@@ -1,0 +1,28 @@
+---
+layout: default
+title: "Favourites"
+permalink: /favourites/
+---
+
+<div class="bbm-page bbm-fullbleed">
+
+  <!-- Hero -->
+  <div class="bbm-hero">
+    <div class="container-fluid px-4 px-md-5">
+      <h1><span class="accent-pink">Fav</span>ourites</h1>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="container-fluid px-4 px-md-5 py-2">
+    <div id="favListWrap">
+      <div class="bbm-loading">Loading…</div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { renderFavourites } from '{{ "/scripts/pages/favourites.js" | relative_url }}';
+document.addEventListener('bbm:ready', () => renderFavourites());
+</script>
