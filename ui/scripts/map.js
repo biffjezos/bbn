@@ -124,7 +124,7 @@
   // ── POST location to backend ─────────────────────────────
   async function pushLocation(lat, lng) {
     try {
-      const data = await window.Api.updateLocation(lat, lng);
+      const data = await window.Api.putLocation(lat, lng);
       if (data.sessionId && !sessionId) {
         sessionId = data.sessionId;
         const secs = data.guestTtlSeconds;

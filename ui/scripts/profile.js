@@ -129,7 +129,7 @@ export async function renderMyProfile() {
       }
 
       try {
-        await window.Api.changePassword(curr, nw);
+        await window.Api.updateMe({ email: null, password: curr, newPassword: nw });
         alertEl.className = 'alert alert-success';
         alertEl.textContent = 'Password updated.';
         alertEl.classList.remove('d-none');
@@ -152,7 +152,7 @@ export async function renderMyProfile() {
     const sex      = document.getElementById('editSex').value;
 
     try {
-      await window.Api.updateProfile({ nickname, age, sex });
+      await window.Api.updateMe({ nickname, age, sex });
       window.Auth.updateProfile({ nickname, sex });
       alertEl.className = 'alert alert-success';
       alertEl.textContent = 'Profile saved.';

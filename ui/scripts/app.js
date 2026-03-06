@@ -102,7 +102,7 @@
 
   $('confirmDeleteBtn')?.addEventListener('click', async () => {
     try {
-      await Api.deleteAccount();
+      await Api.deleteMe();
       Auth.logout();
       bootstrap.Modal.getInstance($('deleteConfirmModal'))?.hide();
       window.location.href = '/';
@@ -118,8 +118,13 @@
     const errEl    = $('loginError');
     errEl?.classList.add('d-none');
 
+    if (!email || !password) {
+      if (errEl) { errEl.textContent = 'Please enter your email and password.'; errEl.classList.remove('d-none'); }
+      return;
+    }
+
     try {
-      await Auth.login(email, password);
+      await Auth.login({ email, password });
       bootstrap.Modal.getInstance($('loginModal'))?.hide();
       onLogin();
     } catch (err) {
