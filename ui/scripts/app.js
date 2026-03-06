@@ -93,7 +93,12 @@
   // ── Auth hooks — set NOW, before Auth.init() runs ─────────
   Auth.onLogin = function () {
     applyAuthState(true);
-    window.MapModule && window.MapModule.refreshMarkers();
+    console.log('[App] onLogin fired, sex:', Auth.getSex());
+    if (window.MapModule) {
+      window.MapModule.refreshMarkers();
+      // Retry after 1s in case map wasn't ready on first call
+      setTimeout(function() { window.MapModule && window.MapModule.refreshMarkers(); }, 1000);
+    }
   };
 
   Auth.onLogout = function () {

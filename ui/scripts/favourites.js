@@ -21,7 +21,7 @@ function loadingHtml(text = 'Loading…') {
   return `<div class="bbm-loading"><p>${escHtml(text)}</p></div>`;
 }
 
-export async function renderFavourites() {
+async function renderFavourites() {
   const wrap = document.getElementById('favListWrap');
   if (!wrap) return;
 
@@ -76,3 +76,6 @@ export async function renderFavourites() {
     wrap.innerHTML = `<div class="alert alert-danger mt-3">${escHtml(err.message)}</div>`;
   }
 }
+
+// Auto-run when loaded as extra_js
+(window.__authReady || Promise.resolve()).then(function() { renderFavourites(); });

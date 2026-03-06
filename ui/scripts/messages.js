@@ -42,7 +42,7 @@ function loadingHtml(text = 'Loading…') {
 }
 
 // ── Conversation list ─────────────────────────────────────
-export async function renderConversationList() {
+async function renderConversationList() {
   const wrap = document.getElementById('convListWrap');
   if (!wrap) return;
 
@@ -101,7 +101,7 @@ export async function renderConversationList() {
 }
 
 // ── Message thread ────────────────────────────────────────
-export async function renderThread() {
+async function renderThread() {
   const params      = new URLSearchParams(window.location.search);
   const userId      = params.get('uid');
   const displayName = params.get('name') || userId;
@@ -173,3 +173,9 @@ export async function renderThread() {
   pollTimer = setInterval(load, 5000);
   window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
 }
+
+// Auto-run when loaded as extra_js
+(window.__authReady || Promise.resolve()).then(function() {
+  if (document.getElementById('convListWrap'))  renderConversationList();
+  if (document.getElementById('threadMsgs'))    renderThread();
+});

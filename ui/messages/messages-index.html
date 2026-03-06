@@ -2,6 +2,8 @@
 layout: default
 title: "Conversations"
 permalink: /messages/
+extra_js:
+  - /scripts/pages/messages.js
 ---
 
 <div class="bbm-page bbm-fullbleed">
@@ -15,12 +17,7 @@ permalink: /messages/
 
   <!-- Content -->
   <div class="container-fluid px-4 px-md-5 py-2">
-    <div id="convListWrap">
-      <div class="bbm-loading">
-        <i class="bi bi-arrow-repeat d-block mb-2" style="animation: spin 1s linear infinite; font-size:1.5rem"></i>
-        Loading…
-      </div>
-    </div>
+    <div id="convListWrap"></div>
   </div>
 
 </div>
@@ -28,9 +25,3 @@ permalink: /messages/
 <style>
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
-
-<script type="module">
-import { renderConversationList } from '{{ "/scripts/pages/messages.js" | relative_url }}';
-await window.__authReady;
-renderConversationList();
-</script>

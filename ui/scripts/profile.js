@@ -28,7 +28,7 @@ function loadingHtml(text = 'Loading…') {
 }
 
 // ── My Profile ────────────────────────────────────────────
-export async function renderMyProfile() {
+async function renderMyProfile() {
   const wrap = document.getElementById('profileFormWrap');
   if (!wrap) return;
 
@@ -156,7 +156,7 @@ export async function renderMyProfile() {
 }
 
 // ── Public Profile ────────────────────────────────────────
-export async function renderPublicProfile() {
+async function renderPublicProfile() {
   const page = document.getElementById('pubProfilePage');
   if (!page) return;
 
@@ -239,3 +239,9 @@ export async function renderPublicProfile() {
     </div>`;
   }
 }
+
+// Auto-run when loaded as extra_js
+(window.__authReady || Promise.resolve()).then(function() {
+  if (document.getElementById('profileFormWrap')) renderMyProfile();
+  if (document.getElementById('pubProfilePage'))  renderPublicProfile();
+});

@@ -2,6 +2,8 @@
 layout: default
 title: "Favourites"
 permalink: /favourites/
+extra_js:
+  - /scripts/pages/favourites.js
 ---
 
 <div class="bbm-page bbm-fullbleed">
@@ -16,14 +18,7 @@ permalink: /favourites/
   <!-- Content -->
   <div class="container-fluid px-4 px-md-5 py-2">
     <div id="favListWrap">
-      <div class="bbm-loading"><p>Loading…</p></div>
-    </div>
+</div>
   </div>
 
 </div>
-
-<script type="module">
-import { renderFavourites } from '{{ "/scripts/pages/favourites.js" | relative_url }}';
-await window.__authReady;
-renderFavourites();
-</script>

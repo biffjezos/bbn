@@ -2,6 +2,8 @@
 layout: default
 title: "My Profile"
 permalink: /profile/
+extra_js:
+  - /scripts/pages/profile.js
 ---
 
 <div class="bbm-page bbm-fullbleed">
@@ -18,16 +20,9 @@ permalink: /profile/
     <div class="row">
       <div class="col-12 col-lg-6">
         <div class="bbm-section" id="profileFormWrap">
-          <div class="bbm-loading"><p>Loading…</p></div>
-        </div>
+</div>
       </div>
     </div>
   </div>
 
 </div>
-
-<script type="module">
-import { renderMyProfile } from '{{ "/scripts/pages/profile.js" | relative_url }}';
-await window.__authReady;
-renderMyProfile();
-</script>
