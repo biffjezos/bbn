@@ -16,7 +16,7 @@ const CFG = {
   JWT_SECRET:      process.env.JWT_SECRET      || 'change-me-in-production',
   LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://loc',
 
-  MESSAGE_MAX_CHARS:   144,
+  MESSAGE_MAX_CHARS:   4096,  // encrypted payload is larger than plaintext
   MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 hours
   MESSAGE_PROXIMITY_M: 100,
 };

@@ -144,7 +144,12 @@ async function renderMyProfile() {
         alertEl.className = 'alert alert-danger'; alertEl.textContent = 'New passwords do not match.'; alertEl.classList.remove('d-none'); return;
       }
       try {
-        // updateMe with current + new password — field names may vary by your backend
+        // Re-encrypt the private key blob with the new password
+        const keys = await window.Api.getMyKeys();
+        if (keys.encryptedPrivateKey) {
+          const newEncBlob = await window.BBMCrypto.reencrypt(curr, nw, keys.encryptedPrivateKey);
+          await window.Api.saveKeys(keys.publicKey, newEncBlob);
+        }
         await window.Api.updateMe({ currentPassword: curr, password: nw });
         alertEl.className = 'alert alert-success'; alertEl.textContent = 'Password updated.'; alertEl.classList.remove('d-none');
         ['currentPw','newPw','confirmPw'].forEach(id => document.getElementById(id).value = '');

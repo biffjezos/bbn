@@ -34,8 +34,49 @@ function isRegistered() {
   } catch { return false; }
 }
 
-function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'unknown'; }
-function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
+// ── Crypto helpers ────────────────────────────────────────
+// Cache of public keys by userId to avoid re-fetching
+const _pubKeyCache = {};
+
+async function getPublicKey(userId) {
+  if (_pubKeyCache[userId]) return _pubKeyCache[userId];
+  const profile = await window.Api.getProfile(userId);
+  if (!profile.publicKey) throw new Error('User has no public key.');
+  _pubKeyCache[userId] = profile.publicKey;
+  return profile.publicKey;
+}
+
+async function encryptFor(text, userId) {
+  if (!window.BBMCrypto?.isUnlocked()) throw new Error('Crypto not ready.');
+  const pubKey = await getPublicKey(userId);
+  return window.BBMCrypto.encryptMessage(text, pubKey);
+}
+
+async function decryptFrom(payload, userId) {
+  if (!window.BBMCrypto?.isUnlocked()) return '[encrypted]';
+  try {
+    const pubKey = await getPublicKey(userId);
+    return window.BBMCrypto.decryptMessage(payload, pubKey);
+  } catch {
+    return '[decryption failed]';
+  }
+}
+
+// Parse message text — may be JSON ciphertext or legacy plaintext
+async function decodeMessage(m, partnerId) {
+  const myId = getMyId();
+  const senderId = m.fromUserId;
+  // The sender encrypted with recipient's public key,
+  // so decrypt using the *other* person's public key
+  const otherUserId = senderId === myId ? partnerId : senderId;
+  try {
+    const payload = JSON.parse(m.text);
+    if (payload.ivB64 && payload.cipherB64) {
+      return await decryptFrom(payload, otherUserId);
+    }
+  } catch { /* not JSON — legacy plaintext */ }
+  return m.text;
+}
 
 function loadingHtml(text = 'Loading…') {
   return `<div class="bbm-loading"><p>${escHtml(text)}</p></div>`;
@@ -78,9 +119,24 @@ async function renderConversationList() {
     const profiles   = await Promise.allSettled(partnerIds.map(uid => window.Api.getProfile(uid)));
     partnerIds.forEach((uid, i) => {
       const r = profiles[i];
-      threads[uid].nickname = r.status === 'fulfilled' ? (r.value.nickname || uid) : uid;
-      threads[uid].sex      = r.status === 'fulfilled' ? (r.value.sex || null) : null;
+      threads[uid].nickname  = r.status === 'fulfilled' ? (r.value.nickname || uid) : uid;
+      threads[uid].sex       = r.status === 'fulfilled' ? (r.value.sex || null) : null;
+      threads[uid].publicKey = r.status === 'fulfilled' ? (r.value.publicKey || null) : null;
     });
+
+    // Decrypt preview text for each thread
+    await Promise.all(Object.values(threads).map(async t => {
+      try {
+        const payload = JSON.parse(t.latest.text);
+        if (payload.ivB64 && payload.cipherB64 && t.publicKey) {
+          t.preview = await window.BBMCrypto.decryptMessage(payload, t.publicKey);
+        } else {
+          t.preview = t.latest.text;
+        }
+      } catch {
+        t.preview = t.latest.text;
+      }
+    }));
 
     wrap.innerHTML = Object.values(threads)
       .sort((a, b) => new Date(b.latest.sentAt) - new Date(a.latest.sentAt))
@@ -90,7 +146,7 @@ async function renderConversationList() {
           <div class="conv-avatar ${sexClass(t.sex)}">${sexEmoji(t.sex)}</div>
           <div class="conv-body">
             <div class="conv-name">${escHtml(t.nickname)}</div>
-            <div class="conv-preview">${escHtml(t.latest.text)}</div>
+            <div class="conv-preview">${escHtml(t.preview || t.latest.text)}</div>
           </div>
           <div class="conv-meta">${timeAgo(t.latest.sentAt)}<i class="bi bi-chevron-right d-block text-faint mt-1"></i></div>
         </a>`;
@@ -134,7 +190,13 @@ async function renderThread() {
         return;
       }
 
-      msgsEl.innerHTML = messages.map(m => {
+      // Decrypt all messages
+      const decrypted = await Promise.all(messages.map(async m => ({
+        ...m,
+        text: await decodeMessage(m, userId),
+      })));
+
+      msgsEl.innerHTML = decrypted.map(m => {
         const out = m.fromUserId === myId;
         return `<div class="d-flex ${out ? 'justify-content-end' : 'justify-content-start'}">
           <div>
@@ -161,7 +223,15 @@ async function renderThread() {
     if (!text) return;
     sendError?.classList.add('d-none');
     try {
-      await window.Api.sendMessage(userId, text);
+      let body = text;
+      // Encrypt if crypto is ready and recipient has a public key
+      try {
+        const encrypted = await encryptFor(text, userId);
+        body = JSON.stringify(encrypted);
+      } catch (e) {
+        console.warn('[Messages] Encryption failed, sending plaintext:', e.message);
+      }
+      await window.Api.sendMessage(userId, body);
       if (inputEl) inputEl.value = '';
       if (charCount) charCount.textContent = '144';
       await load();

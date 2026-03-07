@@ -151,12 +151,45 @@ app.get('/users/:userId/profile', requireAny, async (req, res) => {
     }
     const user = await db.collection('users').findOne(
       { _id: oid },
-      { projection: { nickname: 1, age: 1, sex: 1, _id: 0 } }
+      { projection: { nickname: 1, age: 1, sex: 1, publicKey: 1, _id: 0 } }
     );
     if (!user) return res.status(404).json({ error: 'User not found.' });
     res.json(user);
   } catch (e) {
     console.error('[users/:userId/profile]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+// PUT /users/me/keys — store public key + encrypted private key blob
+app.put('/users/me/keys', requireUser, async (req, res) => {
+  try {
+    const { publicKey, encryptedPrivateKey } = req.body;
+    if (!publicKey || !encryptedPrivateKey)
+      return res.status(400).json({ error: 'publicKey and encryptedPrivateKey required.' });
+
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(req.auth.sub) },
+      { $set: { publicKey, encryptedPrivateKey } }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[users/me/keys PUT]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+// GET /users/me/keys — fetch encrypted private key blob for login
+app.get('/users/me/keys', requireUser, async (req, res) => {
+  try {
+    const user = await db.collection('users').findOne(
+      { _id: new ObjectId(req.auth.sub) },
+      { projection: { publicKey: 1, encryptedPrivateKey: 1, _id: 0 } }
+    );
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    res.json(user);
+  } catch (e) {
+    console.error('[users/me/keys GET]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
 });

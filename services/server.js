@@ -82,10 +82,12 @@ app.post('/api/auth/register', (req, res) => proxy(req, res, `${CFG.AUTH_SERVICE
 app.post('/api/auth/login',    (req, res) => proxy(req, res, `${CFG.AUTH_SERVICE_URL}/auth/login`));
 
 // --- Users --------------------------------------------------
-app.get   ('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
-app.put   ('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
-app.delete('/api/users/me',                (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
-app.get   ('/api/users/:userId/profile', (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.userId}/profile`));
+app.get   ('/api/users/me',                  (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.put   ('/api/users/me',                  (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.delete('/api/users/me',                  (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
+app.get   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me/keys`));
+app.put   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me/keys`));
+app.get   ('/api/users/:userId/profile',     (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.userId}/profile`));
 
 // --- Location -----------------------------------------------
 app.put   ('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));

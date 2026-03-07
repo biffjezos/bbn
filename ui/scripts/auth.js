@@ -148,11 +148,29 @@ const Auth = (() => {
       saveToStorage();
       stopCountdown();
       localStorage.removeItem(STORAGE_GUEST_EXP);
+
+      // Unlock crypto keys
+      try {
+        const keys = await window.Api.getMyKeys();
+        if (keys.encryptedPrivateKey && keys.publicKey) {
+          await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
+        } else {
+          // No keys yet (legacy account) — generate and save
+          const { publicKeyB64, encBlob } = await window.BBMCrypto.setup(password);
+          await window.Api.saveKeys(publicKeyB64, encBlob);
+        }
+      } catch (e) {
+        console.warn('[Auth] Crypto unlock failed:', e.message);
+      }
+
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
       return data;
     },
 
     async register(fields) {
+      // Generate keypair before registering so we can save keys right after
+      const { publicKeyB64, encBlob } = await window.BBMCrypto.setup(fields.password);
+
       const data = await window.Api.register({ ...fields, guestId: _guestId });
       _token    = data.token;
       _nickname = data.nickname;
@@ -161,6 +179,14 @@ const Auth = (() => {
       saveToStorage();
       stopCountdown();
       localStorage.removeItem(STORAGE_GUEST_EXP);
+
+      // Save keys now that we have a token
+      try {
+        await window.Api.saveKeys(publicKeyB64, encBlob);
+      } catch (e) {
+        console.warn('[Auth] Failed to save crypto keys:', e.message);
+      }
+
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
       return data;
     },
@@ -172,6 +198,7 @@ const Auth = (() => {
 
     logout() {
       Auth.onLogout?.();
+      window.BBMCrypto?.lock();
       clearUserStorage();
       _token = _nickname = _sex = null;
       _isUser = false;
@@ -181,6 +208,7 @@ const Auth = (() => {
     async deleteAccount() {
       await window.Api.deleteMe();
       Auth.onLogout?.();
+      window.BBMCrypto?.lock();
       clearUserStorage();
       _token = _nickname = _sex = null;
       _isUser = false;

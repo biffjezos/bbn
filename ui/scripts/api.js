@@ -84,6 +84,19 @@ const Api = {
     return apiFetch(`/users/${encodeURIComponent(userId)}/profile`);
   },
 
+  // ---- Crypto keys ----------------------------------------
+
+  saveKeys(publicKey, encryptedPrivateKey) {
+    return apiFetch('/users/me/keys', {
+      method: 'PUT',
+      body: JSON.stringify({ publicKey, encryptedPrivateKey }),
+    });
+  },
+
+  getMyKeys() {
+    return apiFetch('/users/me/keys');
+  },
+
   // ---- Location -------------------------------------------
 
   putLocation(lat, lon, accuracy) {

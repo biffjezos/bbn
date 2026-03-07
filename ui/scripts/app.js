@@ -480,3 +480,139 @@
   };
 
 })();
+
+// ============================================================
+// LockModule — inactivity lock for registered users
+// Locks crypto keys after LOCK_TIMEOUT_MS of inactivity or
+// when the tab becomes hidden. Shows modal-lock.html to
+// re-enter password and restore keys without full logout.
+// ============================================================
+(function () {
+
+  var LOCK_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes
+  var _lockTimer      = null;
+  var _modal          = null;
+  var _locked         = false;
+
+  function getModal() {
+    if (!_modal) {
+      var el = document.getElementById('lockModal');
+      if (el) _modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: false });
+    }
+    return _modal;
+  }
+
+  function lock() {
+    if (!window.Auth.isRegistered()) return;   // guests have no keys to lock
+    if (_locked) return;
+    _locked = true;
+    clearTimer();
+    window.BBMCrypto.lock();
+    var modal = getModal();
+    if (modal) modal.show();
+    console.log('[Lock] Session locked.');
+  }
+
+  function unlock() {
+    _locked = false;
+    resetTimer();
+    var modal = getModal();
+    if (modal) modal.hide();
+    console.log('[Lock] Session unlocked.');
+  }
+
+  function clearTimer() {
+    if (_lockTimer) { clearTimeout(_lockTimer); _lockTimer = null; }
+  }
+
+  function resetTimer() {
+    if (!window.Auth.isRegistered()) return;
+    clearTimer();
+    _lockTimer = setTimeout(lock, LOCK_TIMEOUT_MS);
+  }
+
+  // ── Activity events — reset timer on any interaction ──────
+  ['mousemove', 'keydown', 'pointerdown', 'scroll', 'touchstart'].forEach(function (evt) {
+    document.addEventListener(evt, function () {
+      if (!_locked) resetTimer();
+    }, { passive: true });
+  });
+
+  // ── Tab visibility — lock immediately when hidden ─────────
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (window.Auth.isRegistered()) lock();
+    } else {
+      // Tab came back into view — if not locked (e.g. very quick switch) restart timer
+      if (!_locked) resetTimer();
+    }
+  });
+
+  // ── Unlock button ─────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', function () {
+    var unlockBtn  = document.getElementById('lockUnlockBtn');
+    var logoutBtn  = document.getElementById('lockLogoutBtn');
+    var pwInput    = document.getElementById('lockPassword');
+    var errorEl    = document.getElementById('lockError');
+
+    function showError(msg) {
+      if (!errorEl) return;
+      errorEl.textContent = msg;
+      errorEl.classList.remove('d-none');
+    }
+
+    function clearError() {
+      if (errorEl) errorEl.classList.add('d-none');
+    }
+
+    async function tryUnlock() {
+      var password = pwInput ? pwInput.value : '';
+      if (!password) { showError('Please enter your password.'); return; }
+      clearError();
+      if (unlockBtn) { unlockBtn.disabled = true; unlockBtn.textContent = 'Unlocking…'; }
+      try {
+        var keys = await window.Api.getMyKeys();
+        var ok   = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
+        if (!ok) throw new Error('Wrong password.');
+        if (pwInput) pwInput.value = '';
+        unlock();
+      } catch (e) {
+        showError(e.message || 'Unlock failed.');
+      } finally {
+        if (unlockBtn) { unlockBtn.disabled = false; unlockBtn.textContent = 'Unlock'; }
+      }
+    }
+
+    unlockBtn?.addEventListener('click', tryUnlock);
+
+    pwInput?.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') tryUnlock();
+    });
+
+    logoutBtn?.addEventListener('click', function () {
+      if (pwInput) pwInput.value = '';
+      clearError();
+      // Hide modal first so it doesn't interfere with guest state
+      var modal = getModal();
+      if (modal) modal.hide();
+      _locked = false;
+      window.Auth.logout();
+    });
+  });
+
+  // ── Start timer once user logs in, stop on logout ─────────
+  var _origOnLogin  = Auth.onLogin;
+  Auth.onLogin = function (data) {
+    if (_origOnLogin) _origOnLogin(data);
+    _locked = false;
+    resetTimer();
+  };
+
+  var _origOnLogout = Auth.onLogout;
+  Auth.onLogout = function () {
+    if (_origOnLogout) _origOnLogout();
+    clearTimer();
+    _locked = false;
+  };
+
+})();
