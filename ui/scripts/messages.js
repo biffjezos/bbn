@@ -44,22 +44,34 @@ const _pubKeyCache = {};
 async function getPublicKey(userId) {
   if (_pubKeyCache[userId]) return _pubKeyCache[userId];
   const profile = await window.Api.getProfile(userId);
-  if (!profile.publicKey) throw new Error('User has no public key.');
+  if (!profile.publicKey) throw new Error('User has no public key — not yet logged in since E2EE update.');
   _pubKeyCache[userId] = profile.publicKey;
   return profile.publicKey;
 }
 
-async function encryptFor(text, userId) {
+async function encryptFor(text, recipientId) {
   if (!window.BBMCrypto?.isUnlocked()) throw new Error('Crypto not ready.');
-  const pubKey = await getPublicKey(userId);
-  return window.BBMCrypto.encryptMessage(text, pubKey);
+  const myId         = getMyId();
+  const recipientKey = await getPublicKey(recipientId);
+  const senderKey    = await getPublicKey(myId);
+  // Encrypt twice — once for recipient, once for sender (to read own sent messages)
+  const [forRecipient, forSender] = await Promise.all([
+    window.BBMCrypto.encryptMessage(text, recipientKey),
+    window.BBMCrypto.encryptMessage(text, senderKey),
+  ]);
+  return { forRecipient, forSender };
 }
 
-async function decryptFrom(payload, userId) {
+async function decryptFrom(payload, senderId, recipientId) {
   if (!window.BBMCrypto?.isUnlocked()) return '[encrypted]';
+  const myId      = getMyId();
+  const isSender  = senderId === myId;
+  // Use the ciphertext that was encrypted for me
+  const cipher    = isSender ? payload.forSender : payload.forRecipient;
+  // Decrypt using the other person's public key + my private key (ECDH)
+  const otherKey  = await getPublicKey(isSender ? recipientId : senderId);
   try {
-    const pubKey = await getPublicKey(userId);
-    return window.BBMCrypto.decryptMessage(payload, pubKey);
+    return await window.BBMCrypto.decryptMessage(cipher, otherKey);
   } catch {
     return '[decryption failed]';
   }
@@ -67,15 +79,10 @@ async function decryptFrom(payload, userId) {
 
 // Parse message text — may be JSON ciphertext or legacy plaintext
 async function decodeMessage(m, partnerId) {
-  const myId = getMyId();
-  const senderId = m.fromUserId;
-  // The sender encrypted with recipient's public key,
-  // so decrypt using the *other* person's public key
-  const otherUserId = senderId === myId ? partnerId : senderId;
   try {
     const payload = JSON.parse(m.text);
-    if (payload.ivB64 && payload.cipherB64) {
-      return await decryptFrom(payload, otherUserId);
+    if (payload.forRecipient && payload.forSender) {
+      return await decryptFrom(payload, m.fromUserId, m.toUserId);
     }
   } catch { /* not JSON — legacy plaintext */ }
   return m.text;
@@ -131,8 +138,8 @@ async function renderConversationList() {
     await Promise.all(Object.values(threads).map(async t => {
       try {
         const payload = JSON.parse(t.latest.text);
-        if (payload.ivB64 && payload.cipherB64 && t.publicKey) {
-          t.preview = await window.BBMCrypto.decryptMessage(payload, t.publicKey);
+        if (payload.forRecipient && payload.forSender) {
+          t.preview = await decryptFrom(payload, t.latest.fromUserId, t.latest.toUserId);
         } else {
           t.preview = t.latest.text;
         }
@@ -227,7 +234,7 @@ async function renderThread() {
     sendError?.classList.add('d-none');
     try {
       let body = text;
-      // Encrypt if crypto is ready and recipient has a public key
+      // Encrypt if crypto is ready and both parties have public keys
       try {
         const encrypted = await encryptFor(text, userId);
         body = JSON.stringify(encrypted);
