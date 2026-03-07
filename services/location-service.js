@@ -17,10 +17,10 @@ const CFG = {
   UPDATE_DISTANCE_M:   100,
   LOCATION_TTL_SEC:    10 * 60,
 
-  RADIUS_GUEST_M:      50,
-  RADIUS_REGISTERED_M: 2000,
+  RADIUS_GUEST_M:      Infinity,
+  RADIUS_REGISTERED_M: Infinity,
 
-  MAX_VISIBLE_GUESTS:      5,
+  MAX_VISIBLE_GUESTS:      Infinity,
   MAX_VISIBLE_REGISTERED:  Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
 };
@@ -100,7 +100,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 // PUT /location — upsert caller's position
 app.put('/location', requireAny, async (req, res) => {
   try {
-    const { lat, lon } = req.body;
+    const { lat, lon, accuracy } = req.body;
     if (typeof lat !== 'number' || typeof lon !== 'number' ||
         lat < -90 || lat > 90 || lon < -180 || lon > 180)
       return res.status(400).json({ error: 'Valid lat and lon required.' });
@@ -126,6 +126,7 @@ app.put('/location', requireAny, async (req, res) => {
           isRegistered: isUser,
           sex:          req.auth.sex      || null,
           nickname:     req.auth.nickname || null,
+          accuracy:     accuracy === 'ip' ? 'ip' : 'gps',
           updatedAt:    new Date(),
         },
       },
@@ -148,21 +149,12 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       return res.status(400).json({ error: 'lat and lon query params required.' });
 
     const callerId     = req.auth.sub;
-    const isRegistered = req.auth.role === 'user';
-    const radiusM      = isRegistered ? CFG.RADIUS_REGISTERED_M : CFG.RADIUS_GUEST_M;
-    const maxCount     = isRegistered ? CFG.MAX_VISIBLE_REGISTERED : CFG.MAX_VISIBLE_GUESTS;
     const cutoff       = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
 
-    // $nearSphere uses the 2dsphere index — returns results nearest-first naturally
+    // Infinite radius — plain query, no geo filter needed
     const nearby = await db.collection('locations').find({
       userId:    { $ne: callerId },
       updatedAt: { $gt: cutoff },
-      location: {
-        $nearSphere: {
-          $geometry:    { type: 'Point', coordinates: [lon, lat] },
-          $maxDistance: radiusM,
-        },
-      },
     }).toArray();
 
     const withDist = nearby.map(u => ({
@@ -170,7 +162,7 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       _dist: haversineDistance(lat, lon, u.lat, u.lon),
     }));
 
-    const visible = applyStrategy(withDist, maxCount, CFG.VISIBLE_SELECTION_STRATEGY);
+    const visible = applyStrategy(withDist, Infinity, CFG.VISIBLE_SELECTION_STRATEGY);
 
     res.json({
       users: visible.map(u => ({
@@ -180,6 +172,7 @@ app.get('/location/nearby', requireAny, async (req, res) => {
         isRegistered: u.isRegistered,
         sex:          u.sex,
         nickname:     u.nickname,
+        accuracy:     u.accuracy || 'gps',
         distanceM:    Math.round(u._dist),
       })),
     });

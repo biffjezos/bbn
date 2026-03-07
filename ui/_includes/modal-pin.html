@@ -21,17 +21,26 @@
         <h5 class="heading-serif mb-1" id="pinNickname" style="font-size:1.3rem">—</h5>
 
         <!-- Meta row -->
-        <p class="text-muted-bb mb-3" style="font-size:0.85rem">
+        <p class="text-muted-bb mb-1" style="font-size:0.85rem">
           <span id="pinAge">—</span>
           <span class="mx-1 text-faint">·</span>
           <span id="pinSex">—</span>
           <span class="mx-1 text-faint">·</span>
           <span id="pinDist">—</span>
         </p>
+        <p id="pinAccuracyWrap" class="d-none mb-3" style="font-size:0.78rem">
+          <span class="badge bg-secondary"><i class="bi bi-crosshair me-1"></i>approximate location</span>
+        </p>
 
-        <!-- Actions — only shown for registered users viewing registered targets -->
+        <!-- Actions — registered viewer, registered target -->
         <div id="pinActions" class="d-flex flex-column gap-2 d-none">
-          <a href="#" id="pinProfileLink" class="btn btn-bbm-primary w-100">
+          <a href="#" id="pinMessageLink" class="btn btn-bbm-pink w-100">
+            <i class="bi bi-chat-dots me-2"></i>Send Message
+          </a>
+          <button type="button" id="pinFavBtn" class="btn btn-bbm-ghost w-100">
+            <i class="bi bi-star me-2" id="pinFavIcon"></i><span id="pinFavLabel">Add to Favourites</span>
+          </button>
+          <a href="#" id="pinProfileLink" class="btn btn-bbm-outline w-100" style="border-color:var(--bbm-border)">
             <i class="bi bi-person me-2"></i>View Profile
           </a>
         </div>

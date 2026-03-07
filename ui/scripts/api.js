@@ -86,10 +86,10 @@ const Api = {
 
   // ---- Location -------------------------------------------
 
-  putLocation(lat, lon) {
+  putLocation(lat, lon, accuracy) {
     return apiFetch('/location', {
       method: 'PUT',
-      body: JSON.stringify({ lat, lon }),
+      body: JSON.stringify({ lat, lon, accuracy: accuracy || 'gps' }),
     });
   },
 

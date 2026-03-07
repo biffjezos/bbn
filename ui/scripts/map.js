@@ -146,7 +146,7 @@
         myPos = { lat: data.latitude, lng: data.longitude };
         if (!map) initMap(data.latitude, data.longitude, false);
         setStatus('approximate location', 'live');
-        pushLocation(data.latitude, data.longitude);
+        pushLocation(data.latitude, data.longitude, 'ip');
         startPolling();
       } else {
         throw new Error('No coordinates in IP response');
@@ -159,11 +159,11 @@
   }
 
   // ── Push location to backend ──────────────────────────────
-  async function pushLocation(lat, lng) {
-    if (!window.Auth?.getToken()) return;  // no token — skip silently
-    console.log('[Map] Pushing location to backend:', lat, lng);
+  async function pushLocation(lat, lng, accuracy) {
+    if (!window.Auth?.getToken()) return;
+    console.log('[Map] Pushing location to backend:', lat, lng, accuracy || 'gps');
     try {
-      const data = await window.Api.putLocation(lat, lng);
+      const data = await window.Api.putLocation(lat, lng, accuracy || 'gps');
       console.log('[Map] Location push response:', JSON.stringify(data));
     } catch (e) {
       console.warn('[Map] Location push failed:', e.message);

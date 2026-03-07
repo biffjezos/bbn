@@ -231,6 +231,7 @@
       var sex         = user.sex;
       var distanceM   = user.distanceM;
       var targetIsReg = user.isRegistered;
+      var accuracy    = user.accuracy;
 
       var avatarEl = $('pinAvatar');
       if (avatarEl) avatarEl.className = 'pin-avatar ' + (sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
@@ -243,15 +244,64 @@
         ? (distanceM < 1000 ? Math.round(distanceM) + 'm away' : (distanceM / 1000).toFixed(1) + 'km away')
         : '';
 
+      // Accuracy badge
+      var accWrap = $('pinAccuracyWrap');
+      if (accWrap) accWrap.classList.toggle('d-none', accuracy !== 'ip');
+
       var viewerIsReg = Auth.isRegistered();
       var pinActions  = $('pinActions');
       var pinGuest    = $('pinGuestPrompt');
       if (pinActions) pinActions.classList.toggle('d-none', !viewerIsReg || !targetIsReg);
       if (pinGuest)   pinGuest.classList.toggle('d-none', viewerIsReg);
 
-      var profileLink = $('pinProfileLink');
-      if (viewerIsReg && targetIsReg && profileLink && userId) {
-        profileLink.href = '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+      if (viewerIsReg && targetIsReg && userId) {
+        // Profile link
+        var profileLink = $('pinProfileLink');
+        if (profileLink) profileLink.href = '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+
+        // Message link
+        var msgLink = $('pinMessageLink');
+        if (msgLink) msgLink.href = '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+
+        // Favourites button
+        var favBtn   = $('pinFavBtn');
+        var favIcon  = $('pinFavIcon');
+        var favLabel = $('pinFavLabel');
+        if (favBtn) {
+          // Reset state
+          favBtn.disabled = false;
+          if (favIcon)  { favIcon.className  = 'bi bi-star me-2'; }
+          if (favLabel) { favLabel.textContent = 'Add to Favourites'; }
+
+          // Check if already favourited
+          window.Api.getFavourites().then(function(data) {
+            var isFav = (data.favourites || []).some(function(f) { return f.userId === userId; });
+            if (isFav) {
+              if (favIcon)  favIcon.className   = 'bi bi-star-fill text-pink me-2';
+              if (favLabel) favLabel.textContent = 'Favourited';
+            }
+            favBtn.onclick = async function () {
+              favBtn.disabled = true;
+              try {
+                if (isFav) {
+                  await window.Api.removeFavourite(userId);
+                  isFav = false;
+                  if (favIcon)  favIcon.className   = 'bi bi-star me-2';
+                  if (favLabel) favLabel.textContent = 'Add to Favourites';
+                } else {
+                  await window.Api.addFavourite(userId);
+                  isFav = true;
+                  if (favIcon)  favIcon.className   = 'bi bi-star-fill text-pink me-2';
+                  if (favLabel) favLabel.textContent = 'Favourited';
+                }
+              } catch (err) {
+                alert(err.message);
+              } finally {
+                favBtn.disabled = false;
+              }
+            };
+          }).catch(function() { /* ignore */ });
+        }
       }
 
       new bootstrap.Modal($('pinModal')).show();
