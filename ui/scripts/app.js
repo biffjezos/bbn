@@ -409,14 +409,18 @@
         onPosition(pos, acc < 5000);
         navigator.geolocation.watchPosition(
           function (pos) { onPosition(pos, true); },
-          function () { /* GPS not available — low accuracy is enough */ },
+          function (err) { console.warn('[Geo] watchPosition error:', err.code, err.message); },
           { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
         );
       },
-      function () {
+      function (err) {
+        console.warn('[Geo] Low-accuracy failed:', err.code, err.message);
         navigator.geolocation.getCurrentPosition(
           function (pos) { onPosition(pos, true); },
-          function () { tryIpFallback(); },
+          function (err2) {
+            console.warn('[Geo] High-accuracy failed:', err2.code, err2.message, '— falling back to IP');
+            tryIpFallback();
+          },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       },
