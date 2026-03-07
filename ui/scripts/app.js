@@ -377,9 +377,9 @@
   async function tryIpFallback() {
     setStatus('locating…', 'locating');
     var services = [
-      { url: 'https://ipwho.is/',             lat: 'latitude', lon: 'longitude' },
-      { url: 'https://ipapi.co/json/',         lat: 'latitude', lon: 'longitude' },
-      { url: 'https://freeipapi.com/api/json', lat: 'latitude', lon: 'longitude' },
+      { url: 'https://ipwho.org/',                    lat: 'latitude', lon: 'longitude' },
+      { url: 'https://iplocate.io/api/lookup/',       lat: 'latitude', lon: 'longitude' },
+      { url: 'https://api.ipapi.is/',                 lat: 'latitude', lon: 'longitude' },
     ];
     // Shuffle so load is spread evenly across services
     for (var s = services.length - 1; s > 0; s--) {
@@ -507,7 +507,7 @@
     if (_locked) return;
     _locked = true;
     clearTimer();
-    window.BBMCrypto.lock();
+    window.BBMCrypto?.lock();
     var modal = getModal();
     if (modal) modal.show();
     console.log('[Lock] Session locked.');
