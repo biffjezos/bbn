@@ -232,15 +232,13 @@ async function renderThread() {
     const text = inputEl?.value.trim();
     if (!text) return;
     sendError?.classList.add('d-none');
+
+    // Hard block — no plaintext fallback
+    if (!window.requireUnlocked?.()) return;
+
     try {
-      let body = text;
-      // Encrypt if crypto is ready and both parties have public keys
-      try {
-        const encrypted = await encryptFor(text, userId);
-        body = JSON.stringify(encrypted);
-      } catch (e) {
-        console.warn('[Messages] Encryption failed, sending plaintext:', e.message);
-      }
+      const encrypted = await encryptFor(text, userId);
+      const body = JSON.stringify(encrypted);
       await window.Api.sendMessage(userId, body);
       if (inputEl) inputEl.value = '';
       if (charCount) charCount.textContent = '144';
