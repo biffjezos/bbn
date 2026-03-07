@@ -93,6 +93,10 @@ const Api = {
     });
   },
 
+  deleteLocation() {
+    return apiFetch('/location', { method: 'DELETE' });
+  },
+
   getNearby(lat, lon) {
     return apiFetch(`/location/nearby?lat=${lat}&lon=${lon}`);
   },

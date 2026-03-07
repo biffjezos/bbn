@@ -156,6 +156,17 @@ app.put('/location', requireAny, async (req, res) => {
   }
 });
 
+// DELETE /location — remove caller's own location doc immediately
+app.delete('/location', requireAny, async (req, res) => {
+  try {
+    await db.collection('locations').deleteOne({ userId: req.auth.sub });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[location DELETE]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
 // GET /location/nearby?lat=&lon=
 app.get('/location/nearby', requireAny, async (req, res) => {
   try {

@@ -430,12 +430,26 @@
     startWatch();
   });
 
-  // Re-push on login (token may have changed, sex/nickname updated)
+  // On login: delete the guest location doc, then immediately push as the new user
   var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
     var pos = window.GeoState.pos;
-    if (pos) pushLocation(pos.lat, pos.lng, window.GeoState.accuracy);
+    if (pos) {
+      // Delete guest doc first (auth-service already cleaned up the guest session,
+      // but the location doc is keyed by guestId which is a different token sub)
+      window.Api.deleteLocation().catch(function() {});
+      // Push immediately as the now-logged-in user
+      pushLocation(pos.lat, pos.lng, window.GeoState.accuracy);
+    }
+  };
+
+  // On logout: delete the user location doc immediately, guest session will push its own
+  var _origOnLogout = Auth.onLogout;
+  Auth.onLogout = function () {
+    // Delete while we still have the user token (auth.js clears it after this hook)
+    window.Api.deleteLocation().catch(function() {});
+    if (_origOnLogout) _origOnLogout();
   };
 
   // Stop pushing on guest expired

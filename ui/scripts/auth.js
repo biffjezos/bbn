@@ -171,19 +171,19 @@ const Auth = (() => {
     },
 
     logout() {
+      Auth.onLogout?.();
       clearUserStorage();
       _token = _nickname = _sex = null;
       _isUser = false;
-      Auth.onLogout?.();
       Auth.initGuest();
     },
 
     async deleteAccount() {
       await window.Api.deleteMe();
+      Auth.onLogout?.();
       clearUserStorage();
       _token = _nickname = _sex = null;
       _isUser = false;
-      Auth.onLogout?.();
       Auth.initGuest();
     },
 
