@@ -150,17 +150,19 @@ const Auth = (() => {
       localStorage.removeItem(STORAGE_GUEST_EXP);
 
       // Unlock crypto keys
-      try {
-        const keys = await window.Api.getMyKeys();
-        if (keys.encryptedPrivateKey && keys.publicKey) {
-          await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
-        } else {
-          // No keys yet (legacy account) — generate and save
-          const { publicKeyB64, encBlob } = await window.BBMCrypto.setup(password);
-          await window.Api.saveKeys(publicKeyB64, encBlob);
+      if (window.BBMCrypto) {
+        try {
+          const keys = await window.Api.getMyKeys();
+          if (keys.encryptedPrivateKey && keys.publicKey) {
+            await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
+          } else {
+            // No keys yet (legacy account) — generate and save
+            const { publicKeyB64, encBlob } = await window.BBMCrypto.setup(password);
+            await window.Api.saveKeys(publicKeyB64, encBlob);
+          }
+        } catch (e) {
+          console.warn('[Auth] Crypto unlock failed:', e.message);
         }
-      } catch (e) {
-        console.warn('[Auth] Crypto unlock failed:', e.message);
       }
 
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
@@ -169,7 +171,16 @@ const Auth = (() => {
 
     async register(fields) {
       // Generate keypair before registering so we can save keys right after
-      const { publicKeyB64, encBlob } = await window.BBMCrypto.setup(fields.password);
+      let publicKeyB64 = null, encBlob = null;
+      if (window.BBMCrypto) {
+        try {
+          ({ publicKeyB64, encBlob } = await window.BBMCrypto.setup(fields.password));
+        } catch (e) {
+          console.warn('[Auth] Crypto setup failed during register:', e.message);
+        }
+      } else {
+        console.warn('[Auth] BBMCrypto not available — keys will be generated on next login.');
+      }
 
       const data = await window.Api.register({ ...fields, guestId: _guestId });
       _token    = data.token;
@@ -181,10 +192,12 @@ const Auth = (() => {
       localStorage.removeItem(STORAGE_GUEST_EXP);
 
       // Save keys now that we have a token
-      try {
-        await window.Api.saveKeys(publicKeyB64, encBlob);
-      } catch (e) {
-        console.warn('[Auth] Failed to save crypto keys:', e.message);
+      if (publicKeyB64 && encBlob) {
+        try {
+          await window.Api.saveKeys(publicKeyB64, encBlob);
+        } catch (e) {
+          console.warn('[Auth] Failed to save crypto keys:', e.message);
+        }
       }
 
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
