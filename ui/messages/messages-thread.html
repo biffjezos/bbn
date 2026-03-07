@@ -47,8 +47,4 @@ permalink: /messages/thread/
 
 </div>
 
-<script type="module">
-import { renderThread } from '{{ "/scripts/pages/messages.js" | relative_url }}';
-await window.__authReady;
-renderThread();
-</script>
+<script src="{{ '/scripts/messages.js' | relative_url }}"></script>

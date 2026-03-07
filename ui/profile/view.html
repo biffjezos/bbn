@@ -8,8 +8,4 @@ permalink: /profile/view/
   <div class="bbm-loading"><p>Loading…</p></div>
 </div>
 
-<script type="module">
-import { renderPublicProfile } from '{{ "/scripts/pages/profile.js" | relative_url }}';
-await window.__authReady;
-renderPublicProfile();
-</script>
+<script src="{{ '/scripts/profile.js' | relative_url }}"></script>

@@ -62,7 +62,7 @@
 
 {% if page.extra_js %}
 {% for js in page.extra_js %}
-<script type="module" src="{{ js | relative_url }}"></script>
+<script src="{{ js | relative_url }}"></script>
 {% endfor %}
 {% endif %}
 
