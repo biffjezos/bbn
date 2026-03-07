@@ -34,6 +34,9 @@ function isRegistered() {
   } catch { return false; }
 }
 
+function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'unknown'; }
+function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
+
 // ── Crypto helpers ────────────────────────────────────────
 // Cache of public keys by userId to avoid re-fetching
 const _pubKeyCache = {};
