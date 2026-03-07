@@ -376,23 +376,37 @@
 
   async function tryIpFallback() {
     setStatus('locating…', 'locating');
-    try {
-      var r    = await fetch('https://ipapi.co/json/');
-      var data = await r.json();
-      if (data.latitude && data.longitude) {
-        console.log('[Geo] IP location:', data.city, data.country_name);
-        window.GeoState.accuracy = 'ip';
-        dispatchPosition(data.latitude, data.longitude);
-        setStatus('approximate location', 'live');
-        pushLocation(data.latitude, data.longitude, 'ip');
-        startPushTimer();
-      } else {
-        throw new Error('No coordinates in IP response');
-      }
-    } catch (e) {
-      console.warn('[Geo] IP fallback failed:', e.message);
-      setStatus('location unavailable', 'off');
+    var services = [
+      { url: 'https://ipwho.is/',             lat: 'latitude', lon: 'longitude' },
+      { url: 'https://ipapi.co/json/',         lat: 'latitude', lon: 'longitude' },
+      { url: 'https://freeipapi.com/api/json', lat: 'latitude', lon: 'longitude' },
+    ];
+    // Shuffle so load is spread evenly across services
+    for (var s = services.length - 1; s > 0; s--) {
+      var j = Math.floor(Math.random() * (s + 1));
+      var tmp = services[s]; services[s] = services[j]; services[j] = tmp;
     }
+    for (var i = 0; i < services.length; i++) {
+      try {
+        var r    = await fetch(services[i].url);
+        var data = await r.json();
+        var lat  = data[services[i].lat];
+        var lon  = data[services[i].lon];
+        if (lat && lon) {
+          console.log('[Geo] IP location from', services[i].url);
+          window.GeoState.accuracy = 'ip';
+          dispatchPosition(lat, lon);
+          setStatus('approximate location', 'live');
+          pushLocation(lat, lon, 'ip');
+          startPushTimer();
+          return;
+        }
+      } catch (e) {
+        console.warn('[Geo] IP fallback failed for', services[i].url, e.message);
+      }
+    }
+    console.warn('[Geo] All IP fallbacks failed');
+    setStatus('location unavailable', 'off');
   }
 
   function startWatch() {
