@@ -1,0 +1,47 @@
+<!-- ============================================================
+     MODAL — Session Lock
+     Shown after inactivity or tab hidden. Cannot be dismissed
+     without re-entering password. No close button.
+     ============================================================ -->
+<div class="modal fade" id="lockModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+    <div class="modal-content">
+
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">
+          <i class="bi bi-lock-fill me-2 text-pink"></i>Session Locked
+        </h5>
+      </div>
+
+      <div class="modal-body pt-2">
+        <p class="text-muted-bb small mb-3">
+          Your session was locked due to inactivity. Enter your password to continue.
+        </p>
+
+        <div id="lockError" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+        <div class="mb-4">
+          <label class="form-label" for="lockPassword">Password</label>
+          <input
+            type="password"
+            class="form-control"
+            id="lockPassword"
+            autocomplete="current-password"
+            placeholder="••••••••"
+          />
+        </div>
+
+        <button type="button" class="btn btn-bbm-primary w-100" id="lockUnlockBtn">
+          <i class="bi bi-unlock me-2"></i>Unlock
+        </button>
+      </div>
+
+      <div class="modal-footer border-0 pt-0 justify-content-center">
+        <button type="button" class="btn btn-bbm-ghost btn-sm" id="lockLogoutBtn">
+          <i class="bi bi-box-arrow-right me-1"></i>Log out instead
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
