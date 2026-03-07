@@ -1,5 +1,9 @@
 # Favourites
 
+*[← Messages](messages.md) · [Tiers →](tiers.md)*
+
+---
+
 ## Overview
 
 Favourites allow a registered user to maintain a list of other registered users they want to keep track of. The list shows live online status for each favourited user. Favourites are managed by `favourites-service.js`.
@@ -10,13 +14,13 @@ Favourites allow a registered user to maintain a list of other registered users 
 
 ## How It Works
 
-A favourite is a link between two user IDs — the owner and the target. The target user is not notified and does not need to accept. Favourites are one-directional.
+A favourite is a one-directional link between two user IDs — the owner and the target. The target is not notified and does not need to accept.
 
 When fetching the favourites list, the service:
 1. Loads all favourite entries for the owner
-2. Joins against the `users` collection to get current nicknames and sex (in case they were updated since the favourite was added)
-3. Checks the `locations` collection to determine which users have been active in the last 10 minutes (online status)
-4. Silently drops any entries where the target account no longer exists
+2. Joins against `users` to get current nicknames and sex
+3. Checks `locations` to determine which users have been active in the last 10 minutes (online status)
+4. Silently drops entries where the target account no longer exists
 
 ---
 
@@ -58,7 +62,7 @@ POST /api/favourites/:userId
 **Validation:**
 - Cannot favourite yourself
 - Target user must exist
-- Cannot add the same user twice (returns 409 if already in favourites)
+- Cannot add the same user twice (returns 409)
 
 **Response:**
 ```json
@@ -75,12 +79,12 @@ DELETE /api/favourites/:userId
 
 **Auth:** Registered user token required.
 
+Returns 404 if the entry does not exist.
+
 **Response:**
 ```json
 { "ok": true }
 ```
-
-Returns 404 if the entry does not exist.
 
 ---
 
@@ -102,3 +106,7 @@ A unique compound index on `{ ownerUserId, favouriteUserId }` prevents duplicate
 ## Account Deletion
 
 When a user deletes their account, all favourites documents are cleaned up — both entries they own and entries that reference their userId in other users' lists.
+
+---
+
+*[← Messages](messages.md) · [Tiers →](tiers.md)*

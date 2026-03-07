@@ -1,20 +1,24 @@
-# User Profiles
+# User Profiles & Keys
+
+*[← Authentication](auth.md) · [Location →](location.md)*
+
+---
 
 ## Overview
 
-User profile management is handled by `users-service.js`. All routes require a registered user token (`role: "user"`).
+User profile management is handled by `users-service.js`. This service also stores and serves the cryptographic keys used for end-to-end encrypted messaging.
 
 ---
 
 ## Nickname
 
-Nickname is a **display name only**. It is not unique — multiple users may share the same nickname. All internal service-to-service communication uses `userId` (the MongoDB `_id` as a string). Nicknames are shown in the UI but never used as identifiers in API calls.
+Nickname is a **display name only** — not unique. All internal service communication uses `userId` (the MongoDB `_id` as a string). Nicknames are shown in the UI but never used as identifiers in API calls.
 
 ---
 
 ## Get My Profile
 
-Returns the current user's full profile document, excluding `passwordHash`.
+Returns the current user's full profile, excluding `passwordHash`, `encryptedPrivateKey`.
 
 ```
 GET /api/users/me
@@ -31,6 +35,7 @@ GET /api/users/me
   "age":       25,
   "sex":       "m",
   "tier":      "regular",
+  "publicKey": "BEB…",
   "createdAt": "2024-01-01T00:00:00.000Z"
 }
 ```
@@ -39,7 +44,7 @@ GET /api/users/me
 
 ## Update My Profile
 
-Updates one or more profile fields. Only fields included in the request body are changed.
+Updates one or more profile fields.
 
 ```
 PUT /api/users/me
@@ -58,18 +63,9 @@ PUT /api/users/me
 }
 ```
 
-**Validation:**
-- `sex` must be `"m"` or `"f"` if provided
-- `age` must be between 18 and 120 if provided
-- `password` must be at least 8 characters if provided
-- `nickname` has no uniqueness constraint
+If `nickname` or `sex` are updated, the change is also written to the active location document so the map updates without re-login.
 
-If `nickname` or `sex` are updated, the change is also written to the user's active location document so the map icon updates correctly without a re-login.
-
-**Response:**
-```json
-{ "ok": true }
-```
+If `password` is changed, the frontend re-encrypts the private key blob with the new password before saving — so old messages remain readable. See [Crypto Keys](#crypto-keys).
 
 ---
 
@@ -81,41 +77,81 @@ Permanently deletes the account and all associated data.
 DELETE /api/users/me
 ```
 
-**Auth:** Registered user token required.
-
-Deletes:
-- User document
-- Location document
-- All messages sent or received
-- All favourites (owned or referencing this user)
-
-**Response:**
-```json
-{ "ok": true }
-```
+Deletes: user document, location document, all messages sent or received, all favourites.
 
 ---
 
 ## Get Public Profile
 
-Returns the public-facing profile for a user by their **userId**.
+Returns the public-facing profile for any user by userId. Includes the public key so senders can encrypt messages to this user.
 
 ```
 GET /api/users/:userId/profile
 ```
 
-**Auth:** Any valid token (guest or registered).
+**Auth:** Any valid token.
 
 **Response:**
 ```json
 {
-  "nickname": "username",
-  "age":      25,
-  "sex":      "m"
+  "nickname":  "username",
+  "age":       25,
+  "sex":       "m",
+  "publicKey": "BEB…"
 }
 ```
 
-Only `nickname`, `age`, and `sex` are returned. Email, tier, and internal fields are never exposed.
+Only `nickname`, `age`, `sex`, and `publicKey` are returned. Email, tier, and internal fields are never exposed.
+
+---
+
+## Crypto Keys
+
+### Save Keys
+
+Called after registration or when a legacy account (no keys) logs in for the first time.
+
+```
+PUT /api/users/me/keys
+```
+
+**Auth:** Registered user token required.
+
+**Body:**
+```json
+{
+  "publicKey": "BEB…",
+  "encryptedPrivateKey": {
+    "saltB64":      "base64…",
+    "ivB64":        "base64…",
+    "encryptedB64": "base64…"
+  }
+}
+```
+
+The `encryptedPrivateKey` blob is the user's ECDH private key encrypted with a key derived from their password using PBKDF2 (200,000 iterations, SHA-256) + AES-GCM. The server stores this blob but cannot decrypt it without the user's password.
+
+### Get My Keys
+
+Called on login to retrieve the encrypted blob for client-side decryption.
+
+```
+GET /api/users/me/keys
+```
+
+**Auth:** Registered user token required.
+
+**Response:**
+```json
+{
+  "publicKey": "BEB…",
+  "encryptedPrivateKey": {
+    "saltB64":      "base64…",
+    "ivB64":        "base64…",
+    "encryptedB64": "base64…"
+  }
+}
+```
 
 ---
 
@@ -123,13 +159,23 @@ Only `nickname`, `age`, and `sex` are returned. Email, tier, and internal fields
 
 ```json
 {
-  "_id":          "ObjectId",
-  "email":        "string (unique, lowercase)",
-  "nickname":     "string (display only, not unique, min 2 chars, max 32 chars)",
-  "passwordHash": "string (bcrypt, never returned in API responses)",
-  "age":          "number",
-  "sex":          "m | f",
-  "tier":         "regular | premium",
-  "createdAt":    "Date"
+  "_id":                 "ObjectId",
+  "email":              "string (unique, lowercase)",
+  "nickname":           "string (display only, not unique)",
+  "passwordHash":       "string (bcrypt, never returned in API)",
+  "age":                "number",
+  "sex":                "m | f",
+  "tier":               "regular | premium",
+  "publicKey":          "string (base64 ECDH public key)",
+  "encryptedPrivateKey": {
+    "saltB64":      "string",
+    "ivB64":        "string",
+    "encryptedB64": "string"
+  },
+  "createdAt": "Date"
 }
 ```
+
+---
+
+*[← Authentication](auth.md) · [Location →](location.md)*

@@ -834,3 +834,26 @@
    ::-webkit-scrollbar-track { background: transparent; }
    ::-webkit-scrollbar-thumb { background: var(--bbm-border); border-radius: 2px; }
    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+   /* Donation badge in navbar */
+   .bbm-donate-badge {
+     display: inline-flex;
+     align-items: center;
+     gap: 0.35rem;
+     font-size: 0.75rem;
+     font-weight: 600;
+     color: var(--bbm-pink) !important;
+     background: rgba(255, 90, 140, 0.1);
+     border: 1px solid rgba(255, 90, 140, 0.25);
+     border-radius: 50px;
+     padding: 0.3rem 0.75rem;
+     text-decoration: none !important;
+     transition: background 0.2s, border-color 0.2s;
+     white-space: nowrap;
+   }
+   .bbm-donate-badge:hover {
+     background: rgba(255, 90, 140, 0.2);
+     border-color: rgba(255, 90, 140, 0.5);
+   }
+   .bbm-donate-badge .bi-heart-fill {
+     font-size: 0.7rem;
+   }

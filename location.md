@@ -1,20 +1,31 @@
 # Location
 
+*[← User Profiles](users.md) · [Messages →](messages.md)*
+
+---
+
 ## Overview
 
-Location is handled by `location-service.js`. It tracks where users are, serves nearby user lookups, and is consulted by `messages-service.js` before allowing a message to be sent.
+Location is handled by `location-service.js`. It tracks where users are, serves nearby user lookups, and exposes a per-user location endpoint used internally by `messages-service.js`.
 
 ---
 
 ## How Location Works
 
-The browser uses the Geolocation API (`navigator.geolocation.watchPosition`) to continuously track the user. The frontend pushes the position to the server, but only when:
+The frontend uses the HTML5 Geolocation API with a two-step approach:
 
-- It is the first position fix, **or**
-- At least 15 seconds have passed since the last push, **or**
-- The user has moved more than 100 metres
+1. **Low-accuracy fix first** — fast, uses WiFi/cell positioning, gets an immediate position
+2. **High-accuracy watch** — enables GPS if available, refines position continuously
 
-This prevents unnecessary writes while keeping the server in sync with the user's real position.
+If the browser blocks geolocation (permission denied or unavailable), the frontend falls back to **IP geolocation** using a randomised list of free services tried in sequence:
+
+- `ipwho.org`
+- `iplocate.io`
+- `api.ipapi.is`
+
+The fallback services are shuffled randomly on each page load to distribute load evenly across them. If one fails or returns a CORS error, the next is tried automatically.
+
+Each location push includes an `accuracy` field: `"gps"` for browser geolocation, `"ip"` for IP-based fallback. The map shows an "approximate location" indicator for IP-based pins.
 
 Location documents expire automatically after **10 minutes** via a MongoDB TTL index. If a user closes the app or loses signal, they disappear from the map within 10 minutes.
 
@@ -22,7 +33,7 @@ Location documents expire automatically after **10 minutes** via a MongoDB TTL i
 
 ## Push Location
 
-Updates the caller's position in the database.
+Updates the caller's position in the database. Called every 30 seconds by the frontend regardless of movement.
 
 ```
 PUT /api/location
@@ -33,51 +44,45 @@ PUT /api/location
 **Body:**
 ```json
 {
-  "lat": 51.5074,
-  "lon": -0.1278
+  "lat":      51.5074,
+  "lon":      -0.1278,
+  "accuracy": "gps"
 }
 ```
-
-**Validation:**
-- `lat` must be a number between -90 and 90
-- `lon` must be a number between -180 and 180
-
-If the position has not changed enough since the last push (time or distance threshold not met), the write is skipped and `skipped: true` is returned.
 
 **Response:**
 ```json
 { "ok": true }
 ```
 
-or if skipped:
+---
 
+## Delete Location
+
+Removes the caller's location document immediately. Called on logout (to remove the pin from the map instantly) and on login (to remove the stale guest pin before pushing the new user pin).
+
+```
+DELETE /api/location
+```
+
+**Auth:** Any valid token.
+
+**Response:**
 ```json
-{ "ok": true, "skipped": true }
+{ "ok": true }
 ```
 
 ---
 
 ## Get Nearby Users
 
-Returns users visible to the caller within their tier's radius. The caller is never included in their own results.
+Returns all users with an active location in the last 10 minutes. The caller is never included in results.
 
 ```
 GET /api/location/nearby?lat=51.5074&lon=-0.1278
 ```
 
 **Auth:** Any valid token.
-
-**Tier radius:**
-
-| Tier | Radius |
-|---|---|
-| Guest | 50 metres |
-| Regular | 500 metres |
-| Premium | 2000 metres |
-
-Only users whose location was updated within the last **10 minutes** are returned.
-
-Guests see a maximum of 5 other users. Registered users see all users within range.
 
 **Response:**
 ```json
@@ -90,6 +95,7 @@ Guests see a maximum of 5 other users. Registered users see all users within ran
       "isRegistered": true,
       "sex":          "f",
       "nickname":     "username",
+      "accuracy":     "gps",
       "distanceM":    42
     }
   ]
@@ -98,17 +104,13 @@ Guests see a maximum of 5 other users. Registered users see all users within ran
 
 ---
 
-## Visibility Strategy
+## Get User Location (Internal)
 
-When the number of visible users exceeds the maximum (applies to guests), the service selects which users to show using the `VISIBLE_SELECTION_STRATEGY` config value:
+Used internally by `messages-service.js` via the service token. Not exposed publicly.
 
-| Strategy | Behaviour |
-|---|---|
-| `random` (default) | Random selection from users in range |
-| `nearest` | Closest users are shown first |
-| `newest` | Most recently active users are shown first |
-
-Change `VISIBLE_SELECTION_STRATEGY` in `location-service.js` CFG to switch strategy.
+```
+GET /location/user/:userId
+```
 
 ---
 
@@ -122,6 +124,7 @@ Change `VISIBLE_SELECTION_STRATEGY` in `location-service.js` CFG to switch strat
   "isRegistered": "boolean",
   "sex":          "m | f | null",
   "nickname":     "string | null",
+  "accuracy":     "gps | ip",
   "updatedAt":    "Date (TTL field — document expires 10 min after this)"
 }
 ```
@@ -130,14 +133,12 @@ Change `VISIBLE_SELECTION_STRATEGY` in `location-service.js` CFG to switch strat
 
 ## Configuration
 
-All values are in `location-service.js` CFG:
-
 | Key | Default | Description |
 |---|---|---|
-| `UPDATE_INTERVAL_MS` | 15000 | Min time between location pushes (ms) |
-| `UPDATE_DISTANCE_M` | 100 | Min movement before a push is triggered (metres) |
-| `LOCATION_TTL_SEC` | 600 | Location document lifetime (seconds) |
-| `VICINITY_RADIUS_M` | 100 | Hard server-side radius cap (metres) — tier radius in `tiers.js` applies on top |
-| `MAX_VISIBLE_GUESTS` | 5 | Max users returned to a guest caller |
-| `MAX_VISIBLE_REGISTERED` | Infinity | Max users returned to a registered caller |
-| `VISIBLE_SELECTION_STRATEGY` | `random` | Selection strategy when capping results |
+| `LOCATION_TTL_SEC` | 600 | Location document lifetime in seconds |
+| `MAX_VISIBLE_GUESTS` | Infinity | Max users returned (currently unlimited) |
+| `VISIBLE_SELECTION_STRATEGY` | `random` | Selection strategy when capping results: `random`, `nearest`, `newest` |
+
+---
+
+*[← User Profiles](users.md) · [Messages →](messages.md)*
