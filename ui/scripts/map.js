@@ -1,6 +1,7 @@
 // ============================================================
 // bOOmbOOm.NOW! — map.js
-// Only runs when #map exists (index.html)
+// Map rendering only. Geolocation lives in app.js (GeoModule).
+// Only runs when #map exists (index.html).
 // ============================================================
 
 (function () {
@@ -9,7 +10,6 @@
   let map        = null;
   let selfMarker = null;
   let markers    = {};
-  let myPos      = null;
   let pollTimer  = null;
 
   const TILE_URL     = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
@@ -17,7 +17,6 @@
   const POLL_MS      = 5000;
   const DEFAULT_ZOOM = 17;
 
-  // ── Emoji + CSS class by sex ─────────────────────────────
   function markerEmoji(sex) { return sex==='f'?'👌':sex==='m'?'👆':'👊'; }
   function markerClass(sex) { return sex==='f'?'female':sex==='m'?'male':'guest'; }
 
@@ -33,18 +32,15 @@
     });
   }
 
-  // ── Init map ─────────────────────────────────────────────
-  function initMap(lat, lng, accurate) {
+  function initMap(lat, lng) {
     if (map) return;
-    console.log('[Map] Initialising map at', lat, lng, accurate ? '(accurate)' : '(approximate)');
+    console.log('[Map] Initialising at', lat, lng);
     map = L.map('map', { center: [lat, lng], zoom: DEFAULT_ZOOM, zoomControl: true });
     L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
     placeSelfMarker(lat, lng);
-    setStatus(accurate ? 'live' : 'approximate location', 'live');
     startPolling();
   }
 
-  // ── Self marker ───────────────────────────────────────────
   function placeSelfMarker(lat, lng) {
     const sex = window.Auth?.getSex?.() || null;
     if (selfMarker) {
@@ -58,7 +54,6 @@
     }
   }
 
-  // ── Other user markers ────────────────────────────────────
   function renderMarkers(users) {
     const seen = new Set();
     users.forEach(u => {
@@ -78,99 +73,6 @@
     });
   }
 
-  // ── Geolocation ───────────────────────────────────────────
-  function startWatch() {
-    if (!('geolocation' in navigator)) {
-      console.warn('[Map] Geolocation not available in this browser');
-      setStatus('location unavailable', 'off');
-      tryIpFallback();
-      return;
-    }
-    setStatus('locating…', 'locating');
-    console.log('[Map] Starting geolocation (low accuracy first)');
-
-    // Step 1 — low accuracy, fast, works on desktop via Wi-Fi
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const acc = pos.coords.accuracy;
-        console.log('[Map] Low-accuracy fix, accuracy:', Math.round(acc) + 'm');
-        onPosition(pos, acc < 5000);  // accurate if within 5km
-        // Start high-accuracy watch to refine on mobile GPS — silent on failure
-        navigator.geolocation.watchPosition(
-          pos => {
-            console.log('[Map] High-accuracy fix, accuracy:', Math.round(pos.coords.accuracy) + 'm');
-            onPosition(pos, true);
-          },
-          _err => { /* No GPS on this device — low accuracy fix is enough */ },
-          { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
-        );
-      },
-      _err => {
-        console.warn('[Map] Low-accuracy geolocation failed, trying high accuracy');
-        navigator.geolocation.getCurrentPosition(
-          pos => onPosition(pos, true),
-          _err2 => {
-            console.warn('[Map] All geolocation failed, falling back to IP');
-            tryIpFallback();
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
-    );
-  }
-
-  function onPosition(pos, accurate) {
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
-    myPos = { lat, lng };
-
-    if (!map) {
-      initMap(lat, lng, accurate);
-    } else {
-      placeSelfMarker(lat, lng);
-      if (accurate) setStatus('live', 'live');
-    }
-    pushLocation(lat, lng);
-  }
-
-  // IP fallback
-  async function tryIpFallback() {
-    console.log('[Map] Trying IP geolocation fallback');
-    setStatus('locating…', 'locating');
-    try {
-      const r    = await fetch('https://ipapi.co/json/');
-      const data = await r.json();
-      if (data.latitude && data.longitude) {
-        console.log('[Map] IP location:', data.city, data.country_name);
-        myPos = { lat: data.latitude, lng: data.longitude };
-        if (!map) initMap(data.latitude, data.longitude, false);
-        setStatus('approximate location', 'live');
-        pushLocation(data.latitude, data.longitude, 'ip');
-        startPolling();
-      } else {
-        throw new Error('No coordinates in IP response');
-      }
-    } catch (e) {
-      console.warn('[Map] IP fallback failed:', e.message);
-      setStatus('location unavailable', 'off');
-      if (!map) initMap(51.505, -0.09, false);
-    }
-  }
-
-  // ── Push location to backend ──────────────────────────────
-  async function pushLocation(lat, lng, accuracy) {
-    if (!window.Auth?.getToken()) return;
-    console.log('[Map] Pushing location to backend:', lat, lng, accuracy || 'gps');
-    try {
-      const data = await window.Api.putLocation(lat, lng, accuracy || 'gps');
-      console.log('[Map] Location push response:', JSON.stringify(data));
-    } catch (e) {
-      console.warn('[Map] Location push failed:', e.message);
-    }
-  }
-
-  // ── Poll nearby users ─────────────────────────────────────
   function startPolling() {
     if (pollTimer) return;
     console.log('[Map] Starting nearby poll every', POLL_MS + 'ms');
@@ -179,68 +81,46 @@
   }
 
   async function poll() {
-    if (!myPos) return;
-    if (!window.Auth?.getToken()) return;  // no token — skip silently
+    const pos = window.GeoState?.pos;
+    if (!pos || !window.Auth?.getToken()) return;
     try {
-      const result = await window.Api.getNearby(myPos.lat, myPos.lng);
-      const users = result.users || [];
-      console.log('[Map] Nearby users:', users.length);
-      renderMarkers(users);
+      const result = await window.Api.getNearby(pos.lat, pos.lng);
+      renderMarkers(result.users || []);
     } catch (e) {
       console.warn('[Map] Nearby poll failed:', e.message);
     }
   }
 
-  // ── Refresh markers after login/logout ────────────────────
   function refreshMarkers() {
-    // Always update self marker if map exists — myPos may be set even if marker wasn't
-    if (map && myPos) placeSelfMarker(myPos.lat, myPos.lng);
-    // Re-poll so other markers update too
+    const pos = window.GeoState?.pos;
+    if (map && pos) placeSelfMarker(pos.lat, pos.lng);
     poll();
   }
 
-  // ── Centre on self ────────────────────────────────────────
   function centreOnSelf() {
-    if (map && myPos) map.setView([myPos.lat, myPos.lng], DEFAULT_ZOOM, { animate: true });
+    const pos = window.GeoState?.pos;
+    if (map && pos) map.setView([pos.lat, pos.lng], DEFAULT_ZOOM, { animate: true });
   }
 
-  // ── Guest session expired ─────────────────────────────────
   function onGuestExpired() {
-    console.log('[Map] Guest session expired');
-    setStatus('session expired', 'off');
     Object.values(markers).forEach(m => map?.removeLayer(m));
     markers = {};
     if (selfMarker) { map?.removeLayer(selfMarker); selfMarker = null; }
   }
 
-  // ── Status helper ─────────────────────────────────────────
-  function setStatus(text, state) {
-    const dot  = document.getElementById('statusDot');
-    const span = document.getElementById('statusText');
-    if (dot)  dot.className    = 'bbm-status-dot' + (state ? ' ' + state : '');
-    if (span) span.textContent = text;
-  }
+  // Listen for position updates from GeoModule in app.js
+  window.addEventListener('geo:position', function (e) {
+    const { lat, lng } = e.detail;
+    if (!map) initMap(lat, lng);
+    else placeSelfMarker(lat, lng);
+  });
 
   window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired };
 
-  // Wait for Auth.init() to complete before starting —
-  // we need a valid token before we can push location or poll
-  if (window.__authReady && typeof window.__authReady.then === 'function') {
-    window.__authReady.then(function() {
-      console.log('[Map] Auth ready, starting geolocation');
-      startWatch();
-    });
-  } else {
-    // __authReady not set yet — wait for it
-    var authWait = setInterval(function() {
-      if (window.__authReady && typeof window.__authReady.then === 'function') {
-        clearInterval(authWait);
-        window.__authReady.then(function() {
-          console.log('[Map] Auth ready (waited), starting geolocation');
-          startWatch();
-        });
-      }
-    }, 50);
-  }
+  // GeoState may already have a position if geo resolved before map.js ran
+  window.__authReady.then(function () {
+    const pos = window.GeoState?.pos;
+    if (pos) initMap(pos.lat, pos.lng);
+  });
 
 })();

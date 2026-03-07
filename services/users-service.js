@@ -27,6 +27,23 @@ console.log('[users] DB connected.');
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
+// --- Service token guard ------------------------------------
+function requireServiceToken(req, res, next) {
+  const token = (req.headers['x-service-token'] || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ error: 'No service token.' });
+  try {
+    const payload = jwt.verify(token, CFG.JWT_SECRET);
+    if (payload.role !== 'service') return res.status(403).json({ error: 'Not a service token.' });
+    next();
+  } catch {
+    res.status(401).json({ error: 'Service token invalid or expired.' });
+  }
+}
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  requireServiceToken(req, res, next);
+});
+
 function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;

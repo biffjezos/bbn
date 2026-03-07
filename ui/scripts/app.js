@@ -36,14 +36,6 @@
 
   function $(id) { return document.getElementById(id); }
 
-  // ── Status badge ──────────────────────────────────────────
-  function setStatus(text, state) {
-    var dot  = $('statusDot');
-    var span = $('statusText');
-    if (dot)  dot.className    = 'bbm-status-dot' + (state ? ' ' + state : '');
-    if (span) span.textContent = text;
-  }
-
   // ── Desktop nav links ─────────────────────────────────────
   function buildDesktopNav(isReg) {
     var el = $('navLinksDesktop');
@@ -110,11 +102,8 @@
     }
   };
 
-  Auth.onGuestReady   = function () { /* map.js owns status */ };
-  Auth.onGuestExpired = function () {
-    setStatus('session expired', 'off');
-    window.MapModule && window.MapModule.onGuestExpired();
-  };
+  Auth.onGuestReady   = function () { /* status owned by GeoModule */ };
+  Auth.onGuestExpired = function () { /* handled by GeoModule */ };
 
   // ── Kick off Auth.init() now — hooks are ready ────────────
   window.__authReady = Auth.init();
@@ -240,6 +229,13 @@
       if ($('pinNickname')) $('pinNickname').textContent = nickname || 'Anonymous';
       if ($('pinAge'))      $('pinAge').textContent      = age ? age + ' yrs' : '—';
       if ($('pinSex'))      $('pinSex').textContent      = sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—';
+
+      // Fetch age from profile if not in nearby data (age isn't in JWT/location doc)
+      if (targetIsReg && userId && !age) {
+        window.Api.getProfile(userId).then(function(profile) {
+          if (profile.age && $('pinAge')) $('pinAge').textContent = profile.age + ' yrs';
+        }).catch(function() {});
+      }
       if ($('pinDist'))     $('pinDist').textContent     = distanceM != null
         ? (distanceM < 1000 ? Math.round(distanceM) + 'm away' : (distanceM / 1000).toFixed(1) + 'km away')
         : '';
@@ -319,5 +315,136 @@
     });
 
   }); // DOMContentLoaded
+
+})();
+
+// ============================================================
+// GeoModule — runs on every page
+// Handles geolocation, location push, and status bar updates.
+// Exposes window.GeoState = { pos, accuracy } for map.js.
+// Fires 'geo:position' CustomEvent whenever position updates.
+// ============================================================
+(function () {
+
+  var PUSH_INTERVAL_MS  = 30000;  // push location every 30s even if not moved
+  var pushTimer         = null;
+  var lastPushedPos     = null;
+
+  window.GeoState = { pos: null, accuracy: null };
+
+  function setStatus(text, state) {
+    var dot  = document.getElementById('statusDot');
+    var span = document.getElementById('statusText');
+    if (dot)  dot.className    = 'bbm-status-dot' + (state ? ' ' + state : '');
+    if (span) span.textContent = text;
+  }
+
+  function dispatchPosition(lat, lng) {
+    window.GeoState.pos = { lat: lat, lng: lng };
+    window.dispatchEvent(new CustomEvent('geo:position', { detail: { lat: lat, lng: lng } }));
+  }
+
+  async function pushLocation(lat, lng, accuracy) {
+    if (!window.Auth?.getToken()) return;
+    try {
+      await window.Api.putLocation(lat, lng, accuracy || 'gps');
+      lastPushedPos = { lat: lat, lng: lng };
+      console.log('[Geo] Location pushed:', lat, lng, accuracy || 'gps');
+    } catch (e) {
+      console.warn('[Geo] Location push failed:', e.message);
+    }
+  }
+
+  function startPushTimer(lat, lng, accuracy) {
+    if (pushTimer) clearInterval(pushTimer);
+    pushTimer = setInterval(function () {
+      var pos = window.GeoState.pos;
+      if (pos) pushLocation(pos.lat, pos.lng, window.GeoState.accuracy);
+    }, PUSH_INTERVAL_MS);
+  }
+
+  function onPosition(pos, accurate) {
+    var lat = pos.coords.latitude;
+    var lng = pos.coords.longitude;
+    var accuracy = accurate ? 'gps' : 'gps';  // still gps, just lower accuracy
+    window.GeoState.accuracy = accuracy;
+    dispatchPosition(lat, lng);
+    setStatus(accurate ? 'live' : 'approximate location', 'live');
+    pushLocation(lat, lng, accuracy);
+    startPushTimer();
+  }
+
+  async function tryIpFallback() {
+    setStatus('locating…', 'locating');
+    try {
+      var r    = await fetch('https://ipapi.co/json/');
+      var data = await r.json();
+      if (data.latitude && data.longitude) {
+        console.log('[Geo] IP location:', data.city, data.country_name);
+        window.GeoState.accuracy = 'ip';
+        dispatchPosition(data.latitude, data.longitude);
+        setStatus('approximate location', 'live');
+        pushLocation(data.latitude, data.longitude, 'ip');
+        startPushTimer();
+      } else {
+        throw new Error('No coordinates in IP response');
+      }
+    } catch (e) {
+      console.warn('[Geo] IP fallback failed:', e.message);
+      setStatus('location unavailable', 'off');
+    }
+  }
+
+  function startWatch() {
+    if (!('geolocation' in navigator)) {
+      console.warn('[Geo] Geolocation not available');
+      tryIpFallback();
+      return;
+    }
+    setStatus('locating…', 'locating');
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var acc = pos.coords.accuracy;
+        console.log('[Geo] Low-accuracy fix:', Math.round(acc) + 'm');
+        onPosition(pos, acc < 5000);
+        navigator.geolocation.watchPosition(
+          function (pos) { onPosition(pos, true); },
+          function () { /* GPS not available — low accuracy is enough */ },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+        );
+      },
+      function () {
+        navigator.geolocation.getCurrentPosition(
+          function (pos) { onPosition(pos, true); },
+          function () { tryIpFallback(); },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 }
+    );
+  }
+
+  // Start after auth is ready — need a token to push location
+  window.__authReady.then(function () {
+    console.log('[Geo] Auth ready, starting geolocation');
+    startWatch();
+  });
+
+  // Re-push on login (token may have changed, sex/nickname updated)
+  var _origOnLogin = Auth.onLogin;
+  Auth.onLogin = function (data) {
+    if (_origOnLogin) _origOnLogin(data);
+    var pos = window.GeoState.pos;
+    if (pos) pushLocation(pos.lat, pos.lng, window.GeoState.accuracy);
+  };
+
+  // Stop pushing on guest expired
+  var _origOnGuestExpired = Auth.onGuestExpired;
+  Auth.onGuestExpired = function () {
+    if (_origOnGuestExpired) _origOnGuestExpired();
+    if (pushTimer) { clearInterval(pushTimer); pushTimer = null; }
+    setStatus('session expired', 'off');
+    window.MapModule && window.MapModule.onGuestExpired();
+  };
 
 })();

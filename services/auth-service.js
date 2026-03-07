@@ -64,23 +64,28 @@ async function cleanupGuest(guestId) {
 const app = express();
 app.use(express.json({ limit: '16kb' }));
 
-// Auth middleware — skipped for the three public endpoints
+// --- Service token guard ------------------------------------
+// Rejects requests that carry neither a valid user token
+// nor a valid X-Service-Token from an internal service.
+function requireServiceToken(req, res, next) {
+  const token = (req.headers['x-service-token'] || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ error: 'No service token.' });
+  try {
+    const payload = jwt.verify(token, CFG.JWT_SECRET);
+    if (payload.role !== 'service') return res.status(403).json({ error: 'Not a service token.' });
+    next();
+  } catch {
+    res.status(401).json({ error: 'Service token invalid or expired.' });
+  }
+}
+
+// Apply to all routes except public auth endpoints and health
 app.use((req, res, next) => {
+  if (req.path === '/health') return next();
   if (req.path === '/auth/guest'    && req.method === 'POST') return next();
   if (req.path === '/auth/login'    && req.method === 'POST') return next();
   if (req.path === '/auth/register' && req.method === 'POST') return next();
-  if (req.path === '/health') return next();
-
-  const header = req.headers['authorization'] || '';
-  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'No token provided.' });
-
-  try {
-    req.auth = jwt.verify(token, CFG.JWT_SECRET);
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
-  }
+  requireServiceToken(req, res, next);
 });
 
 app.get('/health', (_req, res) => res.json({ ok: true }));

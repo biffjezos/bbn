@@ -14,7 +14,7 @@ const CFG = {
   MONGO_URI:       process.env.MONGO_URI       || '',
   DB_NAME:         process.env.DB_NAME         || 'boomboom',
   JWT_SECRET:      process.env.JWT_SECRET      || 'change-me-in-production',
-  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://localhost:8080',
+  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://loc',
 
   MESSAGE_MAX_CHARS:   144,
   MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 hours
@@ -38,6 +38,22 @@ await db.collection('messages').createIndex(
 // --- Express ------------------------------------------------
 const app = express();
 app.use(express.json({ limit: '16kb' }));
+// --- Service token guard ------------------------------------
+function requireServiceToken(req, res, next) {
+  const token = (req.headers['x-service-token'] || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ error: 'No service token.' });
+  try {
+    const payload = jwt.verify(token, CFG.JWT_SECRET);
+    if (payload.role !== 'service') return res.status(403).json({ error: 'Not a service token.' });
+    next();
+  } catch {
+    res.status(401).json({ error: 'Service token invalid or expired.' });
+  }
+}
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();
+  requireServiceToken(req, res, next);
+});
 
 function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
@@ -48,7 +64,6 @@ function verifyToken(req, res, next) {
     if (payload.role !== 'user')
       return res.status(403).json({ error: 'Registered account required.' });
     req.auth  = payload;
-    req.token = token;
     next();
   } catch (e) {
     res.status(401).json({ error: 'Token invalid or expired.' });
@@ -58,10 +73,19 @@ function verifyToken(req, res, next) {
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // --- Location helper ----------------------------------------
-async function getLocation(userId, bearerToken) {
+// --- Service token ------------------------------------------
+function serviceToken() {
+  return jwt.sign(
+    { sub: 'messages', role: 'service' },
+    CFG.JWT_SECRET,
+    { expiresIn: '60s' }
+  );
+}
+
+async function getLocation(userId) {
   try {
     const response = await fetch(`${CFG.LOC_SERVICE_URL}/location/user/${userId}`, {
-      headers: { Authorization: `Bearer ${bearerToken}` },
+      headers: { 'X-Service-Token': serviceToken() },
     });
     if (!response.ok) return null;
     return response.json();
@@ -161,23 +185,7 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     );
     if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
 
-    // Proximity enforcement — both parties must be online and within range
-    const [fromLoc, toLoc] = await Promise.all([
-      getLocation(fromId, req.token),
-      getLocation(toId,   req.token),
-    ]);
-
-    if (!fromLoc || !toLoc)
-      return res.status(403).json({
-        error: 'Both users must have an active location to message.',
-      });
-
-    const dist = haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon);
-    if (dist > CFG.MESSAGE_PROXIMITY_M)
-      return res.status(403).json({
-        error:     `Both users must be within ${CFG.MESSAGE_PROXIMITY_M}m to message.`,
-        distanceM: Math.round(dist),
-      });
+    // Proximity enforcement disabled — all users can message regardless of distance
 
     const now       = new Date();
     const expiresAt = new Date(now.getTime() + CFG.MESSAGE_TTL_MS);

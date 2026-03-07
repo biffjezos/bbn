@@ -16,11 +16,13 @@ const CFG = {
   MSG_SERVICE_URL:       process.env.MSG_SERVICE_URL       || 'http://msg',
   FAV_SERVICE_URL:       process.env.FAV_SERVICE_URL       || 'http://fav',
   MIGRATION_SERVICE_URL: process.env.MIGRATION_SERVICE_URL || 'http://migrations',
+  JWT_SECRET:            process.env.JWT_SECRET            || 'change-me-in-production',
 };
 // ============================================================
 
 import express from 'express';
 import cors    from 'cors';
+import jwt     from 'jsonwebtoken';
 
 const app = express();
 
@@ -35,15 +37,30 @@ app.use(express.json({ limit: '16kb' }));
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // ============================================================
+// SERVICE TOKEN — short-lived JWT identifying the gateway
+// ============================================================
+function serviceToken() {
+  return jwt.sign(
+    { sub: 'gateway', role: 'service' },
+    CFG.JWT_SECRET,
+    { expiresIn: '60s' }
+  );
+}
+
+// ============================================================
 // PROXY HELPER
+// Passes the client's user token through as-is.
+// Adds a service token in X-Service-Token so internal services
+// can verify the request is coming from the gateway.
 // ============================================================
 async function proxy(req, res, targetUrl) {
   try {
     const response = await fetch(targetUrl, {
       method:  req.method,
       headers: {
-        'Content-Type':  'application/json',
-        'Authorization': req.headers['authorization'] || '',
+        'Content-Type':    'application/json',
+        'Authorization':   req.headers['authorization'] || '',
+        'X-Service-Token': serviceToken(),
       },
       body: ['GET', 'DELETE'].includes(req.method) ? undefined : JSON.stringify(req.body),
     });
@@ -94,7 +111,10 @@ app.use((err, _req, res, _next) => res.status(500).json({ error: 'Internal serve
 // ============================================================
 try {
   console.log('[gateway] Calling migration service…');
-  const result = await fetch(`${CFG.MIGRATION_SERVICE_URL}/migrate/run`, { method: 'POST' });
+  const result = await fetch(`${CFG.MIGRATION_SERVICE_URL}/migrate/run`, {
+    method: 'POST',
+    headers: { 'X-Service-Token': serviceToken() },
+  });
   const data   = await result.json();
   if (data.ok) {
     console.log(`[gateway] Migrations done. Applied: ${data.applied}`);
