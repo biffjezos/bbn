@@ -483,7 +483,7 @@
   // ── sessionStorage key bridge ─────────────────────────────
 
   function inMessages() {
-    return location.pathname.startsWith(BASE + '/messages');
+    return location.pathname.startsWith((window.BOOMBOOM_BASE || '') + '/messages');
   }
 
   function clearSessionKey() {
