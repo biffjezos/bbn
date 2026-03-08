@@ -3,6 +3,7 @@
 // Public gateway. The only service exposed to the client.
 // Forwards requests to internal services with Bearer token.
 // Calls migration-service on boot before opening the gateway.
+// WebSocket endpoints for real-time location and messaging.
 // ============================================================
 
 // ============================================================
@@ -20,6 +21,8 @@ const CFG = {
 };
 // ============================================================
 
+import { createServer }    from 'http';
+import { WebSocketServer } from 'ws';
 import express from 'express';
 import cors    from 'cors';
 import jwt     from 'jsonwebtoken';
@@ -92,12 +95,12 @@ app.get   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CF
 app.put   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me/keys`));
 app.get   ('/api/users/:userId/profile',     (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.userId}/profile`));
 
-// --- Location -----------------------------------------------
+// --- Location (HTTP fallback — WS is preferred) -------------
 app.put   ('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));
 app.delete('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));
 app.get   ('/api/location/nearby', (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location/nearby?lat=${req.query.lat}&lon=${req.query.lon}`));
 
-// --- Messages -----------------------------------------------
+// --- Messages (HTTP fallback — WS is preferred) -------------
 app.get   ('/api/messages',           (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages`));
 app.get   ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
 app.post  ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
@@ -111,6 +114,177 @@ app.delete('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_S
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
 app.use((err, _req, res, _next) => res.status(500).json({ error: 'Internal server error.' }));
+
+// ============================================================
+// WEBSOCKET — shared helpers
+// ============================================================
+
+function verifyToken(token) {
+  try { return jwt.verify(token, CFG.JWT_SECRET); }
+  catch { return null; }
+}
+
+function wsSend(ws, obj) {
+  if (ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+function svcHeaders(token) {
+  return { 'X-Service-Token': serviceToken(), Authorization: `Bearer ${token}` };
+}
+
+// ============================================================
+// WEBSOCKET — Location
+// Any authenticated role (guest or registered user) may connect.
+// Client sends:  { type: 'position', lat, lon, accuracy }
+// Server pushes: { type: 'nearby',   users: [...] }  every 5 s
+// On disconnect: gateway deletes the client's location record.
+// ============================================================
+
+const wssLoc = new WebSocketServer({ noServer: true });
+
+wssLoc.on('connection', (ws, userId, token) => {
+  console.log('[WS:loc] +', userId);
+  let lastPos = null;
+
+  const nearbyTimer = setInterval(async () => {
+    if (!lastPos) return;
+    try {
+      const res  = await fetch(
+        `${CFG.LOC_SERVICE_URL}/location/nearby?lat=${lastPos.lat}&lon=${lastPos.lon}`,
+        { headers: svcHeaders(token) }
+      );
+      const data = await res.json();
+      wsSend(ws, { type: 'nearby', users: data.users || [] });
+    } catch { /* silent — client retains last-known state */ }
+  }, 5000);
+
+  ws.on('message', async raw => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    if (msg.type === 'position' && msg.lat != null && msg.lon != null) {
+      lastPos = { lat: msg.lat, lon: msg.lon };
+      try {
+        await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
+          body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: msg.accuracy || 'gps' }),
+        });
+      } catch { /* silent */ }
+    }
+  });
+
+  ws.on('close', async () => {
+    clearInterval(nearbyTimer);
+    console.log('[WS:loc] -', userId);
+    try {
+      await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+        method: 'DELETE', headers: svcHeaders(token),
+      });
+    } catch { /* silent */ }
+  });
+});
+
+// ============================================================
+// WEBSOCKET — Messages
+// Registered users only.
+// Client sends:  { type: 'view', userId }   — subscribe to thread
+//                { type: 'send', toUserId, text } — send a message
+// Server pushes: { type: 'conversations', messages: [...] } every 3 s
+//                { type: 'thread', userId, messages: [...] } every 2 s
+//                  (only while a thread is being viewed)
+// ============================================================
+
+const wssMsg = new WebSocketServer({ noServer: true });
+
+wssMsg.on('connection', (ws, userId, token) => {
+  console.log('[WS:msg] +', userId);
+  let viewingUserId = null;
+  let threadTimer   = null;
+
+  async function pushList() {
+    try {
+      const res  = await fetch(`${CFG.MSG_SERVICE_URL}/messages`, { headers: svcHeaders(token) });
+      const data = await res.json();
+      wsSend(ws, { type: 'conversations', messages: data.messages || [] });
+    } catch { /* silent */ }
+  }
+
+  async function pushThread() {
+    if (!viewingUserId) return;
+    try {
+      const res  = await fetch(
+        `${CFG.MSG_SERVICE_URL}/messages/${encodeURIComponent(viewingUserId)}`,
+        { headers: svcHeaders(token) }
+      );
+      const data = await res.json();
+      wsSend(ws, { type: 'thread', userId: viewingUserId, messages: data.messages || [] });
+    } catch { /* silent */ }
+  }
+
+  const listTimer = setInterval(pushList, 3000);
+  pushList();  // immediate first push on connect
+
+  ws.on('message', async raw => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    if (msg.type === 'view') {
+      viewingUserId = msg.userId || null;
+      if (threadTimer) { clearInterval(threadTimer); threadTimer = null; }
+      if (viewingUserId) {
+        await pushThread();  // immediate push for the opened thread
+        threadTimer = setInterval(pushThread, 2000);
+      }
+    }
+
+    if (msg.type === 'send' && msg.toUserId && msg.text) {
+      try {
+        await fetch(`${CFG.MSG_SERVICE_URL}/messages/${encodeURIComponent(msg.toUserId)}`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
+          body:    JSON.stringify({ text: msg.text }),
+        });
+        // Push updated thread immediately so sender sees the message right away
+        if (viewingUserId === msg.toUserId) await pushThread();
+      } catch { /* silent */ }
+    }
+  });
+
+  ws.on('close', () => {
+    clearInterval(listTimer);
+    if (threadTimer) clearInterval(threadTimer);
+    console.log('[WS:msg] -', userId);
+  });
+});
+
+// ============================================================
+// HTTP UPGRADE ROUTING
+// Token must be provided as a query parameter because the browser
+// WebSocket API does not support custom request headers.
+// ============================================================
+
+const httpServer = createServer(app);
+
+httpServer.on('upgrade', (req, socket, head) => {
+  const url     = new URL(req.url, `http://${req.headers.host}`);
+  const token   = url.searchParams.get('token');
+  if (!token) { socket.destroy(); return; }
+
+  const payload = verifyToken(token);
+  if (!payload) { socket.destroy(); return; }
+
+  const userId = payload.sub;
+
+  if (url.pathname === '/ws/location') {
+    wssLoc.handleUpgrade(req, socket, head, ws => wssLoc.emit('connection', ws, userId, token));
+  } else if (url.pathname === '/ws/messages') {
+    if (payload.role !== 'user') { socket.destroy(); return; }
+    wssMsg.handleUpgrade(req, socket, head, ws => wssMsg.emit('connection', ws, userId, token));
+  } else {
+    socket.destroy();
+  }
+});
 
 // ============================================================
 // BOOT — run migrations first, then open the gateway
@@ -132,4 +306,4 @@ try {
   console.warn('[gateway] Could not reach migration service:', e.message);
 }
 
-app.listen(CFG.PORT, () => console.log(`[gateway] Running on :${CFG.PORT}`));
+httpServer.listen(CFG.PORT, () => console.log(`[gateway] Running on :${CFG.PORT}`));

@@ -315,13 +315,86 @@
 // Handles geolocation, location push, and status bar updates.
 // Exposes window.GeoState = { pos, accuracy } for map.js.
 // Fires 'geo:position' CustomEvent whenever position updates.
+// Fires 'geo:nearby'   CustomEvent with { users } from WS push.
 // ============================================================
 (function () {
 
-  var PUSH_INTERVAL_MS  = 30000;
-  var pushTimer         = null;
-
   window.GeoState = { pos: null, accuracy: null };
+
+  // ── Location WebSocket ────────────────────────────────────
+  // Replaces the HTTP PUT polling interval. Falls back to HTTP
+  // if the WS is unavailable (e.g. gateway cold-start).
+
+  var _locWs      = null;
+  var _locWsRetry = 1000;
+  var _locWsTimer = null;
+
+  function locWsUrl() {
+    var api   = window.BOOMBOOM_API_URL || '';
+    var base  = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
+    var token = window.Auth?.getToken?.() || '';
+    return base + '/ws/location?token=' + encodeURIComponent(token);
+  }
+
+  function sendLocWS(lat, lon, accuracy) {
+    if (_locWs && _locWs.readyState === WebSocket.OPEN) {
+      _locWs.send(JSON.stringify({ type: 'position', lat: lat, lon: lon, accuracy: accuracy || 'gps' }));
+      return true;
+    }
+    return false;
+  }
+
+  function connectLocWS() {
+    var token = window.Auth?.getToken?.();
+    if (!token) return;
+    if (_locWs && (_locWs.readyState === WebSocket.OPEN || _locWs.readyState === WebSocket.CONNECTING)) return;
+
+    _locWs = new WebSocket(locWsUrl());
+
+    _locWs.onopen = function () {
+      _locWsRetry = 1000;
+      console.log('[Geo] WS connected');
+      var pos = window.GeoState.pos;
+      if (pos) sendLocWS(pos.lat, pos.lng, window.GeoState.accuracy);
+    };
+
+    _locWs.onmessage = function (e) {
+      try {
+        var msg = JSON.parse(e.data);
+        if (msg.type === 'nearby') {
+          window.dispatchEvent(new CustomEvent('geo:nearby', { detail: { users: msg.users || [] } }));
+        }
+      } catch { /* silent */ }
+    };
+
+    _locWs.onclose = function () {
+      _locWs = null;
+      if (!window.Auth?.getToken?.()) return;
+      if (_locWsTimer) clearTimeout(_locWsTimer);
+      _locWsTimer = setTimeout(connectLocWS, _locWsRetry);
+      _locWsRetry = Math.min(_locWsRetry * 2, 30000);
+      console.log('[Geo] WS closed, retrying in', _locWsRetry + 'ms');
+    };
+  }
+
+  function closeLocWS() {
+    if (_locWsTimer) { clearTimeout(_locWsTimer); _locWsTimer = null; }
+    if (_locWs) { _locWs.onclose = null; _locWs.close(); _locWs = null; }
+  }
+
+  // ── Location push — WS first, HTTP fallback ───────────────
+
+  async function pushLocation(lat, lng, accuracy) {
+    if (!window.Auth?.getToken()) return;
+    if (sendLocWS(lat, lng, accuracy)) return;
+    try {
+      await window.Api.putLocation(lat, lng, accuracy || 'gps');
+    } catch (e) {
+      console.warn('[Geo] HTTP location push failed:', e.message);
+    }
+  }
+
+  // ── Status bar ────────────────────────────────────────────
 
   function setStatus(text, state) {
     var dot  = document.getElementById('statusDot');
@@ -335,33 +408,16 @@
     window.dispatchEvent(new CustomEvent('geo:position', { detail: { lat: lat, lng: lng } }));
   }
 
-  async function pushLocation(lat, lng, accuracy) {
-    if (!window.Auth?.getToken()) return;
-    try {
-      await window.Api.putLocation(lat, lng, accuracy || 'gps');
-      console.log('[Geo] Location pushed:', lat, lng, accuracy || 'gps');
-    } catch (e) {
-      console.warn('[Geo] Location push failed:', e.message);
-    }
-  }
-
-  function startPushTimer() {
-    if (pushTimer) clearInterval(pushTimer);
-    pushTimer = setInterval(function () {
-      var pos = window.GeoState.pos;
-      if (pos) pushLocation(pos.lat, pos.lng, window.GeoState.accuracy);
-    }, PUSH_INTERVAL_MS);
-  }
+  // ── Geolocation ───────────────────────────────────────────
 
   function onPosition(pos, accurate) {
-    var lat = pos.coords.latitude;
-    var lng = pos.coords.longitude;
+    var lat      = pos.coords.latitude;
+    var lng      = pos.coords.longitude;
     var accuracy = 'gps';
     window.GeoState.accuracy = accuracy;
     dispatchPosition(lat, lng);
     setStatus(accurate ? 'live' : 'approximate location', 'live');
     pushLocation(lat, lng, accuracy);
-    startPushTimer();
   }
 
   async function tryIpFallback() {
@@ -387,7 +443,6 @@
           dispatchPosition(lat, lon);
           setStatus('approximate location', 'live');
           pushLocation(lat, lon, 'ip');
-          startPushTimer();
           return;
         }
       } catch (e) {
@@ -431,14 +486,22 @@
     );
   }
 
+  // ── Boot ──────────────────────────────────────────────────
+
   window.__authReady.then(function () {
     console.log('[Geo] Auth ready, starting geolocation');
+    connectLocWS();
     startWatch();
   });
+
+  // ── Auth hooks ────────────────────────────────────────────
 
   var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
+    // Reconnect WS with fresh user token (guest token no longer valid)
+    closeLocWS();
+    connectLocWS();
     var pos = window.GeoState.pos;
     if (pos) {
       window.Api.deleteLocation().catch(function() {});
@@ -448,6 +511,7 @@
 
   var _origOnLogout = Auth.onLogout;
   Auth.onLogout = function () {
+    closeLocWS();
     window.Api.deleteLocation().catch(function() {});
     if (_origOnLogout) _origOnLogout();
   };
@@ -455,7 +519,7 @@
   var _origOnGuestExpired = Auth.onGuestExpired;
   Auth.onGuestExpired = function () {
     if (_origOnGuestExpired) _origOnGuestExpired();
-    if (pushTimer) { clearInterval(pushTimer); pushTimer = null; }
+    closeLocWS();
     setStatus('session expired', 'off');
     window.MapModule && window.MapModule.onGuestExpired();
   };

@@ -2,6 +2,8 @@
 // bOOmbOOm.NOW! — map.js
 // Map rendering only. Geolocation lives in app.js (GeoModule).
 // Only runs when #map exists (index.html).
+// Nearby users arrive via 'geo:nearby' CustomEvent pushed from
+// the location WebSocket — no HTTP polling here.
 // ============================================================
 
 (function () {
@@ -10,11 +12,9 @@
   let map        = null;
   let selfMarker = null;
   let markers    = {};
-  let pollTimer  = null;
 
   const TILE_URL     = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
   const TILE_ATTR    = '&copy; OpenStreetMap contributors &copy; CARTO';
-  const POLL_MS      = 5000;
   const DEFAULT_ZOOM = 17;
 
   function markerEmoji(sex) { return sex==='f'?'👌':sex==='m'?'👆':'👊'; }
@@ -38,7 +38,6 @@
     map = L.map('map', { center: [lat, lng], zoom: DEFAULT_ZOOM, zoomControl: true });
     L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
     placeSelfMarker(lat, lng);
-    startPolling();
   }
 
   function placeSelfMarker(lat, lng) {
@@ -73,28 +72,9 @@
     });
   }
 
-  function startPolling() {
-    if (pollTimer) return;
-    console.log('[Map] Starting nearby poll every', POLL_MS + 'ms');
-    poll();
-    pollTimer = setInterval(poll, POLL_MS);
-  }
-
-  async function poll() {
-    const pos = window.GeoState?.pos;
-    if (!pos || !window.Auth?.getToken()) return;
-    try {
-      const result = await window.Api.getNearby(pos.lat, pos.lng);
-      renderMarkers(result.users || []);
-    } catch (e) {
-      console.warn('[Map] Nearby poll failed:', e.message);
-    }
-  }
-
   function refreshMarkers() {
     const pos = window.GeoState?.pos;
     if (map && pos) placeSelfMarker(pos.lat, pos.lng);
-    poll();
   }
 
   function centreOnSelf() {
@@ -108,7 +88,12 @@
     if (selfMarker) { map?.removeLayer(selfMarker); selfMarker = null; }
   }
 
-  // Listen for position updates from GeoModule in app.js
+  // Nearby users pushed from the location WS via GeoModule
+  window.addEventListener('geo:nearby', function (e) {
+    if (map) renderMarkers(e.detail.users || []);
+  });
+
+  // Self-marker updates from GeoModule
   window.addEventListener('geo:position', function (e) {
     const { lat, lng } = e.detail;
     if (!map) initMap(lat, lng);
