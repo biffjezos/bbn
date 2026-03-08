@@ -92,11 +92,6 @@ async function renderConversationList() {
     return;
   }
 
-  if (window.requireUnlocked && !window.requireUnlocked()) {
-    window.addEventListener('bbm:unlocked', function () { renderConversationList(); }, { once: true });
-    return;
-  }
-
   wrap.innerHTML = loadingHtml('Loading conversations…');
 
   try {
@@ -173,11 +168,6 @@ async function renderThread() {
     return;
   }
 
-  if (window.requireUnlocked && !window.requireUnlocked()) {
-    window.addEventListener('bbm:unlocked', function () { renderThread(); }, { once: true });
-    return;
-  }
-
   const msgsEl    = document.getElementById('threadMsgs');
   const inputEl   = document.getElementById('msgInput');
   const sendBtn   = document.getElementById('sendBtn');
@@ -246,24 +236,20 @@ async function renderThread() {
 
   await load();
   pollTimer = setInterval(load, 5000);
-
-  // Re-render messages after inactivity lock/unlock without page reload
-  function onReUnlock() {
-    load();
-    window.addEventListener('bbm:unlocked', onReUnlock, { once: true });
-  }
-  window.addEventListener('bbm:unlocked', onReUnlock, { once: true });
-
   window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
 }
 
 // Wait for auth AND lock restore to complete before rendering.
-// This prevents requireUnlocked() from firing before sessionStorage
-// restore has finished, which was causing the double password prompt.
 Promise.all([
-  window.__authReady  || Promise.resolve(),
-  window.__lockReady  || Promise.resolve(),
+  window.__authReady || Promise.resolve(),
+  window.__lockReady || Promise.resolve(),
 ]).then(function () {
+  if (document.getElementById('convListWrap')) renderConversationList();
+  if (document.getElementById('threadMsgs'))   renderThread();
+});
+
+// Re-render after unlock (inactivity lock then modal dismiss)
+window.addEventListener('bbm:unlocked', function () {
   if (document.getElementById('convListWrap')) renderConversationList();
   if (document.getElementById('threadMsgs'))   renderThread();
 });
