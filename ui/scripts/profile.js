@@ -169,7 +169,7 @@ async function renderPublicProfile() {
   const userId      = params.get('uid');
   const displayName = params.get('name') || userId;
 
-  if (!userId) { window.location.href = '/'; return; }
+  if (!userId) { window.location.href = (window.BOOMBOOM_BASE || '') + '/'; return; }
 
   page.innerHTML = loadingHtml('Loading profile…');
 

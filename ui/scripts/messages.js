@@ -167,7 +167,8 @@ async function renderThread() {
   if (nameEl) nameEl.textContent = displayName;
 
   if (!isRegistered() || !userId) {
-    window.location.href = isRegistered() ? '/messages/' : '/';
+    var _base = window.BOOMBOOM_BASE || '';
+    window.location.href = isRegistered() ? _base + '/messages/' : _base + '/';
     return;
   }
 

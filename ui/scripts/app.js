@@ -37,6 +37,7 @@
   function $(id) { return document.getElementById(id); }
 
   // ── Desktop nav links ─────────────────────────────────────
+  var BASE = (window.BOOMBOOM_BASE || '');
   function buildDesktopNav(isReg) {
     var el = $('navLinksDesktop');
     if (!el) return;
@@ -47,9 +48,9 @@
         '<button class="btn btn-bbm-primary btn-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Sign Up</button>';
     } else {
       el.innerHTML =
-        '<a href="/messages/"   class="nav-link ' + (p.startsWith('/messages/')   ? 'active' : '') + '"><i class="bi bi-chat-dots me-1"></i>Messages</a>' +
-        '<a href="/favourites/" class="nav-link ' + (p.startsWith('/favourites/') ? 'active' : '') + '"><i class="bi bi-star me-1"></i>Favourites</a>' +
-        '<a href="/profile/"    class="nav-link ' + (p.startsWith('/profile/')    ? 'active' : '') + '"><i class="bi bi-person-circle me-1"></i>Profile</a>';
+        '<a href="' + BASE + '/messages/"   class="nav-link ' + (p.startsWith(BASE + '/messages/')   ? 'active' : '') + '"><i class="bi bi-chat-dots me-1"></i>Messages</a>' +
+        '<a href="' + BASE + '/favourites/" class="nav-link ' + (p.startsWith(BASE + '/favourites/') ? 'active' : '') + '"><i class="bi bi-star me-1"></i>Favourites</a>' +
+        '<a href="' + BASE + '/profile/"    class="nav-link ' + (p.startsWith(BASE + '/profile/')    ? 'active' : '') + '"><i class="bi bi-person-circle me-1"></i>Profile</a>';
     }
   }
 
@@ -94,9 +95,9 @@
   Auth.onLogout = function () {
     applyAuthState(false);
     window.MapModule && window.MapModule.refreshMarkers();
-    var prot = ['/messages', '/favourites', '/profile'];
+    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile'];
     if (prot.some(function(p) { return location.pathname.startsWith(p); })) {
-      window.location.href = '/';
+      window.location.href = BASE + '/';
     }
   };
 
@@ -248,10 +249,10 @@
 
       if (viewerIsReg && targetIsReg && userId) {
         var profileLink = $('pinProfileLink');
-        if (profileLink) profileLink.href = '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+        if (profileLink) profileLink.href = BASE + '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
 
         var msgLink = $('pinMessageLink');
-        if (msgLink) msgLink.href = '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+        if (msgLink) msgLink.href = BASE + '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
 
         var favBtn   = $('pinFavBtn');
         var favIcon  = $('pinFavIcon');
@@ -482,7 +483,7 @@
   // ── sessionStorage key bridge ─────────────────────────────
 
   function inMessages() {
-    return location.pathname.startsWith('/messages');
+    return location.pathname.startsWith(BASE + '/messages');
   }
 
   function clearSessionKey() {
