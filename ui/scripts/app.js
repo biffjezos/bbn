@@ -463,63 +463,49 @@
 
 // ============================================================
 // LockModule
-//
-// Problem: Jekyll is a multi-page static site. Every navigation
-// is a full page reload, wiping JS memory including the private
-// key. Without a bridge, the user must re-enter their password
-// on every page change within /messages.
-//
-// Solution: while in /messages (overview or thread), the PKCS8
-// private key bytes are kept in sessionStorage. On each page
-// load within /messages the key is silently restored — no
-// password prompt. When the user navigates away from /messages
-// the key is cleared from sessionStorage on that page load.
-// sessionStorage dies automatically when the tab closes.
-//
-// Lock triggers (wipe key from memory AND sessionStorage):
-//   • Tab hidden > HIDE_LOCK_MS (30s)
-//   • No interaction > INACTIVITY_LOCK_MS (3 min)
-//
-// NOT a lock trigger:
-//   • Navigating between /messages and /messages/thread/
 // ============================================================
 (function () {
 
   var INACTIVITY_LOCK_MS = 3 * 60 * 1000;
   var HIDE_LOCK_MS       = 30 * 1000;
 
-  var _inactivityTimer = null;
-  var _hiddenTimer     = null;
-  var _modal           = null;
-  var _locked          = false;
+  var _inactivityTimer   = null;
+  var _hiddenTimer       = null;
+  var _modal             = null;
+  var _locked            = false;
+  var _modalShownForLock = false;
 
   var SESSION_SK  = 'bbm_sk';
   var SESSION_PK  = 'bbm_pk';
   var SESSION_TS  = 'bbm_sk_ts';
-  var SESSION_MAX = 30 * 60 * 1000; // 30 min safety expiry
+  var SESSION_MAX = 30 * 60 * 1000;
+
+  // Resolves when page-load session restore is complete.
+  // messages.js awaits this before calling requireUnlocked(),
+  // so it never races against an in-progress async restore.
+  var _lockReadyResolve;
+  window.__lockReady = new Promise(function (res) { _lockReadyResolve = res; });
 
   function inMessages() {
     return location.pathname.startsWith('/messages');
   }
 
-  // ── sessionStorage helpers ────────────────────────────────
+  // ── sessionStorage ────────────────────────────────────────
 
   function clearSession() {
     sessionStorage.removeItem(SESSION_SK);
     sessionStorage.removeItem(SESSION_PK);
     sessionStorage.removeItem(SESSION_TS);
-    console.log('[Lock] Session key cleared.');
   }
 
   async function saveSession() {
     try {
-      var crypto = window.BBMCrypto;
-      if (!crypto || !crypto.isUnlocked()) return;
-      var pkcs8  = await crypto.exportPrivateKeyPkcs8();
-      var pubB64 = await crypto.getPublicKeyB64();
-      if (!pkcs8 || !pubB64) return;
-      sessionStorage.setItem(SESSION_SK, pkcs8);
-      sessionStorage.setItem(SESSION_PK, pubB64);
+      if (!window.BBMCrypto || !window.BBMCrypto.isUnlocked()) return;
+      var skB64 = await window.BBMCrypto.exportPrivateKeyPkcs8();
+      var pkB64 = await window.BBMCrypto.getPublicKeyB64();
+      if (!skB64 || !pkB64) return;
+      sessionStorage.setItem(SESSION_SK, skB64);
+      sessionStorage.setItem(SESSION_PK, pkB64);
       sessionStorage.setItem(SESSION_TS, String(Date.now()));
       console.log('[Lock] Key saved to session.');
     } catch (e) {
@@ -564,8 +550,9 @@
     if (!window.Auth.isRegistered()) return;
     if (_locked) return;
     _locked = true;
+    _modalShownForLock = false;
     clearInactivityTimer();
-    window.BBMCrypto && window.BBMCrypto.lock();
+    if (window.BBMCrypto) window.BBMCrypto.lock();
     clearSession();
     console.log('[Lock] Session locked.');
   }
@@ -574,15 +561,16 @@
 
   function unlock(andSave) {
     _locked = false;
+    _modalShownForLock = false;
     resetInactivityTimer();
     var modal = getModal();
     if (modal) modal.hide();
-    if (andSave && inMessages()) saveSession();
+    if (andSave) saveSession();
     window.dispatchEvent(new CustomEvent('bbm:unlocked'));
     console.log('[Lock] Session unlocked.');
   }
 
-  // ── Inactivity timer ──────────────────────────────────────
+  // ── Timers ────────────────────────────────────────────────
 
   function clearInactivityTimer() {
     if (_inactivityTimer) { clearTimeout(_inactivityTimer); _inactivityTimer = null; }
@@ -596,29 +584,21 @@
 
   ['mousemove', 'keydown', 'pointerdown', 'scroll', 'touchstart'].forEach(function (evt) {
     document.addEventListener(evt, function () {
-      if (!_locked) resetInactivityTimer();
-      // Show modal on first interaction after inactivity lock while on messages page
-      else if (inMessages()) showModalOnce();
+      if (!_locked) { resetInactivityTimer(); return; }
+      if (inMessages() && !_modalShownForLock) {
+        _modalShownForLock = true;
+        var modal = getModal();
+        if (modal) modal.show();
+      }
     }, { passive: true });
   });
-
-  var _modalShownForLock = false;
-  function showModalOnce() {
-    if (_modalShownForLock) return;
-    _modalShownForLock = true;
-    var modal = getModal();
-    if (modal) modal.show();
-  }
 
   // ── Visibility ────────────────────────────────────────────
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       _hiddenTimer = setTimeout(function () {
-        if (document.hidden) {
-          console.log('[Lock] Tab hidden too long — locking.');
-          lock();
-        }
+        if (document.hidden) { console.log('[Lock] Tab hidden too long.'); lock(); }
       }, HIDE_LOCK_MS);
     } else {
       if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
@@ -626,31 +606,30 @@
     }
   });
 
-  // ── On page load: restore or clear session key ────────────
-  // Called from onNeedsUnlock (saved token, no password).
-  // If in /messages → try to restore silently.
-  // If outside /messages → wipe session key (user navigated away).
+  // ── Page load restore ─────────────────────────────────────
+  // Runs on every page load via onNeedsUnlock.
+  // Awaited by messages.js via window.__lockReady.
 
   async function onPageLoad() {
-    if (!window.Auth.isRegistered()) return;
-    if (!inMessages()) {
-      clearSession();
-      return;
-    }
-    if (window.BBMCrypto && window.BBMCrypto.isUnlocked()) {
-      // Fresh login landed on /messages — save key immediately
-      _locked = false;
-      resetInactivityTimer();
-      saveSession();
-      return;
-    }
-    var restored = await restoreSession();
-    if (restored) {
-      _locked = false;
-      resetInactivityTimer();
-    } else {
-      _locked = true;
-      // Modal shown lazily when requireUnlocked() is called
+    try {
+      if (!window.Auth.isRegistered()) return;
+      if (!inMessages()) { clearSession(); return; }
+      if (window.BBMCrypto && window.BBMCrypto.isUnlocked()) {
+        _locked = false;
+        resetInactivityTimer();
+        await saveSession();
+        return;
+      }
+      var restored = await restoreSession();
+      if (restored) {
+        _locked = false;
+        resetInactivityTimer();
+      } else {
+        _locked = true;
+      }
+    } finally {
+      // Always resolve, even on error — messages.js must not hang
+      _lockReadyResolve();
     }
   }
 
@@ -681,8 +660,7 @@
         var ok   = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
         if (!ok) throw new Error('Wrong password.');
         if (pwInput) pwInput.value = '';
-        _modalShownForLock = false;
-        unlock(true); // true = save to sessionStorage
+        unlock(true);
       } catch (e) {
         showError(e.message || 'Unlock failed.');
       } finally {
@@ -692,7 +670,6 @@
 
     if (unlockBtn) unlockBtn.addEventListener('click', tryUnlock);
     if (pwInput)   pwInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
-
     if (logoutBtn) logoutBtn.addEventListener('click', function () {
       if (pwInput) pwInput.value = '';
       clearError();
@@ -718,7 +695,7 @@
     return false;
   };
 
-  // ── Auth lifecycle ─────────────────────────────────────────
+  // ── Auth hooks ────────────────────────────────────────────
 
   var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
@@ -727,6 +704,8 @@
     _modalShownForLock = false;
     resetInactivityTimer();
     if (inMessages()) saveSession();
+    // Login counts as lock-ready too
+    _lockReadyResolve();
   };
 
   Auth.onNeedsUnlock = function () {

@@ -93,10 +93,7 @@ async function renderConversationList() {
   }
 
   if (window.requireUnlocked && !window.requireUnlocked()) {
-    window.addEventListener('bbm:unlocked', function onUnlock() {
-      window.removeEventListener('bbm:unlocked', onUnlock);
-      renderConversationList();
-    }, { once: true });
+    window.addEventListener('bbm:unlocked', function () { renderConversationList(); }, { once: true });
     return;
   }
 
@@ -177,10 +174,7 @@ async function renderThread() {
   }
 
   if (window.requireUnlocked && !window.requireUnlocked()) {
-    window.addEventListener('bbm:unlocked', function onUnlock() {
-      window.removeEventListener('bbm:unlocked', onUnlock);
-      renderThread();
-    }, { once: true });
+    window.addEventListener('bbm:unlocked', function () { renderThread(); }, { once: true });
     return;
   }
 
@@ -253,8 +247,7 @@ async function renderThread() {
   await load();
   pollTimer = setInterval(load, 5000);
 
-  // If keys lock due to inactivity while reading, re-render messages
-  // after the user unlocks via the modal — without requiring a page reload.
+  // Re-render messages after inactivity lock/unlock without page reload
   function onReUnlock() {
     load();
     window.addEventListener('bbm:unlocked', onReUnlock, { once: true });
@@ -264,8 +257,13 @@ async function renderThread() {
   window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
 }
 
-// Auto-run when loaded as extra_js
-(window.__authReady || Promise.resolve()).then(function() {
-  if (document.getElementById('convListWrap'))  renderConversationList();
-  if (document.getElementById('threadMsgs'))    renderThread();
+// Wait for auth AND lock restore to complete before rendering.
+// This prevents requireUnlocked() from firing before sessionStorage
+// restore has finished, which was causing the double password prompt.
+Promise.all([
+  window.__authReady  || Promise.resolve(),
+  window.__lockReady  || Promise.resolve(),
+]).then(function () {
+  if (document.getElementById('convListWrap')) renderConversationList();
+  if (document.getElementById('threadMsgs'))   renderThread();
 });
