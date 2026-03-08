@@ -48,7 +48,7 @@
         valid = payload.role === 'user' && (payload.exp * 1000) > Date.now();
       } catch (e) {}
     }
-    if (!valid) { window.location.replace('/'); throw new Error('Guest redirect.'); }
+    if (!valid) { window.location.replace('{{ "/" | relative_url }}'); throw new Error('Guest redirect.'); }
   })();
 </script>
 

@@ -3,8 +3,8 @@
 # ============================================================
 
 title: boom boom by hammeley.info
-baseurl: ""
-url: "https://hammeley.info"
+baseurl: "/bbn"
+url: "https://biffjezos.github.io"
 
 api_url: "https://boom.up.railway.app/api"
 exclude:
