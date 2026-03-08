@@ -79,7 +79,6 @@
   function applyAuthState(isReg) {
     buildDesktopNav(isReg);
     syncOffcanvas(isReg);
-    // map.js owns the status bar
   }
 
   // ── Auth hooks — set NOW, before Auth.init() runs ─────────
@@ -88,7 +87,6 @@
     console.log('[App] onLogin fired, sex:', Auth.getSex());
     if (window.MapModule) {
       window.MapModule.refreshMarkers();
-      // Retry after 1s in case map wasn't ready on first call
       setTimeout(function() { window.MapModule && window.MapModule.refreshMarkers(); }, 1000);
     }
   };
@@ -230,7 +228,6 @@
       if ($('pinAge'))      $('pinAge').textContent      = age ? age + ' yrs' : '—';
       if ($('pinSex'))      $('pinSex').textContent      = sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—';
 
-      // Fetch age from profile if not in nearby data (age isn't in JWT/location doc)
       if (targetIsReg && userId && !age) {
         window.Api.getProfile(userId).then(function(profile) {
           if (profile.age && $('pinAge')) $('pinAge').textContent = profile.age + ' yrs';
@@ -240,7 +237,6 @@
         ? (distanceM < 1000 ? Math.round(distanceM) + 'm away' : (distanceM / 1000).toFixed(1) + 'km away')
         : '';
 
-      // Accuracy badge
       var accWrap = $('pinAccuracyWrap');
       if (accWrap) accWrap.classList.toggle('d-none', accuracy !== 'ip');
 
@@ -251,25 +247,20 @@
       if (pinGuest)   pinGuest.classList.toggle('d-none', viewerIsReg);
 
       if (viewerIsReg && targetIsReg && userId) {
-        // Profile link
         var profileLink = $('pinProfileLink');
         if (profileLink) profileLink.href = '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
 
-        // Message link
         var msgLink = $('pinMessageLink');
         if (msgLink) msgLink.href = '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
 
-        // Favourites button
         var favBtn   = $('pinFavBtn');
         var favIcon  = $('pinFavIcon');
         var favLabel = $('pinFavLabel');
         if (favBtn) {
-          // Reset state
           favBtn.disabled = false;
           if (favIcon)  { favIcon.className  = 'bi bi-star me-2'; }
           if (favLabel) { favLabel.textContent = 'Add to Favourites'; }
 
-          // Check if already favourited
           window.Api.getFavourites().then(function(data) {
             var isFav = (data.favourites || []).some(function(f) { return f.userId === userId; });
             if (isFav) {
@@ -326,9 +317,8 @@
 // ============================================================
 (function () {
 
-  var PUSH_INTERVAL_MS  = 30000;  // push location every 30s even if not moved
+  var PUSH_INTERVAL_MS  = 30000;
   var pushTimer         = null;
-  var lastPushedPos     = null;
 
   window.GeoState = { pos: null, accuracy: null };
 
@@ -348,14 +338,13 @@
     if (!window.Auth?.getToken()) return;
     try {
       await window.Api.putLocation(lat, lng, accuracy || 'gps');
-      lastPushedPos = { lat: lat, lng: lng };
       console.log('[Geo] Location pushed:', lat, lng, accuracy || 'gps');
     } catch (e) {
       console.warn('[Geo] Location push failed:', e.message);
     }
   }
 
-  function startPushTimer(lat, lng, accuracy) {
+  function startPushTimer() {
     if (pushTimer) clearInterval(pushTimer);
     pushTimer = setInterval(function () {
       var pos = window.GeoState.pos;
@@ -366,7 +355,7 @@
   function onPosition(pos, accurate) {
     var lat = pos.coords.latitude;
     var lng = pos.coords.longitude;
-    var accuracy = accurate ? 'gps' : 'gps';  // still gps, just lower accuracy
+    var accuracy = 'gps';
     window.GeoState.accuracy = accuracy;
     dispatchPosition(lat, lng);
     setStatus(accurate ? 'live' : 'approximate location', 'live');
@@ -381,7 +370,6 @@
       { url: 'https://iplocate.io/api/lookup/',       lat: 'latitude', lon: 'longitude' },
       { url: 'https://api.ipapi.is/',                 lat: 'latitude', lon: 'longitude' },
     ];
-    // Shuffle so load is spread evenly across services
     for (var s = services.length - 1; s > 0; s--) {
       var j = Math.floor(Math.random() * (s + 1));
       var tmp = services[s]; services[s] = services[j]; services[j] = tmp;
@@ -442,35 +430,27 @@
     );
   }
 
-  // Start after auth is ready — need a token to push location
   window.__authReady.then(function () {
     console.log('[Geo] Auth ready, starting geolocation');
     startWatch();
   });
 
-  // On login: delete the guest location doc, then immediately push as the new user
   var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
     var pos = window.GeoState.pos;
     if (pos) {
-      // Delete guest doc first (auth-service already cleaned up the guest session,
-      // but the location doc is keyed by guestId which is a different token sub)
       window.Api.deleteLocation().catch(function() {});
-      // Push immediately as the now-logged-in user
       pushLocation(pos.lat, pos.lng, window.GeoState.accuracy);
     }
   };
 
-  // On logout: delete the user location doc immediately, guest session will push its own
   var _origOnLogout = Auth.onLogout;
   Auth.onLogout = function () {
-    // Delete while we still have the user token (auth.js clears it after this hook)
     window.Api.deleteLocation().catch(function() {});
     if (_origOnLogout) _origOnLogout();
   };
 
-  // Stop pushing on guest expired
   var _origOnGuestExpired = Auth.onGuestExpired;
   Auth.onGuestExpired = function () {
     if (_origOnGuestExpired) _origOnGuestExpired();
@@ -483,17 +463,39 @@
 
 // ============================================================
 // LockModule — inactivity lock for registered users
-// Locks crypto keys after LOCK_TIMEOUT_MS of inactivity or
-// when the tab becomes hidden. Shows modal-lock.html to
-// re-enter password and restore keys without full logout.
+//
+// Lock triggers:
+//   • Tab hidden for > HIDE_LOCK_MS (30s) — switching apps/browser
+//   • No user interaction for > INACTIVITY_LOCK_MS (3 min)
+//
+// NOT a lock trigger:
+//   • Navigation between pages within the same site
+//   • Page load / reload (keys rehydrated lazily on demand)
+//
+// Keys are wiped from memory on lock. Re-entering password
+// re-derives them from the encrypted server blob without
+// a full re-login (US7).
+//
+// requireUnlocked() is the single gate used by pages that
+// need crypto. It shows the modal only if keys are actually
+// locked (US6 — shown once per lock event, not per page).
 // ============================================================
 (function () {
 
-  var LOCK_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes
-  var _lockTimer      = null;
-  var _modal          = null;
-  var _locked         = false;
+  // ── Timers ────────────────────────────────────────────────
+  var INACTIVITY_LOCK_MS = 3 * 60 * 1000;   // US5: 3 minutes of no interaction
+  var HIDE_LOCK_MS       = 30 * 1000;        // US4: 30 seconds hidden / backgrounded
 
+  var _inactivityTimer = null;
+  var _hiddenTimer     = null;
+  var _modal           = null;
+
+  // _locked tracks whether keys have been explicitly locked.
+  // It starts false — a fresh login or a page navigation within
+  // the site does NOT set this to true.
+  var _locked = false;
+
+  // ── Modal ─────────────────────────────────────────────────
   function getModal() {
     if (!_modal) {
       var el = document.getElementById('lockModal');
@@ -502,72 +504,78 @@
     return _modal;
   }
 
+  // ── Lock ─────────────────────────────────────────────────
   function lock() {
-    if (!window.Auth.isRegistered()) return;   // guests have no keys to lock
+    if (!window.Auth.isRegistered()) return;
     if (_locked) return;
     _locked = true;
-    clearTimer();
+    clearInactivityTimer();
     window.BBMCrypto?.lock();
-    var modal = getModal();
-    if (modal) modal.show();
     console.log('[Lock] Session locked.');
+    // Modal is shown lazily by requireUnlocked() when the user
+    // actually tries to access a protected feature (US3, US6).
   }
 
+  // ── Unlock ────────────────────────────────────────────────
   function unlock() {
     _locked = false;
-    resetTimer();
+    resetInactivityTimer();
     var modal = getModal();
     if (modal) modal.hide();
     console.log('[Lock] Session unlocked.');
   }
 
-  function clearTimer() {
-    if (_lockTimer) { clearTimeout(_lockTimer); _lockTimer = null; }
+  // ── Inactivity timer ──────────────────────────────────────
+  function clearInactivityTimer() {
+    if (_inactivityTimer) { clearTimeout(_inactivityTimer); _inactivityTimer = null; }
   }
 
-  function resetTimer() {
+  function resetInactivityTimer() {
     if (!window.Auth.isRegistered()) return;
-    clearTimer();
-    _lockTimer = setTimeout(lock, LOCK_TIMEOUT_MS);
+    clearInactivityTimer();
+    _inactivityTimer = setTimeout(lock, INACTIVITY_LOCK_MS);
   }
 
-  // ── Activity events — reset timer on any interaction ──────
+  // Reset on any real user interaction (US5)
   ['mousemove', 'keydown', 'pointerdown', 'scroll', 'touchstart'].forEach(function (evt) {
     document.addEventListener(evt, function () {
-      if (!_locked) resetTimer();
+      if (!_locked) resetInactivityTimer();
     }, { passive: true });
   });
 
-  // ── Tab visibility — lock after being hidden for a while ──
-  var _hiddenTimer = null;
-  var HIDE_LOCK_MS = 3 * 60 * 1000;  // 3 minutes hidden before locking
-
+  // ── Visibility / focus — tab switch / app backgrounded ────
+  // Only lock if hidden for longer than HIDE_LOCK_MS (US4).
+  // This tolerates rapid tab switching within the same browser
+  // session but catches genuine app-switch / phone-lock events.
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
-      // Start a timer — only lock if still hidden after HIDE_LOCK_MS
+      // Start the hide timer
       _hiddenTimer = setTimeout(function () {
-        if (document.hidden) lock();
+        if (document.hidden) {
+          console.log('[Lock] Tab hidden too long — locking.');
+          lock();
+        }
       }, HIDE_LOCK_MS);
     } else {
-      // Tab came back — cancel pending hide-lock
+      // Tab came back — cancel any pending hide-lock
       if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
-      if (!_locked) resetTimer();
+      // If not locked, reset the inactivity timer
+      if (!_locked) resetInactivityTimer();
     }
   });
 
-  // ── Unlock button ─────────────────────────────────────────
+  // ── Unlock button (modal-lock.html) ──────────────────────
   document.addEventListener('DOMContentLoaded', function () {
-    var unlockBtn  = document.getElementById('lockUnlockBtn');
-    var logoutBtn  = document.getElementById('lockLogoutBtn');
-    var pwInput    = document.getElementById('lockPassword');
-    var errorEl    = document.getElementById('lockError');
+    var unlockBtn = document.getElementById('lockUnlockBtn');
+    var logoutBtn = document.getElementById('lockLogoutBtn');
+    var pwInput   = document.getElementById('lockPassword');
+    var errorEl   = document.getElementById('lockError');
 
     function showError(msg) {
       if (!errorEl) return;
       errorEl.textContent = msg;
       errorEl.classList.remove('d-none');
     }
-
     function clearError() {
       if (errorEl) errorEl.classList.add('d-none');
     }
@@ -586,20 +594,16 @@
       } catch (e) {
         showError(e.message || 'Unlock failed.');
       } finally {
-        if (unlockBtn) { unlockBtn.disabled = false; unlockBtn.textContent = 'Unlock'; }
+        if (unlockBtn) { unlockBtn.disabled = false; unlockBtn.innerHTML = '<i class="bi bi-unlock me-2"></i>Unlock'; }
       }
     }
 
     unlockBtn?.addEventListener('click', tryUnlock);
-
-    pwInput?.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') tryUnlock();
-    });
+    pwInput?.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
 
     logoutBtn?.addEventListener('click', function () {
       if (pwInput) pwInput.value = '';
       clearError();
-      // Hide modal first so it doesn't interfere with guest state
       var modal = getModal();
       if (modal) modal.hide();
       _locked = false;
@@ -607,10 +611,18 @@
     });
   });
 
-  // ── Public helper — call before any action requiring crypto ─
+  // ── requireUnlocked() — single gate for all crypto actions ─
+  // Returns true immediately if keys are available.
+  // If locked, shows the modal and returns false.
+  // The caller should bail out and re-attempt after the modal
+  // fires its 'hidden' event (pages already do this). (US6)
   window.requireUnlocked = function () {
-    if (window.BBMCrypto?.isUnlocked()) return true;
-    // Not unlocked — show lock modal
+    if (window.BBMCrypto?.isUnlocked()) {
+      // Keys are live — ensure _locked is consistent
+      _locked = false;
+      return true;
+    }
+    // Keys are gone — need password
     _locked = true;
     var modal = getModal();
     if (modal) {
@@ -621,30 +633,37 @@
     return false;
   };
 
-  // ── Start timer once user logs in, stop on logout ─────────
-  var _origOnLogin  = Auth.onLogin;
+  // ── Auth lifecycle hooks ──────────────────────────────────
+
+  // onLogin: fresh login — keys are already unlocked by Auth.login().
+  // Start the inactivity timer. Do NOT show the lock modal. (US1, US2)
+  var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
     _locked = false;
-    resetTimer();
+    resetInactivityTimer();
   };
 
-  // onNeedsUnlock — called on page load with saved session (no password available).
-  // Do NOT show modal. Mark as locked silently.
-  // requireUnlocked() will show the modal lazily when the user needs crypto.
+  // onNeedsUnlock: page loaded with a saved token (no password available).
+  // Keys cannot be recovered without the password. Mark as locked silently.
+  // The modal will appear lazily when requireUnlocked() is called. (US3)
   Auth.onNeedsUnlock = function () {
     if (window.BBMCrypto?.isUnlocked()) {
+      // Shouldn't normally happen on page load, but handle gracefully
       _locked = false;
+      resetInactivityTimer();
     } else {
-      _locked = true;  // keys unavailable — will prompt when needed
+      _locked = true;
+      // Do NOT show modal here — wait until the user visits a crypto feature
     }
-    resetTimer();
   };
 
+  // onLogout: stop all timers, clear state. (US8)
   var _origOnLogout = Auth.onLogout;
   Auth.onLogout = function () {
     if (_origOnLogout) _origOnLogout();
-    clearTimer();
+    clearInactivityTimer();
+    if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
     _locked = false;
   };
 

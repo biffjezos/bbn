@@ -25,7 +25,6 @@ function getMyId() {
   try { return JSON.parse(atob(window.Auth.getToken().split('.')[1])).sub; } catch { return null; }
 }
 
-// Check registered by JWT role — Auth.isRegistered() may not exist
 function isRegistered() {
   try {
     if (typeof window.Auth?.isRegistered === 'function') return window.Auth.isRegistered();
@@ -38,7 +37,6 @@ function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 
 function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
 
 // ── Crypto helpers ────────────────────────────────────────
-// Cache of public keys by userId to avoid re-fetching
 const _pubKeyCache = {};
 
 async function getPublicKey(userId) {
@@ -52,9 +50,6 @@ async function getPublicKey(userId) {
 async function encryptFor(text, recipientId) {
   if (!window.BBMCrypto?.isUnlocked()) throw new Error('Crypto not ready.');
   const recipientKey = await getPublicKey(recipientId);
-  // One ciphertext encrypted with recipient's public key.
-  // Sender can decrypt using: senderPrivateKey + recipientPublicKey = same shared secret
-  // as recipientPrivateKey + senderPublicKey. That's ECDH.
   const cipher = await window.BBMCrypto.encryptMessage(text, recipientKey);
   return { cipher, recipientId };
 }
@@ -62,7 +57,6 @@ async function encryptFor(text, recipientId) {
 async function decryptFrom(payload, senderId, recipientId) {
   if (!window.BBMCrypto?.isUnlocked()) return '[encrypted]';
   const myId = getMyId();
-  // Both sender and recipient derive the same ECDH shared secret using the other's public key
   const otherUserId = myId === senderId ? recipientId : senderId;
   try {
     const otherKey = await getPublicKey(otherUserId);
@@ -72,7 +66,6 @@ async function decryptFrom(payload, senderId, recipientId) {
   }
 }
 
-// Parse message text — may be JSON ciphertext or legacy plaintext
 async function decodeMessage(m, partnerId) {
   try {
     const payload = JSON.parse(m.text);
@@ -99,7 +92,6 @@ async function renderConversationList() {
     return;
   }
 
-  // Require keys to be unlocked to decrypt conversation previews
   if (window.requireUnlocked && !window.requireUnlocked()) {
     var lockEl = document.getElementById('lockModal');
     if (lockEl) {
@@ -112,7 +104,6 @@ async function renderConversationList() {
   }
 
   wrap.innerHTML = loadingHtml('Loading conversations…');
-  console.log('[Messages] Fetching conversations, isRegistered:', isRegistered());
 
   try {
     const { messages = [] } = await window.Api.getConversations();
@@ -123,6 +114,7 @@ async function renderConversationList() {
       return;
     }
 
+    // getMyId() called here — guaranteed to have a valid user token at this point
     const myId = getMyId();
     const threads = {};
     messages.forEach(m => {
@@ -141,7 +133,6 @@ async function renderConversationList() {
       threads[uid].publicKey = r.status === 'fulfilled' ? (r.value.publicKey || null) : null;
     });
 
-    // Decrypt preview text for each thread
     await Promise.all(Object.values(threads).map(async t => {
       try {
         const payload = JSON.parse(t.latest.text);
@@ -188,9 +179,7 @@ async function renderThread() {
     return;
   }
 
-  // Require keys to be unlocked before showing or sending any messages
   if (window.requireUnlocked && !window.requireUnlocked()) {
-    // Modal is now showing — re-check after unlock and reload thread
     var lockEl = document.getElementById('lockModal');
     if (lockEl) {
       lockEl.addEventListener('hidden.bs.modal', function onUnlock() {
@@ -206,10 +195,11 @@ async function renderThread() {
   const sendBtn   = document.getElementById('sendBtn');
   const charCount = document.getElementById('charCount');
   const sendError = document.getElementById('sendError');
-  const myId      = getMyId();
   let   pollTimer = null;
 
   async function load() {
+    // getMyId() called fresh on every load/poll — always reflects current token (US2 fix)
+    const myId = getMyId();
     try {
       const { messages = [] } = await window.Api.getConversation(userId);
       if (!msgsEl) return;
@@ -220,7 +210,6 @@ async function renderThread() {
         return;
       }
 
-      // Decrypt all messages
       const decrypted = await Promise.all(messages.map(async m => ({
         ...m,
         text: await decodeMessage(m, userId),
@@ -253,7 +242,6 @@ async function renderThread() {
     if (!text) return;
     sendError?.classList.add('d-none');
 
-    // Hard block — no plaintext fallback
     if (!window.requireUnlocked?.()) return;
 
     try {
