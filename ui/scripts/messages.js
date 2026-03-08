@@ -213,8 +213,8 @@ async function renderThread() {
         const out = m.fromUserId === myId;
         return `<div class="d-flex ${out ? 'justify-content-end' : 'justify-content-start'}">
           <div>
-            <div class="message-bubble ${out ? 'outgoing' : 'incoming'}">${escHtml(m.text)}</div>
-            <div class="message-expiry ${out ? 'text-end' : ''}">expires ${timeUntil(m.expiresAt)}</div>
+            <div class="message-bubble ${out ? 'outgoing' : 'incoming'} px-3 py-2">${escHtml(m.text)}</div>
+            <div class="message-expiry ${out ? 'text-end' : ''} mt-1 px-1 small">expires ${timeUntil(m.expiresAt)}</div>
           </div>
         </div>`;
       }).join('');
@@ -253,14 +253,13 @@ async function renderThread() {
   await load();
   pollTimer = setInterval(load, 5000);
 
-  // If keys lock while on this page and are then unlocked via the modal,
-  // re-render immediately so messages stop showing as [encrypted].
-  window.addEventListener('bbm:unlocked', function onReUnlock() {
-    window.removeEventListener('bbm:unlocked', onReUnlock);
+  // If keys lock due to inactivity while reading, re-render messages
+  // after the user unlocks via the modal — without requiring a page reload.
+  function onReUnlock() {
     load();
-    // Re-register for the next lock/unlock cycle
     window.addEventListener('bbm:unlocked', onReUnlock, { once: true });
-  }, { once: true });
+  }
+  window.addEventListener('bbm:unlocked', onReUnlock, { once: true });
 
   window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
 }

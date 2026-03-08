@@ -578,40 +578,36 @@
    .bbm-thread-wrap {
      display: flex;
      flex-direction: column;
-     height: calc(100vh - var(--bbm-nav-h));
+     height: 100vh;
+     padding-top: var(--bbm-nav-h);
      overflow: hidden;
    }
-   
+
    .bbm-thread-header {
      flex-shrink: 0;
-     padding: 1rem 1.5rem;
      border-bottom: 1px solid var(--bbm-border);
      display: flex;
      align-items: center;
-     gap: 1rem;
      background: var(--bbm-surface);
    }
-   
+
    .bbm-thread-msgs {
      flex: 1;
      overflow-y: auto;
-     padding: 1.5rem 1.5rem 1rem;
      display: flex;
      flex-direction: column;
      gap: 0.75rem;
    }
-   
+
    .bbm-thread-compose {
      flex-shrink: 0;
-     padding: 1rem 1.5rem;
      border-top: 1px solid var(--bbm-border);
      background: var(--bbm-surface);
    }
-   
+
    /* Message bubbles */
    .message-bubble {
      max-width: 72%;
-     padding: 0.6rem 1rem;
      border-radius: var(--r-md);
      font-size: 0.9rem;
      line-height: 1.5;
@@ -622,27 +618,41 @@
      border: 1px solid rgba(232,24,109,0.25);
      color: var(--bbm-text);
      border-bottom-right-radius: 4px;
-     align-self: flex-end;
+     margin-left: auto;
    }
    .message-bubble.incoming {
      background: var(--bbm-blue-dim);
      border: 1px solid rgba(14,184,232,0.2);
      color: var(--bbm-text);
      border-bottom-left-radius: 4px;
-     align-self: flex-start;
+     margin-right: auto;
    }
    .message-expiry {
-     font-size: 0.68rem;
      color: var(--bbm-text-faint);
-     margin-top: 0.25rem;
-     padding: 0 0.25rem;
    }
-   
+   /* Align expiry timestamp to match its bubble side */
+   .bbm-thread-msgs .d-flex.justify-content-end > div {
+     display: flex;
+     flex-direction: column;
+     align-items: flex-end;
+   }
+   .bbm-thread-msgs .d-flex.justify-content-start > div {
+     display: flex;
+     flex-direction: column;
+     align-items: flex-start;
+   }
+
    /* Compose textarea */
    .bbm-compose-input {
      resize: none;
      min-height: 2.75rem;
      max-height: 8rem;
+     line-height: 1.5;
+   }
+
+   /* Send button stretches to match textarea height */
+   .bbm-send-btn {
+     align-self: stretch;
    }
    
    /* ============================================================
