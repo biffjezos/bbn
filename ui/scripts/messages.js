@@ -248,10 +248,14 @@ async function renderThread() {
 // If not yet unlocked, show the lock modal and defer rendering to bbm:unlocked.
 var _threadInitialized = false;
 
-(window.__authReady || Promise.resolve()).then(function() {
+(window.__authReady || Promise.resolve()).then(async function() {
   var hasConvList = !!document.getElementById('convListWrap');
   var hasThread   = !!document.getElementById('threadMsgs');
   if (!hasConvList && !hasThread) return;
+
+  // Sync shadow state with the worker (SharedWorker may already hold the key
+  // from a previous page in the same session).
+  await window.BBMCrypto?.ready?.();
 
   // Check / prompt for key unlock before attempting any decryption
   if (window.requireUnlocked && !window.requireUnlocked()) {

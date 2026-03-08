@@ -464,11 +464,9 @@
 
 // ============================================================
 // LockModule
-// Keys live in JS memory. To survive navigation within /messages
-// (full page reloads), PKCS8 key bytes are kept in sessionStorage
-// while the user is in /messages. On every /messages page load
-// the key is silently restored — no password prompt.
-// Navigating outside /messages wipes the session key.
+// Keys live in the crypto worker (SharedWorker where supported,
+// regular Worker on Safari). The SharedWorker survives full-page
+// navigations so no sessionStorage key export is needed.
 // ============================================================
 (function () {
 
@@ -479,51 +477,6 @@
   var _hiddenTimer     = null;
   var _modal           = null;
   var _locked          = false;
-
-  // ── sessionStorage key bridge ─────────────────────────────
-
-  function inMessages() {
-    return location.pathname.startsWith((window.BOOMBOOM_BASE || '') + '/messages');
-  }
-
-  function clearSessionKey() {
-    sessionStorage.removeItem('bbm_sk');
-    sessionStorage.removeItem('bbm_pk');
-    sessionStorage.removeItem('bbm_ts');
-  }
-
-  async function saveSessionKey() {
-    try {
-      var skB64 = await window.BBMCrypto.exportPrivateKeyPkcs8();
-      var pkB64 = window.BBMCrypto.getPublicKeyB64();
-      if (!skB64 || !pkB64) return;
-      sessionStorage.setItem('bbm_sk', skB64);
-      sessionStorage.setItem('bbm_pk', pkB64);
-      sessionStorage.setItem('bbm_ts', String(Date.now()));
-      console.log('[Lock] Key saved to session.');
-    } catch (e) {
-      console.warn('[Lock] saveSessionKey failed:', e);
-    }
-  }
-
-  async function restoreSessionKey() {
-    try {
-      var skB64 = sessionStorage.getItem('bbm_sk');
-      var pkB64 = sessionStorage.getItem('bbm_pk');
-      var ts    = parseInt(sessionStorage.getItem('bbm_ts') || '0', 10);
-      if (!skB64 || !pkB64) return false;
-      if (Date.now() - ts > 30 * 60 * 1000) { clearSessionKey(); return false; }
-      var ok = await window.BBMCrypto.importFromSession(skB64, pkB64);
-      if (!ok) { clearSessionKey(); return false; }
-      sessionStorage.setItem('bbm_ts', String(Date.now()));
-      console.log('[Lock] Key restored from session.');
-      return true;
-    } catch (e) {
-      console.warn('[Lock] restoreSessionKey failed:', e);
-      clearSessionKey();
-      return false;
-    }
-  }
 
   // ── Modal ─────────────────────────────────────────────────
 
@@ -543,7 +496,6 @@
     _locked = true;
     clearInactivityTimer();
     window.BBMCrypto?.lock();
-    clearSessionKey();
     console.log('[Lock] Session locked.');
   }
 
@@ -554,7 +506,6 @@
     resetInactivityTimer();
     var modal = getModal();
     if (modal) modal.hide();
-    if (inMessages()) saveSessionKey();
     window.dispatchEvent(new CustomEvent('bbm:unlocked'));
     console.log('[Lock] Session unlocked.');
   }
@@ -639,7 +590,6 @@
       var modal = getModal();
       if (modal) modal.hide();
       _locked = false;
-      clearSessionKey();
       window.Auth.logout();
     });
   });
@@ -661,22 +611,15 @@
     if (_origOnLogin) _origOnLogin(data);
     _locked = false;
     resetInactivityTimer();
-    if (inMessages()) saveSessionKey();
   };
 
-  // On page load with saved token: try silent session restore if in /messages.
-  // If restore succeeds, dispatch bbm:unlocked so messages.js re-renders.
-  // If restore fails, mark locked — messages.js will call requireUnlocked()
-  // which shows the modal. Password entered once, saved to session,
-  // survives navigation between /messages and /messages/thread/.
+  // On page load with a saved token: ask the crypto worker if the key is already
+  // loaded (SharedWorker retains it across navigations). If yes, fire bbm:unlocked
+  // silently. If no (new session, Safari regular Worker, or inactivity lock),
+  // mark locked so messages.js shows the lock modal.
   Auth.onNeedsUnlock = async function () {
-    if (!inMessages()) {
-      clearSessionKey();
-      _locked = true;
-      return;
-    }
-    var restored = await restoreSessionKey();
-    if (restored) {
+    await window.BBMCrypto?.ready?.();
+    if (window.BBMCrypto?.isUnlocked()) {
       _locked = false;
       resetInactivityTimer();
       window.dispatchEvent(new CustomEvent('bbm:unlocked'));
@@ -691,7 +634,6 @@
     clearInactivityTimer();
     if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
     _locked = false;
-    clearSessionKey();
   };
 
 })();
