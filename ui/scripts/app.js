@@ -629,34 +629,16 @@
     resetTimer();
   };
 
-  // Show lock modal when page loads with a saved session (no password available)
+  // onNeedsUnlock — called on page load with saved session (no password available).
+  // Do NOT show modal. Mark as locked silently.
+  // requireUnlocked() will show the modal lazily when the user needs crypto.
   Auth.onNeedsUnlock = function () {
-    // If keys were already unlocked (just logged in with password), just start timer
     if (window.BBMCrypto?.isUnlocked()) {
       _locked = false;
-      resetTimer();
-      return;
-    }
-    // Keys not unlocked — lock and show modal regardless of how we got here
-    _locked = true;
-    clearTimer();
-    window.BBMCrypto?.lock();
-    var tryShow = function () {
-      var modal = getModal();
-      if (modal) {
-        var descEl = document.querySelector('#lockModal .modal-body p');
-        if (descEl) descEl.textContent = 'Enter your password to decrypt your messages.';
-        modal.show();
-      } else {
-        setTimeout(tryShow, 100);
-      }
-    };
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', tryShow);
     } else {
-      // Small delay so Bootstrap is ready
-      setTimeout(tryShow, 50);
+      _locked = true;  // keys unavailable — will prompt when needed
     }
+    resetTimer();
   };
 
   var _origOnLogout = Auth.onLogout;

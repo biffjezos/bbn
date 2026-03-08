@@ -51,27 +51,22 @@ async function getPublicKey(userId) {
 
 async function encryptFor(text, recipientId) {
   if (!window.BBMCrypto?.isUnlocked()) throw new Error('Crypto not ready.');
-  const myId         = getMyId();
   const recipientKey = await getPublicKey(recipientId);
-  const senderKey    = await getPublicKey(myId);
-  // Encrypt twice — once for recipient, once for sender (to read own sent messages)
-  const [forRecipient, forSender] = await Promise.all([
-    window.BBMCrypto.encryptMessage(text, recipientKey),
-    window.BBMCrypto.encryptMessage(text, senderKey),
-  ]);
-  return { forRecipient, forSender };
+  // One ciphertext encrypted with recipient's public key.
+  // Sender can decrypt using: senderPrivateKey + recipientPublicKey = same shared secret
+  // as recipientPrivateKey + senderPublicKey. That's ECDH.
+  const cipher = await window.BBMCrypto.encryptMessage(text, recipientKey);
+  return { cipher, recipientId };
 }
 
 async function decryptFrom(payload, senderId, recipientId) {
   if (!window.BBMCrypto?.isUnlocked()) return '[encrypted]';
-  const myId      = getMyId();
-  const isSender  = senderId === myId;
-  // Use the ciphertext that was encrypted for me
-  const cipher    = isSender ? payload.forSender : payload.forRecipient;
-  // Decrypt using the other person's public key + my private key (ECDH)
-  const otherKey  = await getPublicKey(isSender ? recipientId : senderId);
+  const myId = getMyId();
+  // Both sender and recipient derive the same ECDH shared secret using the other's public key
+  const otherUserId = myId === senderId ? recipientId : senderId;
   try {
-    return await window.BBMCrypto.decryptMessage(cipher, otherKey);
+    const otherKey = await getPublicKey(otherUserId);
+    return await window.BBMCrypto.decryptMessage(payload.cipher, otherKey);
   } catch {
     return '[decryption failed]';
   }
@@ -81,7 +76,7 @@ async function decryptFrom(payload, senderId, recipientId) {
 async function decodeMessage(m, partnerId) {
   try {
     const payload = JSON.parse(m.text);
-    if (payload.forRecipient && payload.forSender) {
+    if (payload.cipher) {
       return await decryptFrom(payload, m.fromUserId, m.toUserId);
     }
   } catch { /* not JSON — legacy plaintext */ }
@@ -101,6 +96,18 @@ async function renderConversationList() {
     wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-chat-dots"></i>
       <p>Log in to see your conversations.</p>
       <button class="btn btn-bbm-primary mt-3" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button></div>`;
+    return;
+  }
+
+  // Require keys to be unlocked to decrypt conversation previews
+  if (window.requireUnlocked && !window.requireUnlocked()) {
+    var lockEl = document.getElementById('lockModal');
+    if (lockEl) {
+      lockEl.addEventListener('hidden.bs.modal', function onUnlock() {
+        lockEl.removeEventListener('hidden.bs.modal', onUnlock);
+        if (window.BBMCrypto?.isUnlocked()) renderConversationList();
+      });
+    }
     return;
   }
 
@@ -138,7 +145,7 @@ async function renderConversationList() {
     await Promise.all(Object.values(threads).map(async t => {
       try {
         const payload = JSON.parse(t.latest.text);
-        if (payload.forRecipient && payload.forSender) {
+        if (payload.cipher) {
           t.preview = await decryptFrom(payload, t.latest.fromUserId, t.latest.toUserId);
         } else {
           t.preview = t.latest.text;
@@ -178,6 +185,19 @@ async function renderThread() {
 
   if (!isRegistered() || !userId) {
     window.location.href = isRegistered() ? '/messages/' : '/';
+    return;
+  }
+
+  // Require keys to be unlocked before showing or sending any messages
+  if (window.requireUnlocked && !window.requireUnlocked()) {
+    // Modal is now showing — re-check after unlock and reload thread
+    var lockEl = document.getElementById('lockModal');
+    if (lockEl) {
+      lockEl.addEventListener('hidden.bs.modal', function onUnlock() {
+        lockEl.removeEventListener('hidden.bs.modal', onUnlock);
+        if (window.BBMCrypto?.isUnlocked()) renderThread();
+      });
+    }
     return;
   }
 
