@@ -235,21 +235,31 @@ async function renderThread() {
   });
 
   await load();
+  msgsEl?.addEventListener('bbm:reload', load);
   pollTimer = setInterval(load, 5000);
   window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
 }
 
-// Wait for auth AND lock restore to complete before rendering.
-Promise.all([
-  window.__authReady || Promise.resolve(),
-  window.__lockReady || Promise.resolve(),
-]).then(function () {
-  if (document.getElementById('convListWrap')) renderConversationList();
-  if (document.getElementById('threadMsgs'))   renderThread();
+// Auto-run when loaded as extra_js
+(window.__authReady || Promise.resolve()).then(function() {
+  if (document.getElementById('convListWrap'))  renderConversationList();
+  if (document.getElementById('threadMsgs'))    renderThread();
 });
 
-// Re-render after unlock (inactivity lock then modal dismiss)
+// Re-render after unlock (inactivity lock dismissed, or keys ready after async login)
 window.addEventListener('bbm:unlocked', function () {
   if (document.getElementById('convListWrap')) renderConversationList();
-  if (document.getElementById('threadMsgs'))   renderThread();
+});
+// For thread: just reload messages in place
+window.addEventListener('bbm:unlocked', function reloadThread() {
+  var msgsEl = document.getElementById('threadMsgs');
+  if (msgsEl) {
+    var params = new URLSearchParams(window.location.search);
+    var userId = params.get('uid');
+    if (userId) {
+      // trigger a fresh load by re-calling renderThread won't work (sets up duplicate listeners)
+      // instead just dispatch a custom event the existing load() can hear
+      msgsEl.dispatchEvent(new CustomEvent('bbm:reload'));
+    }
+  }
 });
