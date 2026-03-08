@@ -138,7 +138,7 @@ async function renderConversationList() {
     wrap.innerHTML = Object.values(threads)
       .sort((a, b) => new Date(b.latest.sentAt) - new Date(a.latest.sentAt))
       .map(t => {
-        const href = `/messages/thread/?uid=${encodeURIComponent(t.userId)}&name=${encodeURIComponent(t.nickname)}`;
+        const href = `${window.BOOMBOOM_BASE || ''}/messages/thread/?uid=${encodeURIComponent(t.userId)}&name=${encodeURIComponent(t.nickname)}`;
         return `<a href="${href}" class="conv-item">
           <div class="conv-avatar ${sexClass(t.sex)}">${sexEmoji(t.sex)}</div>
           <div class="conv-body">

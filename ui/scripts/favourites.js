@@ -46,8 +46,9 @@ async function renderFavourites() {
     }
 
     wrap.innerHTML = favourites.map(f => {
-      const profileHref = `/profile/view/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
-      const threadHref  = `/messages/thread/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
+      const _base = window.BOOMBOOM_BASE || '';
+      const profileHref = `${_base}/profile/view/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
+      const threadHref  = `${_base}/messages/thread/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
       const badge = f.online
         ? '<span class="badge badge-online ms-2">online</span>'
         : '<span class="badge badge-offline ms-2">offline</span>';

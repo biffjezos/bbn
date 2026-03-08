@@ -179,7 +179,7 @@ async function renderPublicProfile() {
     const profile = await window.Api.getProfile(userId);
     const cls     = sexClass(profile.sex);
     const emoji   = sexEmoji(profile.sex);
-    const threadHref = `/messages/thread/?uid=${encodeURIComponent(userId)}&name=${encodeURIComponent(profile.nickname || displayName)}`;
+    const threadHref = `${window.BOOMBOOM_BASE || ''}/messages/thread/?uid=${encodeURIComponent(userId)}&name=${encodeURIComponent(profile.nickname || displayName)}`;
 
     let isFav = false;
     if (viewerIsReg) {
