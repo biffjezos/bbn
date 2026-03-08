@@ -613,8 +613,14 @@
       if (unlockBtn) { unlockBtn.disabled = true; unlockBtn.textContent = 'Unlocking…'; }
       try {
         var keys = await window.Api.getMyKeys();
-        var ok   = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
-        if (!ok) throw new Error('Wrong password.');
+        if (keys.encryptedPrivateKey && keys.publicKey) {
+          var ok = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
+          if (!ok) throw new Error('Wrong password.');
+        } else {
+          // No keys on server yet (legacy account) — generate and save now
+          var setup = await window.BBMCrypto.setup(password);
+          await window.Api.saveKeys(setup.publicKeyB64, setup.encBlob);
+        }
         if (pwInput) pwInput.value = '';
         unlock();
       } catch (e) {

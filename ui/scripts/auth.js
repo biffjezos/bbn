@@ -94,8 +94,8 @@ const Auth = (() => {
         _sex      = localStorage.getItem(STORAGE_SEX_KEY);
         _isUser   = true;
         Auth.onLogin?.({ nickname: _nickname, sex: _sex });
-        // Keys can't be unlocked without password — show lock screen
-        Auth.onNeedsUnlock?.();
+        // Keys can't be unlocked without password — show lock screen if needed
+        await Auth.onNeedsUnlock?.();
         return;
       }
       if (stored) clearUserStorage();
@@ -150,27 +150,6 @@ const Auth = (() => {
       saveToStorage();
       stopCountdown();
       localStorage.removeItem(STORAGE_GUEST_EXP);
-
-      // Unlock crypto keys
-      if (window.BBMCrypto) {
-        try {
-          const keys = await window.Api.getMyKeys();
-          console.log('[Auth] Keys from server:', keys.publicKey ? 'publicKey present' : 'NO publicKey', keys.encryptedPrivateKey ? 'encryptedPrivateKey present' : 'NO encryptedPrivateKey');
-          if (keys.encryptedPrivateKey && keys.publicKey) {
-            const ok = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
-            console.log('[Auth] Unlock result:', ok);
-          } else {
-            // No keys yet (legacy account) — generate and save
-            console.log('[Auth] No keys found — generating new keypair');
-            const { publicKeyB64, encBlob } = await window.BBMCrypto.setup(password);
-            await window.Api.saveKeys(publicKeyB64, encBlob);
-          }
-        } catch (e) {
-          console.warn('[Auth] Crypto unlock failed:', e.message);
-        }
-      } else {
-        console.warn('[Auth] BBMCrypto not available at login time.');
-      }
 
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
       return data;

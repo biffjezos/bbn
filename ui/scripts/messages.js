@@ -155,7 +155,10 @@ async function renderConversationList() {
 }
 
 // ── Message thread ────────────────────────────────────────
+var _pollTimer = null;
+
 async function renderThread() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   const params      = new URLSearchParams(window.location.search);
   const userId      = params.get('uid');
   const displayName = params.get('name') || userId;
@@ -173,7 +176,6 @@ async function renderThread() {
   const sendBtn   = document.getElementById('sendBtn');
   const charCount = document.getElementById('charCount');
   const sendError = document.getElementById('sendError');
-  let   pollTimer = null;
 
   async function load() {
     // getMyId() called fresh on every load/poll — always reflects current token (US2 fix)
@@ -236,24 +238,44 @@ async function renderThread() {
 
   await load();
   msgsEl?.addEventListener('bbm:reload', load);
-  pollTimer = setInterval(load, 5000);
-  window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
+  _pollTimer = setInterval(load, 5000);
+  window.addEventListener('beforeunload', () => clearInterval(_pollTimer), { once: true });
 }
 
 // Auto-run when loaded as extra_js
-(window.__authReady || Promise.resolve()).then(function() {
-  if (document.getElementById('convListWrap'))  renderConversationList();
-  if (document.getElementById('threadMsgs'))    renderThread();
+// Keys are only needed (and checked) when entering the messages area.
+// If not yet unlocked, show the lock modal and defer rendering to bbm:unlocked.
+var _threadInitialized = false;
 
-  // If keys are locked on arrival, show the modal immediately
+(window.__authReady || Promise.resolve()).then(function() {
+  var hasConvList = !!document.getElementById('convListWrap');
+  var hasThread   = !!document.getElementById('threadMsgs');
+  if (!hasConvList && !hasThread) return;
+
+  // Check / prompt for key unlock before attempting any decryption
   if (window.requireUnlocked && !window.requireUnlocked()) {
-    // modal is now showing — re-render happens via bbm:unlocked below
+    // Lock modal is now showing — rendering deferred to bbm:unlocked
+    return;
   }
+
+  if (hasConvList) renderConversationList();
+  if (hasThread)   { _threadInitialized = true; renderThread(); }
 });
 
-// After unlock: re-render conversation list, reload thread messages
+// After unlock (first time or re-unlock after inactivity lock):
+// re-render the conversation list and reload/init the thread view.
 window.addEventListener('bbm:unlocked', function () {
-  if (document.getElementById('convListWrap')) renderConversationList();
-  var msgsEl = document.getElementById('threadMsgs');
-  if (msgsEl) msgsEl.dispatchEvent(new CustomEvent('bbm:reload'));
+  if (document.getElementById('convListWrap')) {
+    renderConversationList();
+  }
+  if (document.getElementById('threadMsgs')) {
+    if (_threadInitialized) {
+      // Thread already set up — just reload messages
+      document.getElementById('threadMsgs').dispatchEvent(new CustomEvent('bbm:reload'));
+    } else {
+      // First unlock on this page load — initialize the thread
+      _threadInitialized = true;
+      renderThread();
+    }
+  }
 });
