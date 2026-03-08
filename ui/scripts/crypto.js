@@ -201,6 +201,58 @@ const BBMCrypto = (() => {
       return exportPublicKey(_publicKey);
     },
 
+    // ── Session key persistence (sessionStorage, same-tab only) ──
+    // Stores the raw PKCS8 private key bytes so the key survives
+    // same-tab page navigations without requiring the password again.
+    // sessionStorage is wiped automatically when the tab closes.
+    // We also store the public key so we can fully restore state.
+
+    async saveToSession() {
+      try {
+        if (!_privateKey || !_publicKey) return;
+        const pkcs8     = await exportPrivateKey(_privateKey);
+        const pubB64    = await exportPublicKey(_publicKey);
+        sessionStorage.setItem('bbm_sk', buf2b64(pkcs8));
+        sessionStorage.setItem('bbm_pk', pubB64);
+        sessionStorage.setItem('bbm_sk_ts', String(Date.now()));
+        console.log('[Crypto] Key saved to session.');
+      } catch (e) {
+        console.warn('[Crypto] saveToSession failed:', e.message);
+      }
+    },
+
+    async restoreFromSession() {
+      try {
+        const skB64 = sessionStorage.getItem('bbm_sk');
+        const pkB64 = sessionStorage.getItem('bbm_pk');
+        const ts    = parseInt(sessionStorage.getItem('bbm_sk_ts') || '0', 10);
+        // Expire after 30 minutes of inactivity as a safety net
+        if (!skB64 || !pkB64 || (Date.now() - ts) > 30 * 60 * 1000) {
+          BBMCrypto.clearSession();
+          return false;
+        }
+        const pkcs8 = b642buf(skB64);
+        _privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, ECDH_PARAMS, true, ['deriveKey']);
+        const raw   = b642buf(pkB64);
+        _publicKey  = await crypto.subtle.importKey('raw', raw, ECDH_PARAMS, true, []);
+        // Refresh timestamp
+        sessionStorage.setItem('bbm_sk_ts', String(Date.now()));
+        console.log('[Crypto] Key restored from session.');
+        return true;
+      } catch (e) {
+        console.warn('[Crypto] restoreFromSession failed:', e.message);
+        BBMCrypto.clearSession();
+        return false;
+      }
+    },
+
+    clearSession() {
+      sessionStorage.removeItem('bbm_sk');
+      sessionStorage.removeItem('bbm_pk');
+      sessionStorage.removeItem('bbm_sk_ts');
+      console.log('[Crypto] Session key cleared.');
+    },
+
     encryptMessage,
     decryptMessage,
   };

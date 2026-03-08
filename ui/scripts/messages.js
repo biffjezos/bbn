@@ -93,13 +93,10 @@ async function renderConversationList() {
   }
 
   if (window.requireUnlocked && !window.requireUnlocked()) {
-    var lockEl = document.getElementById('lockModal');
-    if (lockEl) {
-      lockEl.addEventListener('hidden.bs.modal', function onUnlock() {
-        lockEl.removeEventListener('hidden.bs.modal', onUnlock);
-        if (window.BBMCrypto?.isUnlocked()) renderConversationList();
-      });
-    }
+    window.addEventListener('bbm:unlocked', function onUnlock() {
+      window.removeEventListener('bbm:unlocked', onUnlock);
+      renderConversationList();
+    }, { once: true });
     return;
   }
 
@@ -180,13 +177,10 @@ async function renderThread() {
   }
 
   if (window.requireUnlocked && !window.requireUnlocked()) {
-    var lockEl = document.getElementById('lockModal');
-    if (lockEl) {
-      lockEl.addEventListener('hidden.bs.modal', function onUnlock() {
-        lockEl.removeEventListener('hidden.bs.modal', onUnlock);
-        if (window.BBMCrypto?.isUnlocked()) renderThread();
-      });
-    }
+    window.addEventListener('bbm:unlocked', function onUnlock() {
+      window.removeEventListener('bbm:unlocked', onUnlock);
+      renderThread();
+    }, { once: true });
     return;
   }
 
@@ -258,6 +252,16 @@ async function renderThread() {
 
   await load();
   pollTimer = setInterval(load, 5000);
+
+  // If keys lock while on this page and are then unlocked via the modal,
+  // re-render immediately so messages stop showing as [encrypted].
+  window.addEventListener('bbm:unlocked', function onReUnlock() {
+    window.removeEventListener('bbm:unlocked', onReUnlock);
+    load();
+    // Re-register for the next lock/unlock cycle
+    window.addEventListener('bbm:unlocked', onReUnlock, { once: true });
+  }, { once: true });
+
   window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
 }
 

@@ -173,7 +173,6 @@ const Auth = (() => {
       }
 
       Auth.onLogin?.({ nickname: _nickname, sex: _sex });
-      Auth.onNeedsUnlock?.();
       return data;
     },
 
