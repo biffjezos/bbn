@@ -201,26 +201,21 @@ const BBMCrypto = (() => {
       return exportPublicKey(_publicKey);
     },
 
-    // Export private key as base64 PKCS8 for sessionStorage persistence
     async exportPrivateKeyPkcs8() {
       if (!_privateKey) return null;
       const pkcs8 = await exportPrivateKey(_privateKey);
       return buf2b64(pkcs8);
     },
 
-    // Re-import key from sessionStorage — no password required
     async importFromSession(skB64, pkB64) {
       try {
-        const pkcs8 = b642buf(skB64);
-        _privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, ECDH_PARAMS, true, ['deriveKey']);
-        const raw   = b642buf(pkB64);
-        _publicKey  = await crypto.subtle.importKey('raw', raw, ECDH_PARAMS, true, []);
+        _privateKey = await crypto.subtle.importKey('pkcs8', b642buf(skB64), ECDH_PARAMS, true, ['deriveKey']);
+        _publicKey  = await crypto.subtle.importKey('raw',   b642buf(pkB64), ECDH_PARAMS, true, []);
         console.log('[Crypto] Keys imported from session.');
         return true;
       } catch (e) {
         console.warn('[Crypto] importFromSession failed:', e.message);
-        _privateKey = null;
-        _publicKey  = null;
+        _privateKey = null; _publicKey = null;
         return false;
       }
     },

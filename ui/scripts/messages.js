@@ -244,22 +244,16 @@ async function renderThread() {
 (window.__authReady || Promise.resolve()).then(function() {
   if (document.getElementById('convListWrap'))  renderConversationList();
   if (document.getElementById('threadMsgs'))    renderThread();
+
+  // If keys are locked on arrival, show the modal immediately
+  if (window.requireUnlocked && !window.requireUnlocked()) {
+    // modal is now showing — re-render happens via bbm:unlocked below
+  }
 });
 
-// Re-render after unlock (inactivity lock dismissed, or keys ready after async login)
+// After unlock: re-render conversation list, reload thread messages
 window.addEventListener('bbm:unlocked', function () {
   if (document.getElementById('convListWrap')) renderConversationList();
-});
-// For thread: just reload messages in place
-window.addEventListener('bbm:unlocked', function reloadThread() {
   var msgsEl = document.getElementById('threadMsgs');
-  if (msgsEl) {
-    var params = new URLSearchParams(window.location.search);
-    var userId = params.get('uid');
-    if (userId) {
-      // trigger a fresh load by re-calling renderThread won't work (sets up duplicate listeners)
-      // instead just dispatch a custom event the existing load() can hear
-      msgsEl.dispatchEvent(new CustomEvent('bbm:reload'));
-    }
-  }
+  if (msgsEl) msgsEl.dispatchEvent(new CustomEvent('bbm:reload'));
 });
