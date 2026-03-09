@@ -124,6 +124,10 @@ function connectMsgWS() {
       const msg = JSON.parse(e.data);
       if (msg.type === 'conversations') handleConversationsUpdate(msg.messages || []);
       if (msg.type === 'thread')         handleThreadUpdate(msg.messages || []);
+      if (msg.type === 'send:error') {
+        const el = sendError();
+        if (el) { el.textContent = msg.error || 'Failed to send message.'; el.classList.remove('d-none'); }
+      }
     } catch { /* silent */ }
   };
 

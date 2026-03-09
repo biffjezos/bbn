@@ -416,16 +416,26 @@ function setupMsgConnection(ws, userId, token) {
     }
 
     if (msg.type === 'send' && msg.toUserId && msg.text) {
-      if (++sendBucket.count > WS_SEND_LIMIT) return;  // rate limit: max 10 sends per user per 10 s
+      if (++sendBucket.count > WS_SEND_LIMIT) {
+        wsSend(ws, { type: 'send:error', error: 'Rate limit exceeded. Please wait a moment.' });
+        return;
+      }
       try {
-        await fetch(`${CFG.MSG_SERVICE_URL}/messages/${encodeURIComponent(msg.toUserId)}`, {
+        const sendRes = await fetch(`${CFG.MSG_SERVICE_URL}/messages/${encodeURIComponent(msg.toUserId)}`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
           body:    JSON.stringify({ text: msg.text }),
         });
-        // Push updated thread immediately so sender sees the message right away
-        if (viewingUserId === msg.toUserId) await pushThread();
-      } catch { /* silent */ }
+        if (!sendRes.ok) {
+          const body = await sendRes.json().catch(() => ({}));
+          wsSend(ws, { type: 'send:error', error: body.error || 'Failed to send message.' });
+        } else {
+          // Push updated thread immediately so sender sees the message right away
+          if (viewingUserId === msg.toUserId) await pushThread();
+        }
+      } catch {
+        wsSend(ws, { type: 'send:error', error: 'Could not reach messaging service.' });
+      }
     }
   });
 
