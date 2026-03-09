@@ -225,7 +225,7 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
       `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(senderTier)}`,
       { headers: svcAuth }
     ).catch(() => null);
-    const radiusM = tierRes?.ok ? (await tierRes.json()).radiusM : 0;
+    const radiusM = tierRes?.ok ? (await tierRes.json()).radiusM : -1;
 
     if (radiusM !== -1) {
       // Finite radius: both users must be online and within the allowed distance.
