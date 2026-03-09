@@ -17,6 +17,7 @@
   let favLines        = {}; // userId → { polyline, labelMarker }
   let lastNearbyUsers = [];
   let meetControl     = null;
+  let lastBearing     = null; // cached so bearing survives setIcon() DOM replacement
 
   // Populated after auth resolves from /tiers/radius/nearby/:tier
   let viewRadius = 0;
@@ -127,6 +128,9 @@
     if (selfMarker) {
       selfMarker.setLatLng([lat, lng]);
       selfMarker.setIcon(makeLeafIcon(sex, true));
+      // setIcon() replaces the DOM element, wiping any CSS variables on it.
+      // Reapply the cached bearing so meeting-mode compass survives position updates.
+      if (lastBearing !== null) setSelfBearing(lastBearing);
     } else {
       selfMarker = L.marker([lat, lng], {
         icon:        makeLeafIcon(sex, true),
@@ -259,7 +263,8 @@
       return;
     }
 
-    const partner = users.find(u => u.userId === meet.uid);
+    const partner   = users.find(u => u.userId === meet.uid);
+    const targetSex = partner?.sex || meet.sex || null;
 
     // Create pill control if not yet added
     if (!meetControl) {
@@ -272,8 +277,11 @@
       meetControl.addTo(map);
     }
 
-    // Update pill contents
+    // Update pill contents and apply target sex class for border colour
     const pillEl = meetControl.getContainer();
+    pillEl.classList.remove('bbm-meet-pill--male', 'bbm-meet-pill--female');
+    if (targetSex === 'm') pillEl.classList.add('bbm-meet-pill--male');
+    else if (targetSex === 'f') pillEl.classList.add('bbm-meet-pill--female');
     const distHtml = partner
       ? `<span class="bbm-meet-dist">${fmtDist(haversineM(selfPos.lat, selfPos.lng, partner.lat, partner.lon ?? partner.lng))}</span>`
       : `<span class="bbm-meet-dist bbm-meet-absent">not visible</span>`;
@@ -300,6 +308,7 @@
   }
 
   function setSelfBearing(deg) {
+    lastBearing = deg;
     const inner = selfMarker?.getElement()?.querySelector('.bbm-marker');
     if (!inner) return;
     inner.style.setProperty('--bbm-bearing', deg != null ? deg + 'deg' : '0deg');

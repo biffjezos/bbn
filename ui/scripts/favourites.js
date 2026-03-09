@@ -27,11 +27,11 @@ function getMeetUid() {
   try { return JSON.parse(localStorage.getItem('bbm_meet') || 'null')?.uid || null; } catch { return null; }
 }
 
-function toggleMeet(uid, nickname) {
+function toggleMeet(uid, nickname, sex) {
   if (getMeetUid() === uid) {
     localStorage.removeItem('bbm_meet');
   } else {
-    localStorage.setItem('bbm_meet', JSON.stringify({ uid, nickname }));
+    localStorage.setItem('bbm_meet', JSON.stringify({ uid, nickname, sex: sex || null }));
   }
   renderFavourites();
 }
@@ -84,45 +84,50 @@ function matchesFav(f, q) {
 
 // ── Render helpers ────────────────────────────────────────────
 
-function favItemHtml(f, isFav) {
+function favItemHtml(f, isFav, unreadIds = new Set()) {
   const _base       = window.BOOMBOOM_BASE || '';
   const profileHref = `${_base}/profile/view/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
   const threadHref  = `${_base}/messages/thread/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
   const meetUid     = getMeetUid();
   const isMeet      = meetUid === f.userId;
   const badge       = f.online
-    ? '<span class="badge badge-online ms-2">online</span>'
-    : '<span class="badge badge-offline ms-2">offline</span>';
+    ? '<span class="badge badge-online">online</span>'
+    : '<span class="badge badge-offline">offline</span>';
   const ageBadge    = f.age ? `<span class="text-muted-bb ms-1 small">${escHtml(String(f.age))}</span>` : '';
   const meetCls     = isMeet ? 'fav-meet-btn active' : 'fav-meet-btn';
   const meetTitle   = isMeet ? 'Cancel meeting' : 'Set as meeting target';
   const meetIcon    = isMeet ? 'bi-compass-fill' : 'bi-compass';
+  const hasUnread   = unreadIds.has(f.userId);
+  const msgCls      = `fav-msg-btn${hasUnread ? ' fav-msg--unread' : ''}`;
 
   const rightBtns = isFav
-    ? `<button class="btn btn-bbm-ghost btn-sm ${meetCls}"
-         data-userid="${escHtml(f.userId)}" data-nickname="${escHtml(f.nickname)}"
+    ? `<button class="btn fav-action-btn ${meetCls}"
+         data-userid="${escHtml(f.userId)}" data-nickname="${escHtml(f.nickname)}" data-sex="${escHtml(f.sex || '')}"
          title="${meetTitle}"><i class="bi ${meetIcon}"></i></button>
-       <a href="${threadHref}" class="btn btn-bbm-outline-pink btn-sm" title="Message"><i class="bi bi-chat-dots"></i></a>
-       <button class="btn btn-bbm-ghost btn-sm fav-remove-btn" data-userid="${escHtml(f.userId)}" title="Remove">
-         <i class="bi bi-star-fill text-pink"></i></button>`
-    : `<button class="btn btn-bbm-ghost btn-sm fav-add-btn" data-userid="${escHtml(f.userId)}" data-nickname="${escHtml(f.nickname)}" title="Add to favourites">
+       <a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="Message"><i class="bi bi-chat-dots"></i></a>
+       <button class="btn fav-action-btn fav-remove-btn" data-userid="${escHtml(f.userId)}" title="Remove">
+         <i class="bi bi-star-fill"></i></button>`
+    : `<button class="btn fav-action-btn fav-add-btn" data-userid="${escHtml(f.userId)}" data-nickname="${escHtml(f.nickname)}" title="Add to favourites">
          <i class="bi bi-star"></i></button>
-       <a href="${threadHref}" class="btn btn-bbm-outline-pink btn-sm" title="Message"><i class="bi bi-chat-dots"></i></a>`;
+       <a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="Message"><i class="bi bi-chat-dots"></i></a>`;
 
-  return `<div class="fav-item" data-userid="${escHtml(f.userId)}">
+  return `<div class="fav-item ${sexClass(f.sex)}" data-userid="${escHtml(f.userId)}">
     <a href="${profileHref}" class="fav-avatar ${sexClass(f.sex)}" style="text-decoration:none">${sexEmoji(f.sex)}</a>
     <div class="flex-grow-1 min-w-0">
-      <a href="${profileHref}" class="fav-name text-decoration-none text-white">${escHtml(f.nickname)}</a>${ageBadge}${badge}
+      <div class="d-flex align-items-baseline gap-1 flex-wrap">
+        <a href="${profileHref}" class="fav-name text-decoration-none text-white">${escHtml(f.nickname)}</a>${ageBadge}
+      </div>
+      <div class="mt-1">${badge}</div>
     </div>
     <div class="fav-actions">${rightBtns}</div>
   </div>`;
 }
 
-function sectionHtml(title, items, isFav) {
+function sectionHtml(title, items, isFav, unreadIds = new Set()) {
   if (!items.length) return '';
   return `<div class="bbm-search-section mb-2">
     <div class="bbm-search-section-label text-muted-bb small mb-1">${escHtml(title)}</div>
-    ${items.map(f => favItemHtml(f, isFav)).join('')}
+    ${items.map(f => favItemHtml(f, isFav, unreadIds)).join('')}
   </div>`;
 }
 
@@ -173,15 +178,14 @@ async function renderFavourites(forceReload = false) {
   bindListEvents(wrap);
 }
 
-function renderFavList(wrap, favourites) {
+async function renderFavList(wrap, favourites) {
   if (!favourites.length) {
     wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-star"></i>
       <p>No favourites yet.<br>Tap a user on the map to add them.</p></div>`;
     return;
   }
-  const meetUid = getMeetUid();
-  wrap.innerHTML = favourites.map(f => favItemHtml(f, true)).join('');
-  void meetUid; // already used inside favItemHtml via getMeetUid()
+  const unreadIds = await fetchUnreadIds();
+  wrap.innerHTML = favourites.map(f => favItemHtml(f, true, unreadIds)).join('');
 }
 
 async function renderSearchResults(wrap, q, rawQuery) {
@@ -213,14 +217,15 @@ async function renderSearchResults(wrap, q, rawQuery) {
     return;
   }
 
+  const unreadIds = await fetchUnreadIds();
   wrap.innerHTML =
-    sectionHtml('In your favourites', matchedFavs, true) +
-    sectionHtml('Other users',        globalUsers, false);
+    sectionHtml('In your favourites', matchedFavs, true,  unreadIds) +
+    sectionHtml('Other users',        globalUsers, false, unreadIds);
 }
 
 function bindListEvents(wrap) {
   wrap.querySelectorAll('.fav-meet-btn').forEach(btn => {
-    btn.addEventListener('click', () => toggleMeet(btn.dataset.userid, btn.dataset.nickname));
+    btn.addEventListener('click', () => toggleMeet(btn.dataset.userid, btn.dataset.nickname, btn.dataset.sex));
   });
 
   wrap.querySelectorAll('.fav-remove-btn').forEach(btn => {
@@ -246,6 +251,17 @@ function bindListEvents(wrap) {
   });
 }
 
+// ── Unread message detection ──────────────────────────────
+
+async function fetchUnreadIds() {
+  try {
+    const { conversations = [] } = await window.Api.getConversations();
+    return new Set(
+      conversations.filter(c => c.hasUnread || c.unread).map(c => c.userId)
+    );
+  } catch { return new Set(); }
+}
+
 // ── Search bar wiring ─────────────────────────────────────────
 
 function initSearchBar() {
@@ -253,6 +269,10 @@ function initSearchBar() {
   const input = document.getElementById('favSearch');
   const clear = document.getElementById('favSearchClear');
   if (!wrap || !input || !clear) return;
+
+  const sex = window.Auth?.getSex?.();
+  if (sex === 'm') wrap.classList.add('bbm-search--male');
+  else if (sex === 'f') wrap.classList.add('bbm-search--female');
 
   wrap.style.display = '';
 
