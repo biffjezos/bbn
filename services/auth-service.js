@@ -52,11 +52,25 @@ function issueGuestToken(guestId) {
   );
 }
 
-// --- Helper: clean up guest location + session on login/register -
+// --- Helper: clean up guest session + location on login -----
 async function cleanupGuest(guestId) {
   if (!guestId || typeof guestId !== 'string') return;
   await Promise.all([
     db.collection('locations').deleteOne({ userId: guestId }),
+    db.collection('sessions').deleteOne({ guestId }),
+  ]);
+}
+
+// --- Helper: migrate guest location to new registered user --
+// Re-associates the location doc so the user stays visible on
+// the map right after registration without needing a new GPS fix.
+async function migrateGuestLocation(guestId, newUserId, nickname, sex) {
+  if (!guestId || typeof guestId !== 'string') return;
+  await Promise.all([
+    db.collection('locations').updateOne(
+      { userId: guestId },
+      { $set: { userId: newUserId, isRegistered: true, nickname, sex } }
+    ),
     db.collection('sessions').deleteOne({ guestId }),
   ]);
 }
@@ -146,7 +160,7 @@ app.post('/auth/register', async (req, res) => {
       tier:     'regular',
     };
 
-    await cleanupGuest(req.body.guestId);
+    await migrateGuestLocation(req.body.guestId, user._id.toString(), user.nickname, user.sex);
 
     res.status(201).json({
       token:    issueUserToken(user),

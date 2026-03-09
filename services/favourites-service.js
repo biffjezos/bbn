@@ -29,6 +29,11 @@ await db.collection('favourites').createIndex(
   { unique: true, background: true }
 );
 
+// --- Helpers ------------------------------------------------
+function safeObjectId(str) {
+  try { return new ObjectId(str); } catch { return null; }
+}
+
 // --- Express ------------------------------------------------
 const app = express();
 app.use(express.json({ limit: '16kb' }));
@@ -78,7 +83,7 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     if (entries.length === 0) return res.json({ favourites: [] });
 
-    const ids = entries.map(e => new ObjectId(e.favouriteUserId));
+    const ids = entries.map(e => safeObjectId(e.favouriteUserId)).filter(Boolean);
 
     const users = await db.collection('users')
       .find({ _id: { $in: ids } })
@@ -124,15 +129,10 @@ app.post('/favourites/:userId', verifyToken, async (req, res) => {
     if (ownerUserId === favouriteUserId)
       return res.status(400).json({ error: 'Cannot favourite yourself.' });
 
-    let target;
-    try {
-      target = await db.collection('users').findOne(
-        { _id: new ObjectId(favouriteUserId) },
-        { projection: { _id: 1 } }
-      );
-    } catch {
-      return res.status(400).json({ error: 'Invalid user id.' });
-    }
+    const oid = safeObjectId(favouriteUserId);
+    if (!oid) return res.status(400).json({ error: 'Invalid user id.' });
+
+    const target = await db.collection('users').findOne({ _id: oid }, { projection: { _id: 1 } });
     if (!target) return res.status(404).json({ error: 'User not found.' });
 
     await db.collection('favourites').insertOne({

@@ -24,6 +24,11 @@ import jwt                       from 'jsonwebtoken';
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[users] DB connected.');
 
+// --- Helpers ------------------------------------------------
+function safeObjectId(str) {
+  try { return new ObjectId(str); } catch { return null; }
+}
+
 // --- Express ------------------------------------------------
 const app = express();
 app.use(express.json({ limit: '16kb' }));
@@ -154,10 +159,8 @@ app.delete('/users/me', requireUser, async (req, res) => {
 // Uses userId (not nickname) — nickname is display-only
 app.get('/users/:userId/profile', requireAny, async (req, res) => {
   try {
-    let oid;
-    try { oid = new ObjectId(req.params.userId); } catch {
-      return res.status(400).json({ error: 'Invalid userId.' });
-    }
+    const oid = safeObjectId(req.params.userId);
+    if (!oid) return res.status(400).json({ error: 'Invalid userId.' });
     const user = await db.collection('users').findOne(
       { _id: oid },
       { projection: { nickname: 1, age: 1, sex: 1, publicKey: 1, _id: 0 } }

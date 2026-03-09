@@ -108,6 +108,11 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// --- Helpers ------------------------------------------------
+function safeObjectId(str) {
+  try { return new ObjectId(str); } catch { return null; }
+}
+
 // --- Routes -------------------------------------------------
 
 // GET /messages — all active conversations for current user
@@ -133,9 +138,8 @@ app.get('/messages/:userId', verifyToken, async (req, res) => {
     const me      = req.auth.sub;
     const otherId = req.params.userId;
 
-    let otherOid;
-    try { otherOid = new ObjectId(otherId); }
-    catch { return res.status(400).json({ error: 'Invalid userId.' }); }
+    const otherOid = safeObjectId(otherId);
+    if (!otherOid) return res.status(400).json({ error: 'Invalid userId.' });
 
     const other = await db.collection('users').findOne(
       { _id: otherOid },
@@ -176,9 +180,8 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     if (fromId === toId)
       return res.status(400).json({ error: 'Cannot message yourself.' });
 
-    let toOid;
-    try { toOid = new ObjectId(toId); }
-    catch { return res.status(400).json({ error: 'Invalid userId.' }); }
+    const toOid = safeObjectId(toId);
+    if (!toOid) return res.status(400).json({ error: 'Invalid userId.' });
 
     const toUser = await db.collection('users').findOne(
       { _id: toOid },
@@ -209,18 +212,14 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
 // DELETE /messages/:id — sender deletes their own message
 app.delete('/messages/:id', verifyToken, async (req, res) => {
   try {
-    let msgId;
-    try   { msgId = new ObjectId(req.params.id); }
-    catch { return res.status(400).json({ error: 'Invalid message id.' }); }
+    const msgId = safeObjectId(req.params.id);
+    if (!msgId) return res.status(400).json({ error: 'Invalid message id.' });
 
-    const result = await db.collection('messages').deleteOne({
-      _id:        msgId,
-      fromUserId: req.auth.sub,
-    });
+    const msg = await db.collection('messages').findOne({ _id: msgId });
+    if (!msg) return res.status(404).json({ error: 'Message not found.' });
+    if (msg.fromUserId !== req.auth.sub) return res.status(403).json({ error: 'Not your message.' });
 
-    if (!result.deletedCount)
-      return res.status(404).json({ error: 'Message not found or not yours.' });
-
+    await db.collection('messages').deleteOne({ _id: msgId });
     res.json({ ok: true });
   } catch (e) {
     console.error('[messages DELETE]', e);
