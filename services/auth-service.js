@@ -118,8 +118,8 @@ app.post('/auth/register', async (req, res) => {
 
     if (!email || !nickname || !password || !age || !sex)
       return res.status(400).json({ error: 'All fields required.' });
-    if (typeof nickname !== 'string' || nickname.trim().length < 2)
-      return res.status(400).json({ error: 'Nickname must be at least 2 characters.' });
+    if (typeof nickname !== 'string' || nickname.trim().length < 2 || nickname.trim().length > 32)
+      return res.status(400).json({ error: 'Nickname must be 2–32 characters.' });
     if (!['m', 'f'].includes(sex))
       return res.status(400).json({ error: "sex must be 'm' or 'f'." });
     if (typeof age !== 'number' || age < 18 || age > 120)

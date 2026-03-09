@@ -88,7 +88,12 @@ app.put('/users/me', requireUser, async (req, res) => {
 
     const update = {};
 
-    if (req.body.nickname !== undefined) update.nickname = req.body.nickname.trim();
+    if (req.body.nickname !== undefined) {
+      const nick = req.body.nickname.trim();
+      if (nick.length < 2 || nick.length > 32)
+        return res.status(400).json({ error: 'Nickname must be 2–32 characters.' });
+      update.nickname = nick;
+    }
     if (req.body.age      !== undefined) update.age      = parseInt(req.body.age, 10);
     if (req.body.sex      !== undefined) update.sex      = req.body.sex;
     if (req.body.email    !== undefined) update.email    = req.body.email.toLowerCase().trim();

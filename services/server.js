@@ -149,6 +149,10 @@ function svcHeaders(token) {
 // On disconnect: gateway deletes the client's location record.
 // ============================================================
 
+const WS_MAX_BYTES    = 4096;   // max incoming message size per frame
+const WS_SEND_LIMIT   = 10;     // max message sends per connection per window
+const WS_SEND_WINDOW  = 10_000; // window length in ms
+
 const wssLoc = new WebSocketServer({ noServer: true });
 
 wssLoc.on('connection', (ws, userId, token) => {
@@ -168,6 +172,7 @@ wssLoc.on('connection', (ws, userId, token) => {
   }, 5000);
 
   ws.on('message', async raw => {
+    if (raw.length > WS_MAX_BYTES) return;
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
@@ -234,7 +239,11 @@ wssMsg.on('connection', (ws, userId, token) => {
   const listTimer = setInterval(pushList, 3000);
   pushList();  // immediate first push on connect
 
+  let sendCount = 0;
+  const sendRateTimer = setInterval(() => { sendCount = 0; }, WS_SEND_WINDOW);
+
   ws.on('message', async raw => {
+    if (raw.length > WS_MAX_BYTES) return;
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
@@ -248,6 +257,7 @@ wssMsg.on('connection', (ws, userId, token) => {
     }
 
     if (msg.type === 'send' && msg.toUserId && msg.text) {
+      if (++sendCount > WS_SEND_LIMIT) return;  // rate limit: max 10 sends per 10 s
       try {
         await fetch(`${CFG.MSG_SERVICE_URL}/messages/${encodeURIComponent(msg.toUserId)}`, {
           method:  'POST',
@@ -262,6 +272,7 @@ wssMsg.on('connection', (ws, userId, token) => {
 
   ws.on('close', () => {
     clearInterval(listTimer);
+    clearInterval(sendRateTimer);
     if (threadTimer) clearInterval(threadTimer);
     console.log('[WS:msg] -', userId);
   });
