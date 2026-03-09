@@ -560,7 +560,7 @@
   function getModal() {
     if (!_modal) {
       var el = document.getElementById('lockModal');
-      if (el) _modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: false });
+      if (el) _modal = new bootstrap.Modal(el);
     }
     return _modal;
   }
@@ -574,6 +574,8 @@
     clearInactivityTimer();
     window.BBMCrypto?.lock();
     console.log('[Lock] Session locked.');
+    var modal = getModal();
+    if (modal) modal.show();
   }
 
   // ── Unlock ────────────────────────────────────────────────
