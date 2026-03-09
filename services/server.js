@@ -222,9 +222,33 @@ function svcHeaders(token) {
 // ============================================================
 
 const WS_MAX_BYTES        = 4096;   // max incoming message size per frame
-const WS_SEND_LIMIT       = 10;     // max message sends per connection per window
+const WS_SEND_LIMIT       = 10;     // max message sends per user per window
 const WS_SEND_WINDOW      = 10_000; // window length in ms
 const WS_AUTH_TIMEOUT_MS  = 3000;   // ms to wait for first-message auth
+
+// Per-user send rate tracking — shared across all connections for the same userId
+// so opening multiple tabs doesn't multiply the send budget.
+const _wsSendCounts = new Map(); // userId -> { count, connections, timer }
+
+function acquireSendBucket(userId) {
+  if (!_wsSendCounts.has(userId)) {
+    const bucket = { count: 0, connections: 0 };
+    bucket.timer = setInterval(() => { bucket.count = 0; }, WS_SEND_WINDOW);
+    _wsSendCounts.set(userId, bucket);
+  }
+  const bucket = _wsSendCounts.get(userId);
+  bucket.connections++;
+  return bucket;
+}
+
+function releaseSendBucket(userId) {
+  const bucket = _wsSendCounts.get(userId);
+  if (!bucket) return;
+  if (--bucket.connections <= 0) {
+    clearInterval(bucket.timer);
+    _wsSendCounts.delete(userId);
+  }
+}
 
 const wssLoc = new WebSocketServer({ noServer: true });
 
@@ -357,11 +381,10 @@ function setupMsgConnection(ws, userId, token) {
     } catch { /* silent */ }
   }
 
-  const listTimer = setInterval(pushList, 3000);
+  const listTimer  = setInterval(pushList, 3000);
   pushList();  // immediate first push on connect
 
-  let sendCount = 0;
-  const sendRateTimer = setInterval(() => { sendCount = 0; }, WS_SEND_WINDOW);
+  const sendBucket = acquireSendBucket(userId);
 
   ws.on('message', async raw => {
     if (raw.length > WS_MAX_BYTES) return;
@@ -379,7 +402,7 @@ function setupMsgConnection(ws, userId, token) {
     }
 
     if (msg.type === 'send' && msg.toUserId && msg.text) {
-      if (++sendCount > WS_SEND_LIMIT) return;  // rate limit: max 10 sends per 10 s
+      if (++sendBucket.count > WS_SEND_LIMIT) return;  // rate limit: max 10 sends per user per 10 s
       try {
         await fetch(`${CFG.MSG_SERVICE_URL}/messages/${encodeURIComponent(msg.toUserId)}`, {
           method:  'POST',
@@ -394,8 +417,8 @@ function setupMsgConnection(ws, userId, token) {
 
   ws.on('close', () => {
     clearInterval(listTimer);
-    clearInterval(sendRateTimer);
     if (threadTimer) clearInterval(threadTimer);
+    releaseSendBucket(userId);
     console.log('[WS:msg] -', userId);
   });
 }

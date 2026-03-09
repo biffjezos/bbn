@@ -24,7 +24,7 @@
 
 ---
 
-### S3. MEDIUM — WS send rate limit is per-connection, not per-user
+### S3. ✅ FIXED — WS send rate limit is per-connection, not per-user
 **File:** `services/server.js` (line 363)
 
 `sendCount` is a closure variable per WebSocket connection. A user with two browser tabs open gets 2× the send budget. The limit is easy to bypass without any coordination.
