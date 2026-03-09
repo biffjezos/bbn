@@ -55,19 +55,33 @@ app.use((req, res, next) => {
 });
 
 // Verify Bearer token — registered users only
-function verifyToken(req, res, next) {
+async function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided.' });
+  let payload;
   try {
-    const payload = jwt.verify(token, CFG.JWT_SECRET);
-    if (payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
+    payload = jwt.verify(token, CFG.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token invalid or expired.' });
   }
+  if (payload.role !== 'user')
+    return res.status(403).json({ error: 'Registered account required.' });
+
+  // Verify tokenVersion so password changes invalidate old JWTs.
+  try {
+    const oid  = safeObjectId(payload.sub);
+    const user = oid && await db.collection('users').findOne(
+      { _id: oid, tokenVersion: payload.tv ?? 0 },
+      { projection: { _id: 1 } }
+    );
+    if (!user) return res.status(401).json({ error: 'Token revoked.' });
+  } catch {
+    return res.status(500).json({ error: 'Internal error.' });
+  }
+
+  req.auth = payload;
+  next();
 }
 
 

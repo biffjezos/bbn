@@ -27,9 +27,9 @@ const CFG = {
 if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
-import express                from 'express';
-import { MongoClient }       from 'mongodb';
-import jwt                   from 'jsonwebtoken';
+import express                        from 'express';
+import { MongoClient, ObjectId }      from 'mongodb';
+import jwt                            from 'jsonwebtoken';
 const EARTH_RADIUS_M = 6_371_000;
 function haversineDistance(lat1, lon1, lat2, lon2) {
   const toRad = deg => deg * Math.PI / 180;
@@ -81,6 +81,7 @@ function requireServiceToken(req, res, next) {
   try {
     const payload = jwt.verify(token, CFG.JWT_SECRET);
     if (payload.role !== 'service') return res.status(403).json({ error: 'Not a service token.' });
+    req.serviceAuth = payload;
     next();
   } catch {
     res.status(401).json({ error: 'Service token invalid or expired.' });
@@ -91,19 +92,36 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
-function verifyToken(req, res, next, requireRegistered = false) {
+async function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided.' });
+  let payload;
   try {
-    const payload = jwt.verify(token, CFG.JWT_SECRET);
-    if (requireRegistered && payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
+    payload = jwt.verify(token, CFG.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token invalid or expired.' });
   }
+  if (requireRegistered && payload.role !== 'user')
+    return res.status(403).json({ error: 'Registered account required.' });
+
+  // Verify tokenVersion so password changes invalidate old JWTs.
+  if (payload.role === 'user') {
+    try {
+      let oid;
+      try { oid = new ObjectId(payload.sub); } catch { oid = null; }
+      const user = oid && await db.collection('users').findOne(
+        { _id: oid, tokenVersion: payload.tv ?? 0 },
+        { projection: { _id: 1 } }
+      );
+      if (!user) return res.status(401).json({ error: 'Token revoked.' });
+    } catch {
+      return res.status(500).json({ error: 'Internal error.' });
+    }
+  }
+
+  req.auth = payload;
+  next();
 }
 
 const requireAny = (req, res, next) => verifyToken(req, res, next, false);
@@ -220,8 +238,12 @@ app.get('/location/nearby', requireAny, async (req, res) => {
   }
 });
 
-// GET /location/user/:userId — called internally by messages-service
-app.get('/location/user/:userId', requireAny, async (req, res) => {
+// GET /location/user/:userId — called internally by messages-service only
+app.get('/location/user/:userId', (req, res, next) => {
+  if (req.serviceAuth?.sub !== 'messages')
+    return res.status(403).json({ error: 'Not authorised.' });
+  next();
+}, requireAny, async (req, res) => {
   try {
     const loc = await db.collection('locations').findOne({ userId: req.params.userId });
     if (!loc) return res.status(404).json({ error: 'Location not found.' });

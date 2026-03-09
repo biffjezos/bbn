@@ -6,7 +6,7 @@
 
 ## SECURITY
 
-### S1. HIGH — Token revocation not enforced in location-service and favourites-service
+### S1. ✅ FIXED — Token revocation not enforced in location-service and favourites-service
 **Files:** `services/location-service.js` (line 94), `services/favourites-service.js` (line 58)
 
 `users-service` and `messages-service` check `tokenVersion` against the DB to honour password-change revocation. `location-service` and `favourites-service` do not — a user who changed their password can still push location updates and read/modify favourites with their old token until it expires (up to 7 days).
@@ -15,7 +15,7 @@
 
 ---
 
-### S2. MEDIUM — Any authenticated user can look up any other user's precise location by ID
+### S2. ✅ FIXED — Any authenticated user can look up any other user's precise location by ID
 **File:** `services/location-service.js` (line 224)
 
 `GET /location/user/:userId` is used internally by messages-service to enforce proximity, but it is protected only by a service token — not a user token. The gateway does not expose this route directly, so it is not reachable from the public internet. However, any compromised internal service can call it to pinpoint any user.
