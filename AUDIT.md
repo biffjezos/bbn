@@ -87,7 +87,7 @@ The server runs `setInterval` per connected client: location every 5 s, conversa
 
 ---
 
-### P4. LOW — Dynamic `bcryptjs` import inside route handler
+### P4. ✅ FIXED — Dynamic `bcryptjs` import inside route handler
 **File:** `services/users-service.js` (line 141)
 
 ```js

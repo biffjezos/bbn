@@ -20,6 +20,7 @@ if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(
 import express                   from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import jwt                       from 'jsonwebtoken';
+import bcrypt                    from 'bcryptjs';
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
@@ -138,8 +139,7 @@ app.put('/users/me', requireUser, async (req, res) => {
     if (req.body.email    !== undefined) update.email    = req.body.email.toLowerCase().trim();
     const changingPassword = req.body.password !== undefined && req.body.password.length >= 8;
     if (changingPassword) {
-      const bcrypt = await import('bcryptjs');
-      update.passwordHash = await bcrypt.default.hash(req.body.password, 12);
+      update.passwordHash = await bcrypt.hash(req.body.password, 12);
     }
 
     if (!Object.keys(update).length)
