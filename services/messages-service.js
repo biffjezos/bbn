@@ -10,15 +10,15 @@
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:            process.env.PORT            || 8080,
-  MONGO_URI:       process.env.MONGO_URI       || '',
-  DB_NAME:         process.env.DB_NAME         || 'boomboom',
-  JWT_SECRET:      process.env.JWT_SECRET,
-  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://loc',
+  PORT:             process.env.PORT             || 8080,
+  MONGO_URI:        process.env.MONGO_URI        || '',
+  DB_NAME:          process.env.DB_NAME          || 'boomboom',
+  JWT_SECRET:       process.env.JWT_SECRET,
+  LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'http://loc',
+  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL || 'http://tiers',
 
-  MESSAGE_MAX_CHARS:   4096,  // encrypted payload is larger than plaintext
-  MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 hours
-  MESSAGE_PROXIMITY_M: 100,
+  MESSAGE_MAX_CHARS: 4096,  // encrypted payload is larger than plaintext
+  MESSAGE_TTL_MS:    4 * 60 * 60 * 1000,   // 4 hours
 };
 if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
@@ -217,17 +217,28 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     );
     if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
 
-    // Proximity enforcement — both users must be online and within MESSAGE_PROXIMITY_M metres.
+    // Proximity enforcement — consult tiers-service for the sender's allowed radius.
+    // A radius of -1 means Infinity (no restriction), skipping the check entirely.
     const svcAuth = { Authorization: `Bearer ${serviceToken()}`, 'X-Service-Token': serviceToken() };
-    const [fromLocRes, toLocRes] = await Promise.all([
-      fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(fromId)}`,  { headers: svcAuth }),
-      fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(toId)}`,    { headers: svcAuth }),
-    ]);
-    if (fromLocRes.status !== 200 || toLocRes.status !== 200)
-      return res.status(403).json({ error: 'Both users must be sharing location to message.' });
-    const [fromLoc, toLoc] = await Promise.all([fromLocRes.json(), toLocRes.json()]);
-    if (haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon) > CFG.MESSAGE_PROXIMITY_M)
-      return res.status(403).json({ error: 'You are too far away to message this user.' });
+    const senderTier = req.auth.tier || 'regular';
+    const tierRes    = await fetch(
+      `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(senderTier)}`,
+      { headers: svcAuth }
+    ).catch(() => null);
+    const radiusM = tierRes?.ok ? (await tierRes.json()).radiusM : 0;
+
+    if (radiusM !== -1) {
+      // Finite radius: both users must be online and within the allowed distance.
+      const [fromLocRes, toLocRes] = await Promise.all([
+        fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(fromId)}`,  { headers: svcAuth }),
+        fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(toId)}`,    { headers: svcAuth }),
+      ]);
+      if (fromLocRes.status !== 200 || toLocRes.status !== 200)
+        return res.status(403).json({ error: 'Both users must be sharing location to message.' });
+      const [fromLoc, toLoc] = await Promise.all([fromLocRes.json(), toLocRes.json()]);
+      if (haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon) > radiusM)
+        return res.status(403).json({ error: 'You are too far away to message this user.' });
+    }
 
     const now       = new Date();
     const expiresAt = new Date(now.getTime() + CFG.MESSAGE_TTL_MS);
