@@ -77,12 +77,13 @@ The server runs `setInterval` per connected client: location every 5 s, conversa
 
 ---
 
-### P3. MEDIUM — No MongoDB connection pool config
+### P3. ⏸ POSTPONED — No MongoDB connection pool config
 **Files:** all services
 
 `MongoClient` is created with default settings. The Node.js driver default pool size is 5; under load this serialises DB queries.
 
 **Fix:** Pass `{ maxPoolSize: 20 }` (tune per service load profile) to `MongoClient`.
+**Postponed:** Not an issue at current traffic levels. Revisit if query queuing becomes observable under load.
 
 ---
 
