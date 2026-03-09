@@ -420,20 +420,24 @@ function setupMsgConnection(ws, userId, token) {
         wsSend(ws, { type: 'send:error', error: 'Rate limit exceeded. Please wait a moment.' });
         return;
       }
+      console.log(`[WS:send] ${userId} -> ${msg.toUserId}`);
       try {
         const sendRes = await fetch(`${CFG.MSG_SERVICE_URL}/messages/${encodeURIComponent(msg.toUserId)}`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
           body:    JSON.stringify({ text: msg.text }),
         });
+        console.log(`[WS:send] msg-svc responded ${sendRes.status}`);
         if (!sendRes.ok) {
           const body = await sendRes.json().catch(() => ({}));
+          console.warn(`[WS:send] msg-svc error:`, body);
           wsSend(ws, { type: 'send:error', error: body.error || 'Failed to send message.' });
         } else {
           // Push updated thread immediately so sender sees the message right away
           if (viewingUserId === msg.toUserId) await pushThread();
         }
-      } catch {
+      } catch (err) {
+        console.error(`[WS:send] fetch failed:`, err.message);
         wsSend(ws, { type: 'send:error', error: 'Could not reach messaging service.' });
       }
     }
