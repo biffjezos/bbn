@@ -18,8 +18,8 @@
   let lastNearbyUsers = [];
   let meetControl     = null;
 
-  // View radius per tier (must match tiers-service.js FEATURES.view_radius)
-  const VIEW_RADIUS = { guest: 0, regular: 1000, premium: 3000 };
+  // View radius per tier — mirrors tiers-service.js FEATURES.see_nearby.radius
+  const VIEW_RADIUS = { guest: 1000, regular: 1000, premium: 3000 };
 
   const TILE_URL     = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
   const TILE_ATTR    = '&copy; OpenStreetMap contributors &copy; CARTO';

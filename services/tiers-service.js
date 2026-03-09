@@ -39,9 +39,9 @@ const FEATURES = {
   see_nearby: {
     minTier: 'guest',
     radius: {
-      guest:   Infinity,
-      regular: Infinity,
-      premium: Infinity,
+      guest:   1000,
+      regular: 1000,
+      premium: 3000,
     },
   },
 
@@ -66,16 +66,6 @@ const FEATURES = {
 
   manage_favourites: {
     minTier: 'regular',
-  },
-
-  // Visible radius on map (metres). Shown as a circle around the user's pin.
-  view_radius: {
-    minTier: 'guest',
-    radius: {
-      guest:   0,
-      regular: 1000,
-      premium: 3000,
-    },
   },
 
   // ── ADD NEW FEATURES HERE ───────────────────────────────────
