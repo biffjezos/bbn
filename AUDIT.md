@@ -155,12 +155,12 @@ Both `messages-service` and `favourites-service` call `createIndex` during start
 
 ## USABILITY
 
-### U1. MEDIUM — Favourites is premium-only but there is no UI path to upgrade
+### U1. ✅ FIXED — Favourites is premium-only but there is no UI path to upgrade
 **File:** `services/tiers-service.js` (line 67)
 
 `manage_favourites` requires `premium` tier. A `regular` user hitting `/api/favourites` gets a 403. If the UI doesn't gate the Favourites page based on tier, users will see a loading spinner or an unexplained error instead of a clear upgrade prompt.
 
-**Fix:** Return the user's `tier` from the gateway tier-check 403 response (already done) and ensure the frontend reads it to show an upgrade CTA instead of an infinite loader.
+**Fix:** Favourites page now detects 403 and renders a CTA explaining the feature is currently limited, with a link to `/donate/`. The map pin modal also catches 403 on `addFavourite` and shows an inline note instead of a bare alert.
 
 ---
 
