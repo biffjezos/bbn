@@ -447,41 +447,53 @@
    }
    .bbm-marker:hover { transform: scale(1.15); }
    
-   /* 👆 male — light blue */
+   /* 👆 male — blue-tinted emoji, no circle (self overrides below) */
    .bbm-marker.male   {
-     background:   rgba(14,184,232,0.22);
-     border-color: var(--bbm-blue);
-     box-shadow:   0 0 10px rgba(14,184,232,0.45);
+     background:   transparent;
+     border-color: transparent;
+     box-shadow:   none;
+     filter: sepia(1) saturate(8) hue-rotate(175deg) brightness(1.3);
    }
-   /* 👌 female — pink */
+   /* 👌 female — pink-tinted emoji, no circle */
    .bbm-marker.female {
-     background:   rgba(232,24,109,0.22);
-     border-color: var(--bbm-pink);
-     box-shadow:   0 0 10px rgba(232,24,109,0.45);
+     background:   transparent;
+     border-color: transparent;
+     box-shadow:   none;
+     filter: sepia(1) saturate(8) hue-rotate(290deg) brightness(1.1);
    }
-   /* 👊 guest/unknown — yellow */
+   /* 👊 guest/unknown — warm gold tinted emoji, no circle */
    .bbm-marker.guest {
-     background:   rgba(255,210,0,0.15);
-     border-color: rgba(255,210,0,0.6);
-     box-shadow:   0 0 10px rgba(255,210,0,0.3);
+     background:   transparent;
+     border-color: transparent;
+     box-shadow:   none;
+     filter: sepia(1) saturate(5) brightness(1.3);
    }
    
-   /* Self marker — slightly larger + stronger glow */
-   .bbm-marker.self        { width: 3.1rem; height: 3.1rem; font-size: 1.5rem; border-width: 2.5px; }
+   /* Self marker — larger, keeps circle, uses CSS var for compass rotation */
+   .bbm-marker.self {
+     width: 3.1rem; height: 3.1rem; font-size: 1.5rem; border-width: 2.5px;
+     transform-origin: center;
+     transform: rotate(var(--bbm-bearing, 0deg));
+     transition: transform 0.45s ease;
+   }
+   .bbm-marker.self:hover  { transform: rotate(var(--bbm-bearing, 0deg)) scale(1.12); }
    .bbm-marker.self.male   {
      background:   rgba(14,184,232,0.32);
      border-color: var(--bbm-blue-light);
      box-shadow:   0 0 18px rgba(14,184,232,0.65), 0 0 36px rgba(14,184,232,0.2);
+     filter: none;
    }
    .bbm-marker.self.female {
      background:   rgba(232,24,109,0.32);
      border-color: var(--bbm-pink-light);
      box-shadow:   0 0 18px rgba(232,24,109,0.65), 0 0 36px rgba(232,24,109,0.2);
+     filter: none;
    }
    .bbm-marker.self.guest  {
      background:   rgba(255,210,0,0.2);
      border-color: rgba(255,210,0,0.8);
      box-shadow:   0 0 18px rgba(255,210,0,0.5), 0 0 36px rgba(255,210,0,0.15);
+     filter: none;
    }
    
    /* ============================================================
@@ -867,3 +879,79 @@
    .bbm-donate-badge .bi-heart-fill {
      font-size: 0.7rem;
    }
+
+   /* ============================================================
+      FAV CONNECTING LINES
+      Animated dashed curved lines from self → favourite pins.
+      The class is applied to the Leaflet <g> wrapping the path.
+      ============================================================ */
+   .bbm-fav-line path {
+     stroke-dashoffset: 0;
+     animation: bbm-fav-flow 1.1s linear infinite;
+   }
+   @keyframes bbm-fav-flow {
+     to { stroke-dashoffset: -16; }
+   }
+   .bbm-fav-dist {
+     display: block;
+     color: rgba(255, 255, 255, 0.8);
+     font-size: 0.58rem;
+     font-weight: 700;
+     white-space: nowrap;
+     text-align: center;
+     transform-origin: center;
+     text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.7);
+     pointer-events: none;
+     letter-spacing: 0.05em;
+     text-transform: uppercase;
+   }
+
+   /* ============================================================
+      MEETING MODE PILL (Leaflet control, topright)
+      ============================================================ */
+   .bbm-meet-pill {
+     display: flex;
+     align-items: center;
+     gap: 0.45rem;
+     background: var(--bbm-surface-2);
+     border: 1px solid rgba(232,24,109,0.45);
+     border-radius: 2rem;
+     padding: 0.35rem 0.75rem 0.35rem 0.65rem;
+     font-size: 0.78rem;
+     box-shadow: 0 4px 20px rgba(0,0,0,0.55), 0 0 0 1px rgba(232,24,109,0.12);
+     max-width: 220px;
+     margin-top: 0.6rem;
+     margin-right: 0.6rem;
+   }
+   .bbm-meet-icon { font-size: 1rem; flex-shrink: 0; }
+   .bbm-meet-name {
+     font-weight: 700;
+     color: var(--bbm-text);
+     flex: 1;
+     overflow: hidden;
+     text-overflow: ellipsis;
+     white-space: nowrap;
+   }
+   .bbm-meet-dist {
+     color: var(--bbm-pink-light);
+     font-size: 0.68rem;
+     font-weight: 600;
+     white-space: nowrap;
+     flex-shrink: 0;
+   }
+   .bbm-meet-dist.bbm-meet-absent { color: var(--bbm-text-muted); }
+   .bbm-meet-close {
+     background: none;
+     border: none;
+     color: var(--bbm-text-muted);
+     cursor: pointer;
+     padding: 0 0 0 0.2rem;
+     font-size: 0.72rem;
+     line-height: 1;
+     flex-shrink: 0;
+     transition: color 0.15s;
+   }
+   .bbm-meet-close:hover { color: var(--bbm-text); }
+
+   /* Meet toggle button in favourites list */
+   .fav-meet-btn.active { color: var(--bbm-pink-light) !important; }

@@ -1,9 +1,9 @@
 <!-- ============================================================
      MODAL — Session Lock
-     Shown after inactivity or tab hidden. Cannot be dismissed
-     without re-entering password. No close button.
+     Shown after inactivity or tab hidden. Can be dismissed with
+     the × button to navigate away without unlocking.
      ============================================================ -->
-<div class="modal fade" id="lockModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+<div class="modal fade" id="lockModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
     <div class="modal-content">
 
@@ -11,11 +11,12 @@
         <h5 class="modal-title">
           <i class="bi bi-lock-fill me-2 text-pink"></i>Session Locked
         </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
 
       <div class="modal-body pt-2">
         <p class="text-muted-bb small mb-3">
-          Your session was locked due to inactivity. Enter your password to continue.
+          Your session was locked. Enter your password to decrypt messages, or close this to navigate elsewhere.
         </p>
 
         <div id="lockError" class="alert alert-danger d-none mb-3" role="alert"></div>

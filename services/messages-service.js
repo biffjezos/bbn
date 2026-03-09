@@ -10,30 +10,35 @@
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:            process.env.PORT            || 8080,
-  MONGO_URI:       process.env.MONGO_URI       || '',
-  DB_NAME:         process.env.DB_NAME         || 'boomboom',
-  JWT_SECRET:      process.env.JWT_SECRET      || 'change-me-in-production',
-  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://loc',
+  PORT:             process.env.PORT             || 8080,
+  MONGO_URI:        process.env.MONGO_URI        || '',
+  DB_NAME:          process.env.DB_NAME          || 'boomboom',
+  JWT_SECRET:       process.env.JWT_SECRET,
+  LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'http://loc',
+  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL || 'http://tiers',
 
-  MESSAGE_MAX_CHARS:   4096,  // encrypted payload is larger than plaintext
-  MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 hours
-  MESSAGE_PROXIMITY_M: 100,
+  MESSAGE_MAX_CHARS: 4096,  // encrypted payload is larger than plaintext
+  MESSAGE_TTL_MS:    4 * 60 * 60 * 1000,   // 4 hours
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
 import express                   from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import jwt                       from 'jsonwebtoken';
+const EARTH_RADIUS_M = 6_371_000;
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const toRad = deg => deg * Math.PI / 180;
+  const dLat  = toRad(lat2 - lat1);
+  const dLon  = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[messages] DB connected.');
-
-await db.collection('messages').createIndex(
-  { expiresAt: 1 },
-  { expireAfterSeconds: 0, background: true }
-);
 
 // --- Express ------------------------------------------------
 const app = express();
@@ -55,32 +60,52 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
-function verifyToken(req, res, next) {
+async function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  if (!token) return res.status(401).json({ error: 'No token provided.', code: 'NO_TOKEN' });
+  let payload;
   try {
-    const payload = jwt.verify(token, CFG.JWT_SECRET);
-    if (payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth  = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
+    payload = jwt.verify(token, CFG.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
+  if (payload.role !== 'user')
+    return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
+
+  // Verify tokenVersion so password changes invalidate old JWTs.
+  // Compare in JS (not as a Mongo filter) so legacy docs without the field
+  // (which default to 0) are not incorrectly treated as revoked.
+  try {
+    const oid  = safeObjectId(payload.sub);
+    const user = oid && await db.collection('users').findOne(
+      { _id: oid },
+      { projection: { tokenVersion: 1 } }
+    );
+    if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+      return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
+  } catch {
+    return res.status(500).json({ error: 'Internal error.' });
+  }
+
+  req.auth = payload;
+  next();
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// --- Location helper ----------------------------------------
-// --- Service token ------------------------------------------
+// --- Service token (cached) ----------------------------------
+let _svcToken = null;
+let _svcTokenExpiry = 0;
+
 function serviceToken() {
-  return jwt.sign(
-    { sub: 'messages', role: 'service' },
-    CFG.JWT_SECRET,
-    { expiresIn: '60s' }
-  );
+  if (Date.now() < _svcTokenExpiry - 5_000) return _svcToken;
+  _svcToken = jwt.sign({ sub: 'messages', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
+  _svcTokenExpiry = Date.now() + 60_000;
+  return _svcToken;
 }
+
+// --- Location helper -----------------------------------------
 
 async function getLocation(userId) {
   try {
@@ -94,17 +119,24 @@ async function getLocation(userId) {
   }
 }
 
-// --- Haversine ----------------------------------------------
-const EARTH_RADIUS_M = 6_371_000;
-const toRad = deg => deg * Math.PI / 180;
+// --- Helpers ------------------------------------------------
+function safeObjectId(str) {
+  try { return new ObjectId(str); } catch { return null; }
+}
 
-function haversineDistance(lat1, lon1, lat2, lon2) {
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// Validate that text is an E2EE ciphertext envelope.
+// Format (ECDH AES-GCM — sender and recipient derive the same shared key, so
+// a single ciphertext is readable by both parties):
+//   { cipher: { ivB64: '<base64>', cipherB64: '<base64>' }, recipientId: '<userId>' }
+// Rejects plaintext and malformed payloads before they reach the DB.
+const BASE64_RE = /^[A-Za-z0-9+/]+=*$/;
+function isBase64(s) { return typeof s === 'string' && s.length > 0 && BASE64_RE.test(s); }
+function isValidCipherHalf(h) { return h && isBase64(h.ivB64) && isBase64(h.cipherB64); }
+function isValidCiphertext(text) {
+  try {
+    const p = JSON.parse(text);
+    return isValidCipherHalf(p.cipher);
+  } catch { return false; }
 }
 
 // --- Routes -------------------------------------------------
@@ -132,9 +164,8 @@ app.get('/messages/:userId', verifyToken, async (req, res) => {
     const me      = req.auth.sub;
     const otherId = req.params.userId;
 
-    let otherOid;
-    try { otherOid = new ObjectId(otherId); }
-    catch { return res.status(400).json({ error: 'Invalid userId.' }); }
+    const otherOid = safeObjectId(otherId);
+    if (!otherOid) return res.status(400).json({ error: 'Invalid userId.' });
 
     const other = await db.collection('users').findOne(
       { _id: otherOid },
@@ -168,6 +199,8 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'text required.' });
     if (text.length > CFG.MESSAGE_MAX_CHARS)
       return res.status(400).json({ error: `Message exceeds ${CFG.MESSAGE_MAX_CHARS} characters.` });
+    if (!isValidCiphertext(text))
+      return res.status(400).json({ error: 'Message must be a valid E2EE ciphertext envelope.' });
 
     const fromId = req.auth.sub;
     const toId   = req.params.userId;
@@ -175,9 +208,8 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     if (fromId === toId)
       return res.status(400).json({ error: 'Cannot message yourself.' });
 
-    let toOid;
-    try { toOid = new ObjectId(toId); }
-    catch { return res.status(400).json({ error: 'Invalid userId.' }); }
+    const toOid = safeObjectId(toId);
+    if (!toOid) return res.status(400).json({ error: 'Invalid userId.' });
 
     const toUser = await db.collection('users').findOne(
       { _id: toOid },
@@ -185,7 +217,28 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     );
     if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
 
-    // Proximity enforcement disabled — all users can message regardless of distance
+    // Proximity enforcement — consult tiers-service for the sender's allowed radius.
+    // A radius of -1 means Infinity (no restriction), skipping the check entirely.
+    const svcAuth = { Authorization: `Bearer ${serviceToken()}`, 'X-Service-Token': serviceToken() };
+    const senderTier = req.auth.tier || 'regular';
+    const tierRes    = await fetch(
+      `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(senderTier)}`,
+      { headers: svcAuth }
+    ).catch(() => null);
+    const radiusM = tierRes?.ok ? (await tierRes.json()).radiusM : -1;
+
+    if (radiusM !== -1) {
+      // Finite radius: both users must be online and within the allowed distance.
+      const [fromLocRes, toLocRes] = await Promise.all([
+        fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(fromId)}`,  { headers: svcAuth }),
+        fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(toId)}`,    { headers: svcAuth }),
+      ]);
+      if (fromLocRes.status !== 200 || toLocRes.status !== 200)
+        return res.status(403).json({ error: 'Both users must be sharing location to message.' });
+      const [fromLoc, toLoc] = await Promise.all([fromLocRes.json(), toLocRes.json()]);
+      if (haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon) > radiusM)
+        return res.status(403).json({ error: 'You are too far away to message this user.' });
+    }
 
     const now       = new Date();
     const expiresAt = new Date(now.getTime() + CFG.MESSAGE_TTL_MS);
@@ -208,18 +261,14 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
 // DELETE /messages/:id — sender deletes their own message
 app.delete('/messages/:id', verifyToken, async (req, res) => {
   try {
-    let msgId;
-    try   { msgId = new ObjectId(req.params.id); }
-    catch { return res.status(400).json({ error: 'Invalid message id.' }); }
+    const msgId = safeObjectId(req.params.id);
+    if (!msgId) return res.status(400).json({ error: 'Invalid message id.' });
 
-    const result = await db.collection('messages').deleteOne({
-      _id:        msgId,
-      fromUserId: req.auth.sub,
-    });
+    const msg = await db.collection('messages').findOne({ _id: msgId });
+    if (!msg) return res.status(404).json({ error: 'Message not found.' });
+    if (msg.fromUserId !== req.auth.sub) return res.status(403).json({ error: 'Not your message.' });
 
-    if (!result.deletedCount)
-      return res.status(404).json({ error: 'Message not found or not yours.' });
-
+    await db.collection('messages').deleteOne({ _id: msgId });
     res.json({ ok: true });
   } catch (e) {
     console.error('[messages DELETE]', e);

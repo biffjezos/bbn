@@ -80,7 +80,234 @@ function loadingHtml(text = 'Loading…') {
   return `<div class="bbm-loading"><p>${escHtml(text)}</p></div>`;
 }
 
+// ── Messages WebSocket ────────────────────────────────────
+// One connection per page load. Server pushes 'conversations'
+// every 3 s and 'thread' every 2 s (when a thread is viewed).
+
+let _msgWs      = null;
+let _wsRetry    = 1000;
+let _wsRetryTmr = null;
+
+function msgWsUrl() {
+  const api  = window.BOOMBOOM_API_URL || '';
+  const base = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
+  return `${base}/ws/messages`;
+}
+
+function wsSend(obj) {
+  if (_msgWs?.readyState === WebSocket.OPEN) {
+    _msgWs.send(JSON.stringify(obj));
+    return true;
+  }
+  return false;
+}
+
+function connectMsgWS() {
+  if (!isRegistered()) return;
+  if (_msgWs && (_msgWs.readyState === WebSocket.OPEN || _msgWs.readyState === WebSocket.CONNECTING)) return;
+
+  _msgWs = new WebSocket(msgWsUrl());
+
+  _msgWs.onopen = function () {
+    _wsRetry = 1000;
+    console.log('[Msg] WS connected');
+    // First message must be auth (gateway requirement)
+    wsSend({ type: 'auth', token: window.Auth?.getToken?.() || '' });
+    // If we're on the thread page, subscribe immediately
+    const params = new URLSearchParams(window.location.search);
+    const uid    = params.get('uid');
+    if (uid) wsSend({ type: 'view', userId: uid });
+  };
+
+  _msgWs.onmessage = function (e) {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'conversations') handleConversationsUpdate(msg.messages || []);
+      if (msg.type === 'thread')         handleThreadUpdate(msg.messages || []);
+      if (msg.type === 'send:error') {
+        const el = sendError();
+        if (el) { el.textContent = msg.error || 'Failed to send message.'; el.classList.remove('d-none'); }
+      }
+    } catch { /* silent */ }
+  };
+
+  _msgWs.onclose = function () {
+    _msgWs = null;
+    if (!isRegistered()) return;
+    if (_wsRetryTmr) clearTimeout(_wsRetryTmr);
+    _wsRetryTmr = setTimeout(connectMsgWS, _wsRetry);
+    _wsRetry    = Math.min(_wsRetry * 2, 30000);
+    console.log('[Msg] WS closed, retrying in', _wsRetry + 'ms');
+  };
+}
+
 // ── Conversation list ─────────────────────────────────────
+const _profileCache = {};
+
+async function handleConversationsUpdate(messages) {
+  const wrap = document.getElementById('convListWrap');
+  if (!wrap) return;
+
+  if (messages.length === 0) {
+    wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-chat-dots"></i>
+      <p>No conversations yet.<br>Find someone on the map and say hi!</p></div>`;
+    return;
+  }
+
+  const myId    = getMyId();
+  const threads = {};
+  messages.forEach(m => {
+    const partnerId = m.fromUserId === myId ? m.toUserId : m.fromUserId;
+    if (!threads[partnerId] || new Date(m.sentAt) > new Date(threads[partnerId].latest.sentAt)) {
+      threads[partnerId] = { userId: partnerId, latest: m };
+    }
+  });
+
+  const partnerIds = Object.keys(threads);
+
+  // Fetch profiles (cached)
+  await Promise.allSettled(partnerIds.map(async uid => {
+    if (!_profileCache[uid]) {
+      try { _profileCache[uid] = await window.Api.getProfile(uid); } catch { _profileCache[uid] = {}; }
+    }
+    threads[uid].nickname  = _profileCache[uid].nickname  || uid;
+    threads[uid].sex       = _profileCache[uid].sex       || null;
+    threads[uid].publicKey = _profileCache[uid].publicKey || null;
+  }));
+
+  // Decrypt previews
+  await Promise.all(Object.values(threads).map(async t => {
+    try {
+      const payload = JSON.parse(t.latest.text);
+      t.preview = payload.cipher
+        ? await decryptFrom(payload, t.latest.fromUserId, t.latest.toUserId)
+        : t.latest.text;
+    } catch {
+      t.preview = t.latest.text;
+    }
+  }));
+
+  wrap.innerHTML = Object.values(threads)
+    .sort((a, b) => new Date(b.latest.sentAt) - new Date(a.latest.sentAt))
+    .map(t => {
+      const href = `${window.BOOMBOOM_BASE || ''}/messages/thread/?uid=${encodeURIComponent(t.userId)}&name=${encodeURIComponent(t.nickname)}`;
+      return `<a href="${href}" class="conv-item">
+        <div class="conv-avatar ${sexClass(t.sex)}">${sexEmoji(t.sex)}</div>
+        <div class="conv-body">
+          <div class="conv-name">${escHtml(t.nickname)}</div>
+          <div class="conv-preview">${escHtml(t.preview || t.latest.text)}</div>
+        </div>
+        <div class="conv-meta">${timeAgo(t.latest.sentAt)}<i class="bi bi-chevron-right d-block text-faint mt-1"></i></div>
+      </a>`;
+    }).join('');
+}
+
+// ── Message thread ────────────────────────────────────────
+
+const msgsEl    = () => document.getElementById('threadMsgs');
+const inputEl   = () => document.getElementById('msgInput');
+const charCount = () => document.getElementById('charCount');
+const sendError = () => document.getElementById('sendError');
+
+async function handleThreadUpdate(messages) {
+  const el  = msgsEl();
+  const myId = getMyId();
+  if (!el) return;
+
+  if (messages.length === 0) {
+    el.innerHTML = `<div class="bbm-empty" style="padding:2rem 0">
+      <i class="bi bi-chat-heart"></i><p>No messages yet. Say hi!</p></div>`;
+    return;
+  }
+
+  const decrypted = await Promise.all(messages.map(async m => ({
+    ...m,
+    text: await decodeMessage(m),
+  })));
+
+  el.innerHTML = decrypted.map(m => {
+    const out = m.fromUserId === myId;
+    return `<div class="d-flex ${out ? 'justify-content-end' : 'justify-content-start'}">
+      <div>
+        <div class="message-bubble ${out ? 'outgoing' : 'incoming'} px-3 py-2">${escHtml(m.text)}</div>
+        <div class="message-expiry ${out ? 'text-end' : ''} mt-1 px-1 small">expires ${timeUntil(m.expiresAt)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.scrollTop = el.scrollHeight;
+}
+
+function setupThreadUI(userId) {
+  const input  = inputEl();
+  const sendBtn = document.getElementById('sendBtn');
+  const cc      = charCount();
+  const errEl   = sendError();
+
+  if (input) {
+    input.addEventListener('input', function () {
+      const rem = 144 - this.value.length;
+      if (cc) { cc.textContent = rem; cc.style.color = rem < 0 ? '#ff8a80' : ''; }
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendBtn?.click(); }
+    });
+  }
+
+  if (sendBtn) {
+    sendBtn.addEventListener('click', async () => {
+      const text = input?.value.trim();
+      if (!text) return;
+      errEl?.classList.add('d-none');
+
+      if (!window.requireUnlocked?.()) { console.warn('[Send] blocked: crypto not unlocked'); return; }
+
+      try {
+        console.log('[Send] encrypting for', userId);
+        const encrypted = await encryptFor(text, userId);
+        const body      = JSON.stringify(encrypted);
+
+        // Try WS first; fall back to HTTP
+        const sentViaWs = wsSend({ type: 'send', toUserId: userId, text: body });
+        console.log('[Send] via', sentViaWs ? 'WS' : 'HTTP');
+        if (!sentViaWs) {
+          await window.Api.sendMessage(userId, body);
+        }
+
+        if (input)  input.value = '';
+        if (cc)     cc.textContent = '144';
+      } catch (err) {
+        console.error('[Send] error:', err);
+        if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
+      }
+    });
+  }
+}
+
+async function renderThread() {
+  const params      = new URLSearchParams(window.location.search);
+  const userId      = params.get('uid');
+  const displayName = params.get('name') || userId;
+
+  const nameEl = document.getElementById('threadDisplayName');
+  if (nameEl) nameEl.textContent = displayName;
+
+  if (!isRegistered() || !userId) {
+    const _base = window.BOOMBOOM_BASE || '';
+    window.location.href = isRegistered() ? _base + '/messages/' : _base + '/';
+    return;
+  }
+
+  const el = msgsEl();
+  if (el) el.innerHTML = loadingHtml('Loading messages…');
+
+  setupThreadUI(userId);
+
+  // Tell the server which thread to subscribe to
+  wsSend({ type: 'view', userId });
+  window.addEventListener('beforeunload', () => wsSend({ type: 'view', userId: null }), { once: true });
+}
+
 async function renderConversationList() {
   const wrap = document.getElementById('convListWrap');
   if (!wrap) return;
@@ -93,167 +320,46 @@ async function renderConversationList() {
   }
 
   wrap.innerHTML = loadingHtml('Loading conversations…');
-
-  try {
-    const { messages = [] } = await window.Api.getConversations();
-
-    if (messages.length === 0) {
-      wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-chat-dots"></i>
-        <p>No conversations yet.<br>Find someone on the map and say hi!</p></div>`;
-      return;
-    }
-
-    // getMyId() called here — guaranteed to have a valid user token at this point
-    const myId = getMyId();
-    const threads = {};
-    messages.forEach(m => {
-      const partnerId = m.fromUserId === myId ? m.toUserId : m.fromUserId;
-      if (!threads[partnerId] || new Date(m.sentAt) > new Date(threads[partnerId].latest.sentAt)) {
-        threads[partnerId] = { userId: partnerId, latest: m };
-      }
-    });
-
-    const partnerIds = Object.keys(threads);
-    const profiles   = await Promise.allSettled(partnerIds.map(uid => window.Api.getProfile(uid)));
-    partnerIds.forEach((uid, i) => {
-      const r = profiles[i];
-      threads[uid].nickname  = r.status === 'fulfilled' ? (r.value.nickname || uid) : uid;
-      threads[uid].sex       = r.status === 'fulfilled' ? (r.value.sex || null) : null;
-      threads[uid].publicKey = r.status === 'fulfilled' ? (r.value.publicKey || null) : null;
-    });
-
-    await Promise.all(Object.values(threads).map(async t => {
-      try {
-        const payload = JSON.parse(t.latest.text);
-        if (payload.cipher) {
-          t.preview = await decryptFrom(payload, t.latest.fromUserId, t.latest.toUserId);
-        } else {
-          t.preview = t.latest.text;
-        }
-      } catch {
-        t.preview = t.latest.text;
-      }
-    }));
-
-    wrap.innerHTML = Object.values(threads)
-      .sort((a, b) => new Date(b.latest.sentAt) - new Date(a.latest.sentAt))
-      .map(t => {
-        const href = `/messages/thread/?uid=${encodeURIComponent(t.userId)}&name=${encodeURIComponent(t.nickname)}`;
-        return `<a href="${href}" class="conv-item">
-          <div class="conv-avatar ${sexClass(t.sex)}">${sexEmoji(t.sex)}</div>
-          <div class="conv-body">
-            <div class="conv-name">${escHtml(t.nickname)}</div>
-            <div class="conv-preview">${escHtml(t.preview || t.latest.text)}</div>
-          </div>
-          <div class="conv-meta">${timeAgo(t.latest.sentAt)}<i class="bi bi-chevron-right d-block text-faint mt-1"></i></div>
-        </a>`;
-      }).join('');
-
-  } catch (err) {
-    wrap.innerHTML = `<div class="alert alert-danger mt-3">${escHtml(err.message)}</div>`;
-  }
+  // Actual data arrives via WS push → handleConversationsUpdate()
 }
 
-// ── Message thread ────────────────────────────────────────
-async function renderThread() {
-  const params      = new URLSearchParams(window.location.search);
-  const userId      = params.get('uid');
-  const displayName = params.get('name') || userId;
+// ── Auto-run when loaded as extra_js ─────────────────────
+var _threadInitialized = false;
 
-  const nameEl = document.getElementById('threadDisplayName');
-  if (nameEl) nameEl.textContent = displayName;
+(window.__authReady || Promise.resolve()).then(async function() {
+  const hasConvList = !!document.getElementById('convListWrap');
+  const hasThread   = !!document.getElementById('threadMsgs');
+  if (!hasConvList && !hasThread) return;
 
-  if (!isRegistered() || !userId) {
-    window.location.href = isRegistered() ? '/messages/' : '/';
+  // Sync crypto shadow state (SharedWorker may already hold key from prev page)
+  await window.BBMCrypto?.ready?.();
+
+  // Check / prompt for key unlock before attempting any decryption
+  if (window.requireUnlocked && !window.requireUnlocked()) {
+    // Lock modal is now showing — rendering deferred to bbm:unlocked
     return;
   }
 
-  const msgsEl    = document.getElementById('threadMsgs');
-  const inputEl   = document.getElementById('msgInput');
-  const sendBtn   = document.getElementById('sendBtn');
-  const charCount = document.getElementById('charCount');
-  const sendError = document.getElementById('sendError');
-  let   pollTimer = null;
+  connectMsgWS();
 
-  async function load() {
-    // getMyId() called fresh on every load/poll — always reflects current token (US2 fix)
-    const myId = getMyId();
-    try {
-      const { messages = [] } = await window.Api.getConversation(userId);
-      if (!msgsEl) return;
-
-      if (messages.length === 0) {
-        msgsEl.innerHTML = `<div class="bbm-empty" style="padding:2rem 0">
-          <i class="bi bi-chat-heart"></i><p>No messages yet. Say hi!</p></div>`;
-        return;
-      }
-
-      const decrypted = await Promise.all(messages.map(async m => ({
-        ...m,
-        text: await decodeMessage(m, userId),
-      })));
-
-      msgsEl.innerHTML = decrypted.map(m => {
-        const out = m.fromUserId === myId;
-        return `<div class="d-flex ${out ? 'justify-content-end' : 'justify-content-start'}">
-          <div>
-            <div class="message-bubble ${out ? 'outgoing' : 'incoming'} px-3 py-2">${escHtml(m.text)}</div>
-            <div class="message-expiry ${out ? 'text-end' : ''} mt-1 px-1 small">expires ${timeUntil(m.expiresAt)}</div>
-          </div>
-        </div>`;
-      }).join('');
-
-      msgsEl.scrollTop = msgsEl.scrollHeight;
-    } catch { /* silent on poll */ }
-  }
-
-  inputEl?.addEventListener('input', function () {
-    const rem = 144 - this.value.length;
-    if (charCount) { charCount.textContent = rem; charCount.style.color = rem < 0 ? '#ff8a80' : ''; }
-  });
-  inputEl?.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendBtn?.click(); }
-  });
-
-  sendBtn?.addEventListener('click', async () => {
-    const text = inputEl?.value.trim();
-    if (!text) return;
-    sendError?.classList.add('d-none');
-
-    if (!window.requireUnlocked?.()) return;
-
-    try {
-      const encrypted = await encryptFor(text, userId);
-      const body = JSON.stringify(encrypted);
-      await window.Api.sendMessage(userId, body);
-      if (inputEl) inputEl.value = '';
-      if (charCount) charCount.textContent = '144';
-      await load();
-    } catch (err) {
-      if (sendError) { sendError.textContent = err.message; sendError.classList.remove('d-none'); }
-    }
-  });
-
-  await load();
-  msgsEl?.addEventListener('bbm:reload', load);
-  pollTimer = setInterval(load, 5000);
-  window.addEventListener('beforeunload', () => clearInterval(pollTimer), { once: true });
-}
-
-// Auto-run when loaded as extra_js
-(window.__authReady || Promise.resolve()).then(function() {
-  if (document.getElementById('convListWrap'))  renderConversationList();
-  if (document.getElementById('threadMsgs'))    renderThread();
-
-  // If keys are locked on arrival, show the modal immediately
-  if (window.requireUnlocked && !window.requireUnlocked()) {
-    // modal is now showing — re-render happens via bbm:unlocked below
-  }
+  if (hasConvList) renderConversationList();
+  if (hasThread)   { _threadInitialized = true; renderThread(); }
 });
 
-// After unlock: re-render conversation list, reload thread messages
+// After unlock (first time or re-unlock after inactivity lock)
 window.addEventListener('bbm:unlocked', function () {
-  if (document.getElementById('convListWrap')) renderConversationList();
-  var msgsEl = document.getElementById('threadMsgs');
-  if (msgsEl) msgsEl.dispatchEvent(new CustomEvent('bbm:reload'));
+  connectMsgWS();
+  if (document.getElementById('convListWrap')) {
+    renderConversationList();
+  }
+  if (document.getElementById('threadMsgs')) {
+    if (_threadInitialized) {
+      // Thread already set up — re-subscribe to push updates
+      const uid = new URLSearchParams(window.location.search).get('uid');
+      if (uid) wsSend({ type: 'view', userId: uid });
+    } else {
+      _threadInitialized = true;
+      renderThread();
+    }
+  }
 });

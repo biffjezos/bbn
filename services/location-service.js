@@ -11,7 +11,7 @@ const CFG = {
   PORT:      process.env.PORT       || 8080,
   MONGO_URI: process.env.MONGO_URI  || '',
   DB_NAME:   process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
+  JWT_SECRET: process.env.JWT_SECRET,
 
   UPDATE_INTERVAL_MS:  15_000,
   UPDATE_DISTANCE_M:   100,
@@ -24,28 +24,25 @@ const CFG = {
   MAX_VISIBLE_REGISTERED:  Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
-import express         from 'express';
-import { MongoClient } from 'mongodb';
-import jwt             from 'jsonwebtoken';
+import express                        from 'express';
+import { MongoClient, ObjectId }      from 'mongodb';
+import jwt                            from 'jsonwebtoken';
+const EARTH_RADIUS_M = 6_371_000;
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const toRad = deg => deg * Math.PI / 180;
+  const dLat  = toRad(lat2 - lat1);
+  const dLon  = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[location] DB connected.');
-
-// --- Haversine (used for shouldUpdate and distanceM output) -
-const EARTH_RADIUS_M = 6_371_000;
-const toRad = deg => deg * Math.PI / 180;
-
-function haversineDistance(lat1, lon1, lat2, lon2) {
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 function shouldUpdate(prev, next) {
   if (!prev) return true;
@@ -84,6 +81,7 @@ function requireServiceToken(req, res, next) {
   try {
     const payload = jwt.verify(token, CFG.JWT_SECRET);
     if (payload.role !== 'service') return res.status(403).json({ error: 'Not a service token.' });
+    req.serviceAuth = payload;
     next();
   } catch {
     res.status(401).json({ error: 'Service token invalid or expired.' });
@@ -94,19 +92,37 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
-function verifyToken(req, res, next, requireRegistered = false) {
+async function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  if (!token) return res.status(401).json({ error: 'No token provided.', code: 'NO_TOKEN' });
+  let payload;
   try {
-    const payload = jwt.verify(token, CFG.JWT_SECRET);
-    if (requireRegistered && payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
+    payload = jwt.verify(token, CFG.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
+  if (requireRegistered && payload.role !== 'user')
+    return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
+
+  // Verify tokenVersion so password changes invalidate old JWTs.
+  if (payload.role === 'user') {
+    try {
+      let oid;
+      try { oid = new ObjectId(payload.sub); } catch { oid = null; }
+      const user = oid && await db.collection('users').findOne(
+        { _id: oid },
+        { projection: { tokenVersion: 1 } }
+      );
+      if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+        return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
+    } catch {
+      return res.status(500).json({ error: 'Internal error.' });
+    }
+  }
+
+  req.auth = payload;
+  next();
 }
 
 const requireAny = (req, res, next) => verifyToken(req, res, next, false);
@@ -124,31 +140,46 @@ app.put('/location', requireAny, async (req, res) => {
     const id     = req.auth.sub;
     const isUser = req.auth.role === 'user';
 
-    const existing = await db.collection('locations').findOne({ userId: id });
-    if (existing && !shouldUpdate(existing, { lat, lon }))
-      return res.json({ ok: true, skipped: true });
+    const locationDoc = {
+      userId:       id,
+      lat,
+      lon,
+      location:     { type: 'Point', coordinates: [lon, lat] }, // GeoJSON is [longitude, latitude]
+      isRegistered: isUser,
+      sex:          req.auth.sex      || null,
+      nickname:     req.auth.nickname || null,
+      age:          req.auth.age      ?? null,
+      accuracy:     accuracy === 'ip' ? 'ip' : 'gps',
+      updatedAt:    new Date(),
+    };
 
-    await db.collection('locations').updateOne(
+    // Best-effort distance check (non-atomic, but low risk — worst case is one extra write).
+    // The time gate below is enforced atomically in the query filter.
+    const existing = await db.collection('locations').findOne(
       { userId: id },
-      {
-        $set: {
-          userId:   id,
-          lat,
-          lon,
-          location: {
-            type:        'Point',
-            coordinates: [lon, lat],   // GeoJSON is [longitude, latitude]
-          },
-          isRegistered: isUser,
-          sex:          req.auth.sex      || null,
-          nickname:     req.auth.nickname || null,
-          accuracy:     accuracy === 'ip' ? 'ip' : 'gps',
-          updatedAt:    new Date(),
-        },
-      },
-      { upsert: true }
+      { projection: { lat: 1, lon: 1, updatedAt: 1 } }
     );
 
+    if (existing) {
+      const movedFar = haversineDistance(existing.lat, existing.lon, lat, lon) >= CFG.UPDATE_DISTANCE_M;
+      if (!movedFar) {
+        // Atomic time-gated update: only writes if the record is old enough.
+        // If another concurrent request already refreshed updatedAt, matchedCount === 0.
+        const cutoff = new Date(Date.now() - CFG.UPDATE_INTERVAL_MS);
+        const result = await db.collection('locations').updateOne(
+          { userId: id, updatedAt: { $lt: cutoff } },
+          { $set: locationDoc }
+        );
+        return res.json({ ok: true, skipped: result.matchedCount === 0 });
+      }
+    }
+
+    // New user (existing === null) or user moved far enough — unconditional upsert.
+    await db.collection('locations').updateOne(
+      { userId: id },
+      { $set: locationDoc },
+      { upsert: true }
+    );
     res.json({ ok: true });
   } catch (e) {
     console.error('[location PUT]', e);
@@ -199,6 +230,7 @@ app.get('/location/nearby', requireAny, async (req, res) => {
         isRegistered: u.isRegistered,
         sex:          u.sex,
         nickname:     u.nickname,
+        age:          u.age ?? null,
         accuracy:     u.accuracy || 'gps',
         distanceM:    Math.round(u._dist),
       })),
@@ -209,8 +241,12 @@ app.get('/location/nearby', requireAny, async (req, res) => {
   }
 });
 
-// GET /location/user/:userId — called internally by messages-service
-app.get('/location/user/:userId', requireAny, async (req, res) => {
+// GET /location/user/:userId — called internally by messages-service only
+app.get('/location/user/:userId', (req, res, next) => {
+  if (req.serviceAuth?.sub !== 'messages')
+    return res.status(403).json({ error: 'Not authorised.' });
+  next();
+}, requireAny, async (req, res) => {
   try {
     const loc = await db.collection('locations').findOne({ userId: req.params.userId });
     if (!loc) return res.status(404).json({ error: 'Location not found.' });

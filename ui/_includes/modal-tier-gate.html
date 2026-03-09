@@ -1,0 +1,34 @@
+<!-- ============================================================
+     MODAL — Tier Gate
+     Shown automatically by api.js whenever any API call returns
+     403 with a { required } field (tier enforcement from gateway).
+     No per-page code needed — changing minTier in tiers-service
+     is enough to trigger this.
+     ============================================================ -->
+<div class="modal fade" id="tierGateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+    <div class="modal-content text-center">
+
+      <div class="modal-header border-0 pb-0">
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-1 pb-4 px-4">
+        <div style="font-size:2.2rem;margin-bottom:0.75rem">⭐</div>
+        <h5 class="heading-serif mb-2">Feature currently limited</h5>
+        <p class="text-muted-bb mb-4" style="font-size:0.9rem;line-height:1.65">
+          This feature may be restricted when server costs aren't fully covered.
+          If you enjoy bOOmbOOm.NOW! and want it to stay free for everyone,
+          please consider supporting the project.
+        </p>
+        <a href="{{ '/donate/' | relative_url }}" class="btn btn-bbm-primary w-100 mb-2">
+          <i class="bi bi-heart-fill me-2"></i>Support the project
+        </a>
+        <p class="text-muted-bb mb-0" style="font-size:0.78rem">
+          Your support keeps the servers on and features open.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>

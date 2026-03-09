@@ -9,10 +9,11 @@
 const CFG = {
   PORT:             process.env.PORT             || 3006,
   MONGO_URI:        process.env.MONGO_URI        || '',
-  DB_NAME:          process.env.DB_NAME          || 'test',
-  JWT_SECRET:       process.env.JWT_SECRET       || 'change-me-in-production',
+  DB_NAME:          process.env.DB_NAME          || 'boomboom',
+  JWT_SECRET:       process.env.JWT_SECRET,
   LOCATION_TTL_SEC: 10 * 60,   // must match location-service
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
 import express                   from 'express';
@@ -23,10 +24,10 @@ import jwt                       from 'jsonwebtoken';
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[favourites] DB connected.');
 
-await db.collection('favourites').createIndex(
-  { ownerUserId: 1, favouriteUserId: 1 },
-  { unique: true, background: true }
-);
+// --- Helpers ------------------------------------------------
+function safeObjectId(str) {
+  try { return new ObjectId(str); } catch { return null; }
+}
 
 // --- Express ------------------------------------------------
 const app = express();
@@ -49,19 +50,36 @@ app.use((req, res, next) => {
 });
 
 // Verify Bearer token — registered users only
-function verifyToken(req, res, next) {
+async function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  if (!token) return res.status(401).json({ error: 'No token provided.', code: 'NO_TOKEN' });
+  let payload;
   try {
-    const payload = jwt.verify(token, CFG.JWT_SECRET);
-    if (payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
+    payload = jwt.verify(token, CFG.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
+  if (payload.role !== 'user')
+    return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
+
+  // Verify tokenVersion so password changes invalidate old JWTs.
+  // Compare in JS (not as a Mongo filter) so legacy docs without the field
+  // (which default to 0) are not incorrectly treated as revoked.
+  try {
+    const oid  = safeObjectId(payload.sub);
+    const user = oid && await db.collection('users').findOne(
+      { _id: oid },
+      { projection: { tokenVersion: 1 } }
+    );
+    if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+      return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
+  } catch {
+    return res.status(500).json({ error: 'Internal error.' });
+  }
+
+  req.auth = payload;
+  next();
 }
 
 
@@ -77,7 +95,7 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     if (entries.length === 0) return res.json({ favourites: [] });
 
-    const ids = entries.map(e => new ObjectId(e.favouriteUserId));
+    const ids = entries.map(e => safeObjectId(e.favouriteUserId)).filter(Boolean);
 
     const users = await db.collection('users')
       .find({ _id: { $in: ids } })
@@ -123,15 +141,10 @@ app.post('/favourites/:userId', verifyToken, async (req, res) => {
     if (ownerUserId === favouriteUserId)
       return res.status(400).json({ error: 'Cannot favourite yourself.' });
 
-    let target;
-    try {
-      target = await db.collection('users').findOne(
-        { _id: new ObjectId(favouriteUserId) },
-        { projection: { _id: 1 } }
-      );
-    } catch {
-      return res.status(400).json({ error: 'Invalid user id.' });
-    }
+    const oid = safeObjectId(favouriteUserId);
+    if (!oid) return res.status(400).json({ error: 'Invalid user id.' });
+
+    const target = await db.collection('users').findOne({ _id: oid }, { projection: { _id: 1 } });
     if (!target) return res.status(404).json({ error: 'User not found.' });
 
     await db.collection('favourites').insertOne({

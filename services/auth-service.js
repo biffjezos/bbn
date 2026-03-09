@@ -10,11 +10,12 @@ const CFG = {
   PORT:             process.env.PORT       || 8080,
   MONGO_URI:        process.env.MONGO_URI  || '',
   DB_NAME:          process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET:       process.env.JWT_SECRET || 'change-me-in-production',
+  JWT_SECRET:       process.env.JWT_SECRET,
   JWT_EXPIRY_USER:  '7d',
   JWT_EXPIRY_GUEST: '15m',
   GUEST_TTL_SEC:    15 * 60,
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
 import express         from 'express';
@@ -35,8 +36,10 @@ function issueUserToken(user) {
       email:    user.email,
       nickname: user.nickname,
       sex:      user.sex,
+      age:      user.age      ?? null,
       role:     'user',
       tier:     user.tier || 'regular',
+      tv:       user.tokenVersion ?? 0,
     },
     CFG.JWT_SECRET,
     { expiresIn: CFG.JWT_EXPIRY_USER }
@@ -51,11 +54,25 @@ function issueGuestToken(guestId) {
   );
 }
 
-// --- Helper: clean up guest location + session on login/register -
+// --- Helper: clean up guest session + location on login -----
 async function cleanupGuest(guestId) {
   if (!guestId || typeof guestId !== 'string') return;
   await Promise.all([
     db.collection('locations').deleteOne({ userId: guestId }),
+    db.collection('sessions').deleteOne({ guestId }),
+  ]);
+}
+
+// --- Helper: migrate guest location to new registered user --
+// Re-associates the location doc so the user stays visible on
+// the map right after registration without needing a new GPS fix.
+async function migrateGuestLocation(guestId, newUserId, nickname, sex) {
+  if (!guestId || typeof guestId !== 'string') return;
+  await Promise.all([
+    db.collection('locations').updateOne(
+      { userId: guestId },
+      { $set: { userId: newUserId, isRegistered: true, nickname, sex } }
+    ),
     db.collection('sessions').deleteOne({ guestId }),
   ]);
 }
@@ -117,8 +134,8 @@ app.post('/auth/register', async (req, res) => {
 
     if (!email || !nickname || !password || !age || !sex)
       return res.status(400).json({ error: 'All fields required.' });
-    if (typeof nickname !== 'string' || nickname.trim().length < 2)
-      return res.status(400).json({ error: 'Nickname must be at least 2 characters.' });
+    if (typeof nickname !== 'string' || nickname.trim().length < 2 || nickname.trim().length > 32)
+      return res.status(400).json({ error: 'Nickname must be 2–32 characters.' });
     if (!['m', 'f'].includes(sex))
       return res.status(400).json({ error: "sex must be 'm' or 'f'." });
     if (typeof age !== 'number' || age < 18 || age > 120)
@@ -133,8 +150,9 @@ app.post('/auth/register', async (req, res) => {
       passwordHash: hash,
       age,
       sex,
-      tier:      'regular',
-      createdAt: new Date(),
+      tier:         'regular',
+      tokenVersion: 0,
+      createdAt:    new Date(),
     });
 
     const user = {
@@ -145,7 +163,7 @@ app.post('/auth/register', async (req, res) => {
       tier:     'regular',
     };
 
-    await cleanupGuest(req.body.guestId);
+    await migrateGuestLocation(req.body.guestId, user._id.toString(), user.nickname, user.sex);
 
     res.status(201).json({
       token:    issueUserToken(user),

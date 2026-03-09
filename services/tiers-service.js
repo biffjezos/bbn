@@ -11,8 +11,9 @@
 
 const CFG = {
   PORT:       process.env.PORT       || 8080,
-  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
+  JWT_SECRET: process.env.JWT_SECRET,
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 
 import express from 'express';
 import jwt     from 'jsonwebtoken';
@@ -38,9 +39,9 @@ const FEATURES = {
   see_nearby: {
     minTier: 'guest',
     radius: {
-      guest:   50,
-      regular: 500,
-      premium: 2000,
+      guest:   Infinity,
+      regular: Infinity,
+      premium: Infinity,
     },
   },
 
@@ -51,20 +52,20 @@ const FEATURES = {
 
   // Message a user who is offline (no active location doc)
   message_offline: {
-    minTier: 'premium',
+    minTier: 'regular',
   },
 
   // Distance cap when messaging — premium has no limit
   message_radius: {
     minTier: 'regular',
     radius: {
-      regular: 100,
+      regular: Infinity,
       premium: Infinity,
     },
   },
 
   manage_favourites: {
-    minTier: 'premium',
+    minTier: 'regular',
   },
 
   // ── ADD NEW FEATURES HERE ───────────────────────────────────

@@ -6,25 +6,108 @@ A real-time proximity messaging app. Find out who is physically nearby right now
 
 ## Table of Contents
 
-1. [Concept](#concept)
-2. [Architecture](#architecture)
-3. [Features](#features)
-4. [Security & Encryption](#security--encryption)
-5. [Repository Structure](#repository-structure)
-6. [Environment Variables](#environment-variables)
-7. [Deployment](#deployment)
-8. [Local Development](#local-development)
-9. [Documentation](#documentation)
+- [Part 1 — User Guide](#part-1--user-guide)
+  - [What is bOOmbOOm.NOW!](#what-is-boomboomnow)
+  - [Getting Started](#getting-started)
+  - [The Map](#the-map)
+  - [Sending Messages](#sending-messages)
+  - [Favourites](#favourites)
+  - [Your Profile](#your-profile)
+  - [Privacy & Session Lock](#privacy--session-lock)
+  - [What Happens to Your Data](#what-happens-to-your-data)
+- [Part 2 — Technical Reference](#part-2--technical-reference)
+  - [Architecture](#architecture)
+  - [Security & Encryption](#security--encryption)
+  - [Repository Structure](#repository-structure)
+  - [Environment Variables](#environment-variables)
+  - [Deployment](#deployment)
+  - [Local Development](#local-development)
+  - [API Documentation](#api-documentation)
 
 ---
 
-## Concept
+# Part 1 — User Guide
+
+> Full step-by-step usage details: [User Guide →](user-guide.md)
+
+## What is bOOmbOOm.NOW!
 
 bOOmbOOm.NOW! is built around a single constraint: **you can only message someone if you are both in the same place at the same time.** Messages expire after 4 hours. Locations expire after 10 minutes. Nothing is permanent. Everything is now.
 
 There are no followers, no feeds, no algorithmic recommendations. Proximity is the only filter. Privacy is not a feature — it is the foundation.
 
 ---
+
+## Getting Started
+
+You do not need an account to use the map. Open the app and you will appear as a guest pin. You can see who else is nearby immediately.
+
+To send and receive messages, you need a registered account. Registration takes under a minute — just an email, nickname, password, age, and sex.
+
+| | Guest | Registered |
+|---|---|---|
+| See the map | ✅ | ✅ |
+| See nearby users | ✅ | ✅ |
+| Send & receive messages | ❌ | ✅ |
+| End-to-end encrypted messages | ❌ | ✅ |
+| Favourites list | ❌ | ✅ |
+| View public profiles | ✅ | ✅ |
+| Session inactivity lock | ❌ | ✅ |
+
+---
+
+## The Map
+
+The map shows everyone who has pushed their location in the last 10 minutes. Guest pins and registered user pins are visually distinct. Tapping a pin opens a brief profile and, if you are registered, a button to send that person a message.
+
+Your location is pushed automatically every 30 seconds. If the browser blocks location access, the app falls back to IP-based geolocation — those pins are marked as approximate.
+
+---
+
+## Sending Messages
+
+Only registered users can message. You can only message someone who is currently nearby (their pin must be on the map). Messages are end-to-end encrypted — the server never sees your text, only ciphertext. Messages expire 4 hours after they are sent.
+
+Navigate to **Messages** to see all your active conversations and threads.
+
+---
+
+## Favourites
+
+Add anyone you want to keep track of to your Favourites list. You can see in real time whether each favourited person is currently online (has pushed a location in the last 10 minutes). The other person is not notified when you add them.
+
+---
+
+## Your Profile
+
+Your public profile shows your nickname, age, and sex — nothing else. Your email is never visible to other users. You can update your nickname, email, password, age, and sex at any time from the Profile page. Deleting your account permanently removes all your data including messages and location history.
+
+---
+
+## Privacy & Session Lock
+
+Your messages are end-to-end encrypted using keys that exist only in your browser. The server stores an encrypted copy of your private key, but cannot read it — only your password can unlock it.
+
+To protect your keys when you step away, the app automatically locks after:
+- **30 minutes** of no interaction
+- **3 minutes** of the tab being hidden
+
+When locked, a prompt asks for your password to restore your keys. This is not a full re-login — your session stays active.
+
+---
+
+## What Happens to Your Data
+
+| Data | Lifetime |
+|---|---|
+| Your location pin | Disappears 10 minutes after your last push, or immediately on logout |
+| Messages | Expire 4 hours after being sent |
+| Your account | Persists until you delete it |
+| Guest session | 15 minutes, then a new token is issued |
+
+---
+
+# Part 2 — Technical Reference
 
 ## Architecture
 
@@ -62,26 +145,9 @@ server.js — public gateway (port 3000)
 
 ---
 
-## Features
-
-| Feature | Guest | Registered |
-|---|---|---|
-| See the map | ✅ | ✅ |
-| See nearby users | ✅ | ✅ |
-| Send & receive messages | ❌ | ✅ |
-| End-to-end encrypted messages | ❌ | ✅ |
-| Favourites list | ❌ | ✅ |
-| View public profiles | ✅ | ✅ |
-| Push location | ✅ | ✅ |
-| Session inactivity lock | ❌ | ✅ |
-
----
-
 ## Security & Encryption
 
 bOOmbOOm.NOW! implements **end-to-end encrypted (E2EE) messaging** using the Web Crypto API. Messages are encrypted in the browser before being sent to the server. The server stores only ciphertext and can never read message content.
-
-### How it works
 
 - Each user has an ECDH P-256 keypair generated in the browser on first login
 - The private key is encrypted with the user's password (PBKDF2 + AES-GCM) and stored on the server as a blob
@@ -90,13 +156,7 @@ bOOmbOOm.NOW! implements **end-to-end encrypted (E2EE) messaging** using the Web
 - Each message is encrypted twice — once with the recipient's public key, once with the sender's own public key — so both parties can read their copy
 - On logout or inactivity, keys are wiped from memory
 
-### Session lock
-
-Registered users are protected by an inactivity lock:
-
-- **30 minutes** of no interaction → keys wiped, lock screen shown
-- **3 minutes** of tab hidden → keys wiped, lock screen shown
-- Re-entering password re-derives the private key from the server blob — no full re-login needed
+See [Messages](messages.md) for the full E2EE protocol details.
 
 ---
 
@@ -144,6 +204,7 @@ Registered users are protected by an inactivity lock:
 │   └── tiers-service.js          Tier definitions
 │
 ├── README.md                     This file
+├── user-guide.md                 → User Guide (Part 1 detail)
 ├── auth.md                       → Authentication
 ├── users.md                      → User profiles & crypto keys
 ├── location.md                   → Location system
@@ -210,9 +271,9 @@ node services/server.js
 
 ---
 
-## Documentation
+## API Documentation
 
-| Chapter | Description |
+| Document | Description |
 |---|---|
 | [Authentication](auth.md) | Guest tokens, register, login, JWT structure |
 | [User Profiles & Keys](users.md) | Profile management, E2EE key storage |
@@ -224,4 +285,4 @@ node services/server.js
 
 ---
 
-*You are here: README · Next: [Authentication →](auth.md)*
+*You are here: README · [User Guide →](user-guide.md) · [Authentication →](auth.md)*

@@ -37,6 +37,7 @@
   function $(id) { return document.getElementById(id); }
 
   // ── Desktop nav links ─────────────────────────────────────
+  var BASE = (window.BOOMBOOM_BASE || '');
   function buildDesktopNav(isReg) {
     var el = $('navLinksDesktop');
     if (!el) return;
@@ -47,9 +48,9 @@
         '<button class="btn btn-bbm-primary btn-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Sign Up</button>';
     } else {
       el.innerHTML =
-        '<a href="/messages/"   class="nav-link ' + (p.startsWith('/messages/')   ? 'active' : '') + '"><i class="bi bi-chat-dots me-1"></i>Messages</a>' +
-        '<a href="/favourites/" class="nav-link ' + (p.startsWith('/favourites/') ? 'active' : '') + '"><i class="bi bi-star me-1"></i>Favourites</a>' +
-        '<a href="/profile/"    class="nav-link ' + (p.startsWith('/profile/')    ? 'active' : '') + '"><i class="bi bi-person-circle me-1"></i>Profile</a>';
+        '<a href="' + BASE + '/messages/"   class="nav-link ' + (p.startsWith(BASE + '/messages/')   ? 'active' : '') + '"><i class="bi bi-chat-dots me-1"></i>Messages</a>' +
+        '<a href="' + BASE + '/favourites/" class="nav-link ' + (p.startsWith(BASE + '/favourites/') ? 'active' : '') + '"><i class="bi bi-star me-1"></i>Favourites</a>' +
+        '<a href="' + BASE + '/profile/"    class="nav-link ' + (p.startsWith(BASE + '/profile/')    ? 'active' : '') + '"><i class="bi bi-person-circle me-1"></i>Profile</a>';
     }
   }
 
@@ -94,9 +95,9 @@
   Auth.onLogout = function () {
     applyAuthState(false);
     window.MapModule && window.MapModule.refreshMarkers();
-    var prot = ['/messages', '/favourites', '/profile'];
+    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile'];
     if (prot.some(function(p) { return location.pathname.startsWith(p); })) {
-      window.location.href = '/';
+      window.location.href = BASE + '/';
     }
   };
 
@@ -248,10 +249,10 @@
 
       if (viewerIsReg && targetIsReg && userId) {
         var profileLink = $('pinProfileLink');
-        if (profileLink) profileLink.href = '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+        if (profileLink) profileLink.href = BASE + '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
 
         var msgLink = $('pinMessageLink');
-        if (msgLink) msgLink.href = '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+        if (msgLink) msgLink.href = BASE + '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
 
         var favBtn   = $('pinFavBtn');
         var favIcon  = $('pinFavIcon');
@@ -282,7 +283,7 @@
                   if (favLabel) favLabel.textContent = 'Favourited';
                 }
               } catch (err) {
-                alert(err.message);
+                if (err.status !== 403) alert(err.message);
               } finally {
                 favBtn.disabled = false;
               }
@@ -314,13 +315,87 @@
 // Handles geolocation, location push, and status bar updates.
 // Exposes window.GeoState = { pos, accuracy } for map.js.
 // Fires 'geo:position' CustomEvent whenever position updates.
+// Fires 'geo:nearby'   CustomEvent with { users } from WS push.
 // ============================================================
 (function () {
 
-  var PUSH_INTERVAL_MS  = 30000;
-  var pushTimer         = null;
-
   window.GeoState = { pos: null, accuracy: null };
+
+  // ── Location WebSocket ────────────────────────────────────
+  // Replaces the HTTP PUT polling interval. Falls back to HTTP
+  // if the WS is unavailable (e.g. gateway cold-start).
+
+  var _locWs      = null;
+  var _locWsRetry = 1000;
+  var _locWsTimer = null;
+
+  function locWsUrl() {
+    var api   = window.BOOMBOOM_API_URL || '';
+    var base  = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
+    var token = window.Auth?.getToken?.() || '';
+    return base + '/ws/location?token=' + encodeURIComponent(token);
+  }
+
+  function sendLocWS(lat, lon, accuracy) {
+    if (_locWs && _locWs.readyState === WebSocket.OPEN) {
+      _locWs.send(JSON.stringify({ type: 'position', lat: lat, lon: lon, accuracy: accuracy || 'gps' }));
+      return true;
+    }
+    return false;
+  }
+
+  function connectLocWS() {
+    var token = window.Auth?.getToken?.();
+    if (!token) return;
+    if (_locWs && (_locWs.readyState === WebSocket.OPEN || _locWs.readyState === WebSocket.CONNECTING)) return;
+
+    _locWs = new WebSocket(locWsUrl());
+
+    _locWs.onopen = function () {
+      _locWsRetry = 1000;
+      console.log('[Geo] WS connected');
+      _locWs.send(JSON.stringify({ type: 'auth', token: window.Auth?.getToken?.() || '' }));
+      var pos = window.GeoState.pos;
+      if (pos) sendLocWS(pos.lat, pos.lng, window.GeoState.accuracy);
+    };
+
+    _locWs.onmessage = function (e) {
+      try {
+        var msg = JSON.parse(e.data);
+        if (msg.type === 'nearby') {
+          window.dispatchEvent(new CustomEvent('geo:nearby', { detail: { users: msg.users || [] } }));
+        }
+      } catch { /* silent */ }
+    };
+
+    _locWs.onclose = function () {
+      _locWs = null;
+      if (!window.Auth?.getToken?.()) return;
+      if (_locWsTimer) clearTimeout(_locWsTimer);
+      _locWsTimer = setTimeout(connectLocWS, _locWsRetry);
+      _locWsRetry = Math.min(_locWsRetry * 2, 30000);
+      console.log('[Geo] WS closed, retrying in', _locWsRetry + 'ms');
+    };
+  }
+
+  function closeLocWS() {
+    if (_locWsTimer) { clearTimeout(_locWsTimer); _locWsTimer = null; }
+    if (_locWs) { _locWs.onclose = null; _locWs.close(); _locWs = null; }
+  }
+
+  // ── Location push — WS first, HTTP fallback ───────────────
+
+  async function pushLocation(lat, lng, accuracy) {
+    if (!window.Auth?.getToken()) return;
+    if (sendLocWS(lat, lng, accuracy)) return;
+    try {
+      await window.Api.putLocation(lat, lng, accuracy || 'gps');
+    } catch (e) {
+      console.warn('[Geo] HTTP location push failed:', e.message);
+    }
+  }
+
+  // ── Status bar ────────────────────────────────────────────
 
   function setStatus(text, state) {
     var dot  = document.getElementById('statusDot');
@@ -334,33 +409,28 @@
     window.dispatchEvent(new CustomEvent('geo:position', { detail: { lat: lat, lng: lng } }));
   }
 
-  async function pushLocation(lat, lng, accuracy) {
-    if (!window.Auth?.getToken()) return;
-    try {
-      await window.Api.putLocation(lat, lng, accuracy || 'gps');
-      console.log('[Geo] Location pushed:', lat, lng, accuracy || 'gps');
-    } catch (e) {
-      console.warn('[Geo] Location push failed:', e.message);
-    }
-  }
+  // ── Geolocation ───────────────────────────────────────────
 
-  function startPushTimer() {
-    if (pushTimer) clearInterval(pushTimer);
-    pushTimer = setInterval(function () {
-      var pos = window.GeoState.pos;
-      if (pos) pushLocation(pos.lat, pos.lng, window.GeoState.accuracy);
-    }, PUSH_INTERVAL_MS);
+  var MIN_SEND_DISTANCE_M = 5;
+
+  function approxDistM(lat1, lng1, lat2, lng2) {
+    var dLat = (lat2 - lat1) * 111000;
+    var dLng = (lng2 - lng1) * 111000 * Math.cos(lat1 * Math.PI / 180);
+    return Math.sqrt(dLat * dLat + dLng * dLng);
   }
 
   function onPosition(pos, accurate) {
-    var lat = pos.coords.latitude;
-    var lng = pos.coords.longitude;
+    var lat      = pos.coords.latitude;
+    var lng      = pos.coords.longitude;
     var accuracy = 'gps';
     window.GeoState.accuracy = accuracy;
     dispatchPosition(lat, lng);
     setStatus(accurate ? 'live' : 'approximate location', 'live');
-    pushLocation(lat, lng, accuracy);
-    startPushTimer();
+    var last = window.GeoState.lastSent;
+    if (!last || approxDistM(last.lat, last.lng, lat, lng) >= MIN_SEND_DISTANCE_M) {
+      window.GeoState.lastSent = { lat: lat, lng: lng };
+      pushLocation(lat, lng, accuracy);
+    }
   }
 
   async function tryIpFallback() {
@@ -386,7 +456,6 @@
           dispatchPosition(lat, lon);
           setStatus('approximate location', 'live');
           pushLocation(lat, lon, 'ip');
-          startPushTimer();
           return;
         }
       } catch (e) {
@@ -430,14 +499,22 @@
     );
   }
 
+  // ── Boot ──────────────────────────────────────────────────
+
   window.__authReady.then(function () {
     console.log('[Geo] Auth ready, starting geolocation');
+    connectLocWS();
     startWatch();
   });
+
+  // ── Auth hooks ────────────────────────────────────────────
 
   var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
+    // Reconnect WS with fresh user token (guest token no longer valid)
+    closeLocWS();
+    connectLocWS();
     var pos = window.GeoState.pos;
     if (pos) {
       window.Api.deleteLocation().catch(function() {});
@@ -447,6 +524,7 @@
 
   var _origOnLogout = Auth.onLogout;
   Auth.onLogout = function () {
+    closeLocWS();
     window.Api.deleteLocation().catch(function() {});
     if (_origOnLogout) _origOnLogout();
   };
@@ -454,7 +532,7 @@
   var _origOnGuestExpired = Auth.onGuestExpired;
   Auth.onGuestExpired = function () {
     if (_origOnGuestExpired) _origOnGuestExpired();
-    if (pushTimer) { clearInterval(pushTimer); pushTimer = null; }
+    closeLocWS();
     setStatus('session expired', 'off');
     window.MapModule && window.MapModule.onGuestExpired();
   };
@@ -463,11 +541,9 @@
 
 // ============================================================
 // LockModule
-// Keys live in JS memory. To survive navigation within /messages
-// (full page reloads), PKCS8 key bytes are kept in sessionStorage
-// while the user is in /messages. On every /messages page load
-// the key is silently restored — no password prompt.
-// Navigating outside /messages wipes the session key.
+// Keys live in the crypto worker (SharedWorker where supported,
+// regular Worker on Safari). The SharedWorker survives full-page
+// navigations so no sessionStorage key export is needed.
 // ============================================================
 (function () {
 
@@ -479,57 +555,12 @@
   var _modal           = null;
   var _locked          = false;
 
-  // ── sessionStorage key bridge ─────────────────────────────
-
-  function inMessages() {
-    return location.pathname.startsWith('/messages');
-  }
-
-  function clearSessionKey() {
-    sessionStorage.removeItem('bbm_sk');
-    sessionStorage.removeItem('bbm_pk');
-    sessionStorage.removeItem('bbm_ts');
-  }
-
-  async function saveSessionKey() {
-    try {
-      var skB64 = await window.BBMCrypto.exportPrivateKeyPkcs8();
-      var pkB64 = window.BBMCrypto.getPublicKeyB64();
-      if (!skB64 || !pkB64) return;
-      sessionStorage.setItem('bbm_sk', skB64);
-      sessionStorage.setItem('bbm_pk', pkB64);
-      sessionStorage.setItem('bbm_ts', String(Date.now()));
-      console.log('[Lock] Key saved to session.');
-    } catch (e) {
-      console.warn('[Lock] saveSessionKey failed:', e);
-    }
-  }
-
-  async function restoreSessionKey() {
-    try {
-      var skB64 = sessionStorage.getItem('bbm_sk');
-      var pkB64 = sessionStorage.getItem('bbm_pk');
-      var ts    = parseInt(sessionStorage.getItem('bbm_ts') || '0', 10);
-      if (!skB64 || !pkB64) return false;
-      if (Date.now() - ts > 30 * 60 * 1000) { clearSessionKey(); return false; }
-      var ok = await window.BBMCrypto.importFromSession(skB64, pkB64);
-      if (!ok) { clearSessionKey(); return false; }
-      sessionStorage.setItem('bbm_ts', String(Date.now()));
-      console.log('[Lock] Key restored from session.');
-      return true;
-    } catch (e) {
-      console.warn('[Lock] restoreSessionKey failed:', e);
-      clearSessionKey();
-      return false;
-    }
-  }
-
   // ── Modal ─────────────────────────────────────────────────
 
   function getModal() {
     if (!_modal) {
       var el = document.getElementById('lockModal');
-      if (el) _modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: false });
+      if (el) _modal = new bootstrap.Modal(el);
     }
     return _modal;
   }
@@ -542,8 +573,9 @@
     _locked = true;
     clearInactivityTimer();
     window.BBMCrypto?.lock();
-    clearSessionKey();
     console.log('[Lock] Session locked.');
+    var modal = getModal();
+    if (modal) modal.show();
   }
 
   // ── Unlock ────────────────────────────────────────────────
@@ -553,7 +585,6 @@
     resetInactivityTimer();
     var modal = getModal();
     if (modal) modal.hide();
-    if (inMessages()) saveSessionKey();
     window.dispatchEvent(new CustomEvent('bbm:unlocked'));
     console.log('[Lock] Session unlocked.');
   }
@@ -613,8 +644,14 @@
       if (unlockBtn) { unlockBtn.disabled = true; unlockBtn.textContent = 'Unlocking…'; }
       try {
         var keys = await window.Api.getMyKeys();
-        var ok   = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
-        if (!ok) throw new Error('Wrong password.');
+        if (keys.encryptedPrivateKey && keys.publicKey) {
+          var ok = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
+          if (!ok) throw new Error('Wrong password.');
+        } else {
+          // No keys on server yet (legacy account) — generate and save now
+          var setup = await window.BBMCrypto.setup(password);
+          await window.Api.saveKeys(setup.publicKeyB64, setup.encBlob);
+        }
         if (pwInput) pwInput.value = '';
         unlock();
       } catch (e) {
@@ -632,7 +669,6 @@
       var modal = getModal();
       if (modal) modal.hide();
       _locked = false;
-      clearSessionKey();
       window.Auth.logout();
     });
   });
@@ -654,22 +690,15 @@
     if (_origOnLogin) _origOnLogin(data);
     _locked = false;
     resetInactivityTimer();
-    if (inMessages()) saveSessionKey();
   };
 
-  // On page load with saved token: try silent session restore if in /messages.
-  // If restore succeeds, dispatch bbm:unlocked so messages.js re-renders.
-  // If restore fails, mark locked — messages.js will call requireUnlocked()
-  // which shows the modal. Password entered once, saved to session,
-  // survives navigation between /messages and /messages/thread/.
+  // On page load with a saved token: ask the crypto worker if the key is already
+  // loaded (SharedWorker retains it across navigations). If yes, fire bbm:unlocked
+  // silently. If no (new session, Safari regular Worker, or inactivity lock),
+  // mark locked so messages.js shows the lock modal.
   Auth.onNeedsUnlock = async function () {
-    if (!inMessages()) {
-      clearSessionKey();
-      _locked = true;
-      return;
-    }
-    var restored = await restoreSessionKey();
-    if (restored) {
+    await window.BBMCrypto?.ready?.();
+    if (window.BBMCrypto?.isUnlocked()) {
       _locked = false;
       resetInactivityTimer();
       window.dispatchEvent(new CustomEvent('bbm:unlocked'));
@@ -684,7 +713,6 @@
     clearInactivityTimer();
     if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
     _locked = false;
-    clearSessionKey();
   };
 
 })();
