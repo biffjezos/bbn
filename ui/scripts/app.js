@@ -410,6 +410,14 @@
 
   // ── Geolocation ───────────────────────────────────────────
 
+  var MIN_SEND_DISTANCE_M = 5;
+
+  function approxDistM(lat1, lng1, lat2, lng2) {
+    var dLat = (lat2 - lat1) * 111000;
+    var dLng = (lng2 - lng1) * 111000 * Math.cos(lat1 * Math.PI / 180);
+    return Math.sqrt(dLat * dLat + dLng * dLng);
+  }
+
   function onPosition(pos, accurate) {
     var lat      = pos.coords.latitude;
     var lng      = pos.coords.longitude;
@@ -417,7 +425,11 @@
     window.GeoState.accuracy = accuracy;
     dispatchPosition(lat, lng);
     setStatus(accurate ? 'live' : 'approximate location', 'live');
-    pushLocation(lat, lng, accuracy);
+    var last = window.GeoState.lastSent;
+    if (!last || approxDistM(last.lat, last.lng, lat, lng) >= MIN_SEND_DISTANCE_M) {
+      window.GeoState.lastSent = { lat: lat, lng: lng };
+      pushLocation(lat, lng, accuracy);
+    }
   }
 
   async function tryIpFallback() {

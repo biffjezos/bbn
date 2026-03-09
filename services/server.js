@@ -221,6 +221,15 @@ function svcHeaders(token) {
 // On disconnect: gateway deletes the client's location record.
 // ============================================================
 
+function geoDistM(lat1, lon1, lat2, lon2) {
+  const R   = 6_371_000;
+  const rad = d => d * Math.PI / 180;
+  const dLat = rad(lat2 - lat1), dLon = rad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+const LOC_MIN_SEND_M = 5;  // don't forward to location-service if moved less than this
+
 const WS_MAX_BYTES        = 4096;   // max incoming message size per frame
 const WS_SEND_LIMIT       = 10;     // max message sends per user per window
 const WS_SEND_WINDOW      = 10_000; // window length in ms
@@ -271,7 +280,8 @@ wssLoc.on('connection', ws => {
 
 function setupLocConnection(ws, userId, token) {
   console.log('[WS:loc] +', userId);
-  let lastPos        = null;
+  let lastPos        = null;  // most recent client position (used for nearby queries)
+  let lastSentPos    = null;  // last position actually forwarded to location-service
   let lastNearbyHash = null;
 
   const nearbyTimer = setInterval(async () => {
@@ -296,13 +306,17 @@ function setupLocConnection(ws, userId, token) {
 
     if (msg.type === 'position' && msg.lat != null && msg.lon != null) {
       lastPos = { lat: msg.lat, lon: msg.lon };
-      try {
-        await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
-          body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: msg.accuracy || 'gps' }),
-        });
-      } catch { /* silent */ }
+      const moved = !lastSentPos || geoDistM(lastSentPos.lat, lastSentPos.lon, msg.lat, msg.lon) >= LOC_MIN_SEND_M;
+      if (moved) {
+        lastSentPos = { lat: msg.lat, lon: msg.lon };
+        try {
+          await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
+            body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: msg.accuracy || 'gps' }),
+          });
+        } catch { /* silent */ }
+      }
     }
   });
 
