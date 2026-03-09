@@ -48,7 +48,7 @@ Every other service defaults to `'boomboom'`. If `DB_NAME` is not set in the env
 
 ## PERFORMANCE
 
-### P1. HIGH — Location nearby fetches all active users globally
+### P1. ⏸ POSTPONED — Location nearby fetches all active users globally
 **File:** `services/location-service.js` (line 192)
 
 The 2dsphere index is created by migrations but the nearby query is a plain `find()` with no geospatial filter:
@@ -63,6 +63,7 @@ const nearby = await db.collection('locations').find({
 All active location records are loaded into Node.js memory and distance is computed in JS. At scale this is O(all users) per query, executed every 5 seconds per connected client.
 
 **Fix:** Re-introduce the `$nearSphere` / `$geoWithin` filter to let MongoDB do the radius scan using the 2dsphere index, passing a sensible `maxDistance` (e.g. from the tiers service radius config).
+**Postponed:** Moving distance filtering from haversine JS to MongoDB geospatial queries is not feasible at the moment.
 
 ---
 
