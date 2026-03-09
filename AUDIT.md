@@ -33,7 +33,7 @@
 
 ---
 
-### S4. LOW — `favourites-service` defaults DB_NAME to `'test'`
+### S4. ✅ FIXED — `favourites-service` defaults DB_NAME to `'test'`
 **File:** `services/favourites-service.js` (line 12)
 
 ```js

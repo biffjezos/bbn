@@ -9,7 +9,7 @@
 const CFG = {
   PORT:             process.env.PORT             || 3006,
   MONGO_URI:        process.env.MONGO_URI        || '',
-  DB_NAME:          process.env.DB_NAME          || 'test',
+  DB_NAME:          process.env.DB_NAME          || 'boomboom',
   JWT_SECRET:       process.env.JWT_SECRET,
   LOCATION_TTL_SEC: 10 * 60,   // must match location-service
 };
