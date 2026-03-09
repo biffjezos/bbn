@@ -756,9 +756,28 @@
      box-shadow: 0 0 8px rgba(232,24,109,0.3);
    }
 
-   /* Meet button active — sex-aware */
-   .fav-item.male   .fav-meet-btn.active { color: var(--bbm-blue-light)  !important; }
-   .fav-item.female .fav-meet-btn.active { color: var(--bbm-pink-light)  !important; }
+   /* Compass/meet button — neutral by default, sex-aware only when active */
+   .fav-meet-btn {
+     border-color: rgba(255,255,255,0.1) !important;
+     color: var(--bbm-text-muted) !important;
+   }
+   .fav-meet-btn:hover {
+     border-color: rgba(255,255,255,0.2) !important;
+     color: var(--bbm-text) !important;
+     background: rgba(255,255,255,0.05) !important;
+   }
+   .fav-item.male   .fav-meet-btn.active {
+     border-color: var(--bbm-blue) !important;
+     color: var(--bbm-blue-light) !important;
+     background: var(--bbm-blue-dim) !important;
+     box-shadow: 0 0 8px rgba(14,184,232,0.3);
+   }
+   .fav-item.female .fav-meet-btn.active {
+     border-color: var(--bbm-pink) !important;
+     color: var(--bbm-pink-light) !important;
+     background: var(--bbm-pink-dim) !important;
+     box-shadow: 0 0 8px rgba(232,24,109,0.3);
+   }
 
    /* Narrow screens: wrap actions below avatar+info as a full-width row */
    @media (max-width: 480px) {

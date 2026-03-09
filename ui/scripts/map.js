@@ -356,6 +356,7 @@
     const { lat, lng } = e.detail;
     if (!map) initMap(lat, lng);
     else placeSelfMarker(lat, lng);
+    updateMeetingMode({ lat, lng }, lastNearbyUsers);
   });
 
   // Sync meeting mode changes made from the favourites page
