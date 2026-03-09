@@ -244,10 +244,8 @@
       var viewerIsReg = Auth.isRegistered();
       var pinActions  = $('pinActions');
       var pinGuest    = $('pinGuestPrompt');
-      var pinTierMsg  = $('pinTierMsg');
-      if (pinActions)  pinActions.classList.toggle('d-none', !viewerIsReg || !targetIsReg);
-      if (pinGuest)    pinGuest.classList.toggle('d-none', viewerIsReg);
-      if (pinTierMsg)  pinTierMsg.classList.add('d-none');
+      if (pinActions) pinActions.classList.toggle('d-none', !viewerIsReg || !targetIsReg);
+      if (pinGuest)   pinGuest.classList.toggle('d-none', viewerIsReg);
 
       if (viewerIsReg && targetIsReg && userId) {
         var profileLink = $('pinProfileLink');
@@ -285,12 +283,7 @@
                   if (favLabel) favLabel.textContent = 'Favourited';
                 }
               } catch (err) {
-                if (err.status === 403) {
-                  var tm = $('pinTierMsg');
-                  if (tm) tm.classList.remove('d-none');
-                } else {
-                  alert(err.message);
-                }
+                if (err.status !== 403) alert(err.message);
               } finally {
                 favBtn.disabled = false;
               }

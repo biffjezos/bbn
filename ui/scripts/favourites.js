@@ -77,22 +77,7 @@ async function renderFavourites() {
 
   } catch (err) {
     if (err.status === 403) {
-      const base = window.BOOMBOOM_BASE || '';
-      wrap.innerHTML = `<div class="bbm-empty">
-        <i class="bi bi-star" style="font-size:2.5rem;color:var(--bbm-pink);margin-bottom:1rem;display:block"></i>
-        <h5 class="heading-serif mb-2">Favourites is currently limited</h5>
-        <p class="text-muted-bb mb-4" style="max-width:340px;margin:0 auto">
-          This feature may be restricted when server costs aren't fully covered.
-          If you enjoy bOOmbOOm.NOW! and want Favourites to stay free for everyone,
-          please consider supporting the project.
-        </p>
-        <a href="${base}/donate/" class="btn btn-bbm-primary">
-          <i class="bi bi-heart-fill me-2"></i>Support the project
-        </a>
-        <p class="text-muted-bb mt-3" style="font-size:0.8rem">
-          Your support keeps the servers on and features open.
-        </p>
-      </div>`;
+      wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-lock"></i><p class="text-muted-bb mt-2">This feature is currently limited.</p></div>`;
     } else {
       wrap.innerHTML = `<div class="alert alert-danger mt-3">${escHtml(err.message)}</div>`;
     }

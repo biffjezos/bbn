@@ -31,6 +31,9 @@ async function apiFetch(path, options = {}) {
     const err = new Error(data.error || `HTTP ${res.status}`);
     err.status = res.status;
     err.data = data;
+    if (res.status === 403 && data.required) {
+      document.dispatchEvent(new CustomEvent('bbm:tier-gate', { detail: data }));
+    }
     throw err;
   }
 
@@ -153,3 +156,10 @@ const Api = {
 
 // Expose globally (no bundler)
 window.Api = Api;
+
+// Global tier-gate handler — shows modal whenever any apiFetch call returns
+// 403 with a { required } field (tier enforcement). No per-page code needed.
+document.addEventListener('bbm:tier-gate', function () {
+  var el = document.getElementById('tierGateModal');
+  if (el && window.bootstrap) bootstrap.Modal.getOrCreateInstance(el).show();
+});
