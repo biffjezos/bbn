@@ -4,210 +4,199 @@
 
 ---
 
-## NEXT SESSION: Security Issues 5–8
+## SECURITY
 
-> Copy-pasted from the security audit for tomorrow's work.
+### S1. HIGH — Token revocation not enforced in location-service and favourites-service
+**Files:** `services/location-service.js` (line 94), `services/favourites-service.js` (line 58)
 
-### 5. HIGH — Tier system not enforced in Gateway
-**File:** `services/server.js`
-Routes proxy directly to services without calling `/tiers/check`, so a guest or regular user can attempt any action and only gets rejected deep in the service layer.
+`users-service` and `messages-service` check `tokenVersion` against the DB to honour password-change revocation. `location-service` and `favourites-service` do not — a user who changed their password can still push location updates and read/modify favourites with their old token until it expires (up to 7 days).
 
-```js
-// Current — no tier check before proxying
-app.post('/api/messages/:userId', (req, res) =>
-  proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`)
-);
-```
-
-**Fix:** Add a gateway middleware that calls `tiers-service /tiers/check` before forwarding, so unauthorized requests are rejected early and tier logic is centralised.
+**Fix:** Add the same `tokenVersion` DB check that `users-service.js` uses to `verifyToken` in both services.
 
 ---
 
-### 6. MEDIUM — Service token regenerated on every request
-**File:** `services/server.js` (`proxy()`) and `services/messages-service.js`
-`serviceToken()` calls `jwt.sign()` on every proxied request — JWT signing is CPU-bound.
+### S2. MEDIUM — Any authenticated user can look up any other user's precise location by ID
+**File:** `services/location-service.js` (line 224)
 
-```js
-headers: {
-  'X-Service-Token': serviceToken(),  // new token per request
-}
-```
+`GET /location/user/:userId` is used internally by messages-service to enforce proximity, but it is protected only by a service token — not a user token. The gateway does not expose this route directly, so it is not reachable from the public internet. However, any compromised internal service can call it to pinpoint any user.
 
-**Fix:** Cache the token and only regenerate when it's about to expire:
-```js
-let _svcToken = null, _svcExpiry = 0;
-function serviceToken() {
-  if (Date.now() < _svcExpiry - 5000) return _svcToken;
-  _svcToken = jwt.sign({ sub: 'gateway', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
-  _svcExpiry = Date.now() + 60_000;
-  return _svcToken;
-}
-```
+**Fix:** Add an `Authorization` header check in addition to the service token check, or restrict calls to messages-service only (e.g. verify `payload.sub === 'messages'`).
 
 ---
 
-### 7. MEDIUM — Messages stored as plaintext on server
-**File:** `services/messages-service.js`
-`text` is inserted verbatim into MongoDB. A compromised database, a DBA, or a snapshot exposes all message content.
+### S3. MEDIUM — WS send rate limit is per-connection, not per-user
+**File:** `services/server.js` (line 363)
+
+`sendCount` is a closure variable per WebSocket connection. A user with two browser tabs open gets 2× the send budget. The limit is easy to bypass without any coordination.
+
+**Fix:** Move rate-limit state to a shared `Map<userId, count>` keyed by `userId` so all connections for the same account share one bucket.
+
+---
+
+### S4. LOW — `favourites-service` defaults DB_NAME to `'test'`
+**File:** `services/favourites-service.js` (line 12)
 
 ```js
-await db.collection('messages').insertOne({
-  fromUserId, toUserId,
-  text: text.trim(),   // plaintext
-  sentAt: now, expiresAt,
-});
+DB_NAME: process.env.DB_NAME || 'test',
 ```
 
-**Fix:** Require clients to encrypt before sending (E2EE enforced at API boundary). The server should reject any message where `text` is not a valid ciphertext envelope, or add server-side AES-256-GCM encryption at rest as a second layer.
+Every other service defaults to `'boomboom'`. If `DB_NAME` is not set in the environment, favourites reads and writes to a different database than the rest of the platform — silently producing empty results or orphaned data.
+
+**Fix:** Change the default to `'boomboom'` to match all other services.
 
 ---
 
-### 8. MEDIUM — Race condition on location update (TOCTOU)
-**File:** `services/location-service.js`
-A read (`findOne`) is followed by a conditional write (`updateOne`). A second concurrent request can slip between the two, causing both to write or both to skip.
+## PERFORMANCE
+
+### P1. HIGH — Location nearby fetches all active users globally
+**File:** `services/location-service.js` (line 192)
+
+The 2dsphere index is created by migrations but the nearby query is a plain `find()` with no geospatial filter:
 
 ```js
-const existing = await db.collection('locations').findOne({ userId: id });
-if (existing && !shouldUpdate(existing, { lat, lon }))
-  return res.json({ ok: true, skipped: true });
-// ← another request can arrive here
-await db.collection('locations').updateOne({ userId: id }, { $set: { … } }, { upsert: true });
+const nearby = await db.collection('locations').find({
+  userId:    { $ne: callerId },
+  updatedAt: { $gt: cutoff },
+}).toArray();
 ```
 
-**Fix:** Use a single atomic `findOneAndUpdate` with `$set` and version-guard, or push the `shouldUpdate` logic into the MongoDB query filter so the write only happens when the condition is true server-side.
+All active location records are loaded into Node.js memory and distance is computed in JS. At scale this is O(all users) per query, executed every 5 seconds per connected client.
+
+**Fix:** Re-introduce the `$nearSphere` / `$geoWithin` filter to let MongoDB do the radius scan using the 2dsphere index, passing a sensible `maxDistance` (e.g. from the tiers service radius config).
 
 ---
 
+### P2. HIGH — Polling instead of push (WS intervals)
+**File:** `services/server.js` (location WS line 253, message WS lines 360, 377)
+
+The server runs `setInterval` per connected client: location every 5 s, conversation list every 3 s, message thread every 2 s. With N clients that's N × 3 live timers, each doing a service fetch regardless of whether anything changed. The hash-comparison optimisation avoids unnecessary WS frames but not the upstream service calls.
+
+**Fix:** Use MongoDB change streams or a lightweight pub/sub (e.g. Redis) to push on change. Fall back to longer polling intervals (15–30 s) until then.
+
 ---
 
-## PERFORMANCE AUDIT
-
-### P1 — Polling instead of push (WS intervals)
-**Files:** `server.js` (location WS, messages WS)
-The server runs `setInterval` per connected client: location every 5 s, message thread every 2 s, conversation list every 3 s. With N connected clients that's N × 3 live intervals, each doing a fetch to an internal service.
-
-- **Impact:** At 100 concurrent users: ~300 inflight fetches/s to internal services at all times, regardless of whether data changed.
-- **Fix:** Push on change (use MongoDB change streams or an event bus). Fall back to longer polling intervals (10–30 s) until then.
-
-### P2 — No DB connection pooling config
+### P3. MEDIUM — No MongoDB connection pool config
 **Files:** all services
-`MongoClient` is created with default settings. Default pool size is 5 in the Node.js driver; under load this serialises queries.
 
-- **Fix:** Pass `{ maxPoolSize: 20 }` (tune per service) to `MongoClient`.
+`MongoClient` is created with default settings. The Node.js driver default pool size is 5; under load this serialises DB queries.
 
-### P3 — Geospatial query on every WS tick
-**File:** `services/location-service.js` (`GET /location/nearby`)
-A `$nearSphere` query runs every 5 s per connected client. These are index-scanned but still O(nearby users) per tick.
+**Fix:** Pass `{ maxPoolSize: 20 }` (tune per service load profile) to `MongoClient`.
 
-- **Fix:** Cache results per cell with a short TTL (e.g. 3 s). Only invalidate when a user in that cell moves.
+---
 
-### P4 — Service token signing on hot path (see Security #6 above)
-Already documented; the CPU cost also affects latency under load.
+### P4. LOW — Dynamic `bcryptjs` import inside route handler
+**File:** `services/users-service.js` (line 141)
 
-### P5 — No HTTP keep-alive between gateway and internal services
-**File:** `services/server.js` (`proxy()`)
-`fetch()` without a custom `Agent` creates a new TCP connection per request.
-
-- **Fix:** Create a shared `undici.Agent` or Node.js `http.Agent` with `keepAlive: true` and reuse it across all `fetch()` calls.
-
-### P6 — `import bcryptjs` inside route handler
-**File:** `services/users-service.js`
 ```js
-const bcrypt = await import('bcryptjs');  // dynamic import inside handler
+const bcrypt = await import('bcryptjs');
 ```
-This works but the module cache is warm after the first call. It's a minor anti-pattern; hoist to a top-level static import.
+
+The module cache warms after the first call so this has no runtime cost after that, but it is a misleading pattern that could cause confusion or be copied incorrectly.
+
+**Fix:** Hoist to a top-level static import.
 
 ---
 
-## USABILITY / DX AUDIT
+## MAINTAINABILITY
 
-### U1 — No client-visible error codes
-All error responses are free-text strings: `{ error: "Internal error." }`. Clients must string-match to handle specific cases, which is fragile.
+### M1. HIGH — `requireServiceToken` copy-pasted into every service
+**Files:** `auth-service.js`, `users-service.js`, `location-service.js`, `messages-service.js`, `favourites-service.js`, `tiers-service.js`, `migration-service.js`
 
-- **Fix:** Add a machine-readable `code` field: `{ error: "…", code: "USER_NOT_FOUND" }`.
+Identical 10-line function in every file. A bug fix or security change must be applied 7 times.
 
-### U2 — No API versioning
-All routes are `/api/*` with no version prefix. Any breaking change requires coordinated frontend deploy.
-
-- **Fix:** Prefix routes `/api/v1/*` and document a deprecation policy.
-
-### U3 — Guest → registered account transition is destructive
-On registration the guest's location is immediately deleted. If the user was mid-browse they lose context.
-
-- **Fix:** Keep the location record and re-associate it with the new `userId` rather than deleting it.
-
-### U4 — WebSocket disconnect is silent to client
-When the server destroys a WS connection (auth failure, wrong origin) the client receives a bare `1006 Abnormal Closure` with no reason code.
-
-- **Fix:** Send a `close` frame with a reason before destroying:
-  `socket.end('HTTP/1.1 401 Unauthorized\r\n\r\n')` or use `ws.close(4001, 'auth_failed')`.
-
-### U5 — No health/status endpoint aggregation
-Each service exposes `GET /health` but there is no single endpoint that aggregates all service health for ops dashboards.
-
-- **Fix:** Add `GET /api/health` to the gateway that fans out to all internal `/health` endpoints and returns a combined summary.
-
-### U6 — Nickname has no maximum length
-**File:** `services/auth-service.js`
-Minimum length (2) is enforced but there is no upper bound. A 10 000-character nickname would be stored and returned to every nearby user.
-
-- **Fix:** Add `nickname.length <= 32` (or similar) check.
-
-### U7 — Age is validated but never used
-`age` is stored and validated (18–120) on registration but no route filters by age, and it is not returned in public profiles. If it is not needed, remove it to reduce PII exposure. If it is needed, document where it will be used.
-
-### U8 — Messages `DELETE` only works on own messages, but error is generic
-**File:** `services/messages-service.js`
-If user A tries to delete user B's message they get `404` (because the query adds `fromUserId` to the filter). A `403 Forbidden` would be more accurate and less confusing.
+**Fix:** Extract to `services/lib/serviceAuth.js` and import it.
 
 ---
 
-## MAINTAINABILITY / CODE QUALITY
+### M2. MEDIUM — `haversineDistance` inlined in two services
+**Files:** `services/location-service.js` (line 34), `services/messages-service.js` (line 30)
 
-### M1 — Haversine duplicated
-Identical function in `location-service.js` and `messages-service.js`. Move to `services/lib/geo.js`.
+`services/lib/geo.js` exists but is not used. Both services carry an identical copy of the function.
 
-### M2 — CORS origin list duplicated
-HTTP CORS and WS origin check are separate hardcoded arrays. Move to a single `ALLOWED_ORIGINS` constant or env var (see Security #10 in full audit).
+**Fix:** Import from `./lib/geo.js` in both services and delete the inlined copies.
 
-### M3 — No shared request validation
-Each service hand-rolls its own validation. A single schema validation middleware (e.g. with `zod`) would reduce boilerplate and standardise error messages.
+---
 
-### M4 — Inconsistent ObjectId handling
-Some services use `new ObjectId(id)` with a try-catch, others pass the raw string. Standardise on a helper: `safeObjectId(str)` → `ObjectId | null`.
+### M3. MEDIUM — `safeObjectId` duplicated across three services
+**Files:** `users-service.js`, `messages-service.js`, `favourites-service.js`
 
-### M5 — Migration service embedded in server startup
-`server.js` blocks startup while waiting for `migration-service` to respond. If migrations are slow or the service is down, the gateway never starts.
+**Fix:** Move to `services/lib/db.js` alongside a shared MongoClient factory (which would also solve P3).
 
-- **Fix:** Run migrations as a one-shot init container in Docker Compose / Railway, separate from the gateway process.
+---
+
+### M4. MEDIUM — `verifyToken` implementations diverge across services
+Each service implements its own `verifyToken` with subtle differences (tokenVersion check: yes in users/messages, no in location/favourites; `requireRegistered` flag: present in users/location, absent in messages/favourites). This makes it hard to reason about auth correctness globally and caused S1 above.
+
+**Fix:** Extract a single `makeVerifyToken(db, jwtSecret, options)` factory to a shared lib.
+
+---
+
+### M5. LOW — No shared request validation
+Each service hand-rolls its own field checks. A schema library (e.g. `zod`) would reduce boilerplate and standardise error shapes.
+
+---
+
+### M6. LOW — Migration service creates indexes that services also create at boot
+**Files:** `migration-service.js`, `messages-service.js` (line 43), `favourites-service.js` (line 27)
+
+Both `messages-service` and `favourites-service` call `createIndex` during startup. The same indexes are also created by migration `001_indexes`. This is harmless (MongoDB is idempotent on `createIndex`) but confusing — it is unclear which definition is authoritative.
+
+**Fix:** Remove the inline `createIndex` calls from the service files and rely on migrations as the sole index authority.
+
+---
+
+## USABILITY
+
+### U1. MEDIUM — Favourites is premium-only but there is no UI path to upgrade
+**File:** `services/tiers-service.js` (line 67)
+
+`manage_favourites` requires `premium` tier. A `regular` user hitting `/api/favourites` gets a 403. If the UI doesn't gate the Favourites page based on tier, users will see a loading spinner or an unexplained error instead of a clear upgrade prompt.
+
+**Fix:** Return the user's `tier` from the gateway tier-check 403 response (already done) and ensure the frontend reads it to show an upgrade CTA instead of an infinite loader.
+
+---
+
+### U2. LOW — No client-visible error codes
+All error responses are free-text strings: `{ error: "Internal error." }`. Clients must string-match to handle specific cases, which is fragile across locales and refactors.
+
+**Fix:** Add a machine-readable `code` field: `{ error: "…", code: "TOKEN_REVOKED" }`.
+
+---
+
+### U3. LOW — No API versioning
+All routes are `/api/*` with no version prefix. Any breaking change requires a coordinated frontend deploy.
+
+**Fix:** Prefix routes `/api/v1/*` and document a deprecation policy.
+
+---
+
+### U4. LOW — `age` is stored and validated but has no product use
+**File:** `services/auth-service.js` (line 140), `services/users-service.js` (line 213)
+
+`age` is accepted on registration and returned in public profiles. No route filters by age and the value is not displayed anywhere in documented UI flows. This is unnecessary PII storage.
+
+**Fix:** Remove `age` from the data model, or document exactly where and how it will be used.
 
 ---
 
 ## SUMMARY
 
-| Area | Grade | Key blocker |
+| Area | Grade | Key issues |
 |---|---|---|
-| Security | C+ | JWT in URL, proximity disabled, tiers unenforced |
-| Performance | B- | Per-client polling intervals, no connection reuse |
-| Usability | B | Silent WS errors, no error codes, no API versioning |
-| Maintainability | B- | Duplicated code, no shared validation, no structured logging |
+| Security | B | Token revocation gap in 2 services, per-connection rate limit, wrong DB default |
+| Performance | C+ | All-users nearby query O(N) on every WS tick, N×3 polling timers per client |
+| Maintainability | C+ | 7× copy-pasted service auth, haversine and ObjectId helpers duplicated |
+| Usability | B | No upgrade CTA for premium features, no error codes, no API versioning |
 
-**Tomorrow's focus (Security 5–8):** tier enforcement at gateway, service token caching, plaintext message storage, location race condition.
-
----
-
-## BATCH 5 — Pending
-
-### Sec #7 follow-up — Frontend ciphertext format ✅ verified & fixed
-Frontend (`ui/scripts/crypto-worker.js`) already encrypts every message before sending, using AES-GCM dual-encryption (one copy for the recipient, one for the sender). The actual envelope sent as `text` is:
-
-```json
-{
-  "forRecipient": { "ivB64": "<base64 IV>", "cipherB64": "<base64 ciphertext>" },
-  "forSender":    { "ivB64": "<base64 IV>", "cipherB64": "<base64 ciphertext>" }
-}
-```
-
-The server-side `isValidCiphertext()` was corrected to match this exact format — both halves (`forRecipient` and `forSender`) must be present with non-empty base64 `ivB64` and `cipherB64` fields. No frontend changes required.
-
-**Status: closed.**
+### Fixed since last audit
+- Tier enforcement at gateway (`checkTier` middleware) ✅
+- Service token caching in gateway and messages-service ✅
+- Plaintext message storage — E2EE envelope validated at API boundary ✅
+- Location TOCTOU race — atomic time-gated `updateOne` ✅
+- HTTP keep-alive between gateway and internal services (undici Agent) ✅
+- CORS origin list consolidated to single `ALLOWED_ORIGINS` constant ✅
+- Guest → registered account transition preserves location (`migrateGuestLocation`) ✅
+- WebSocket disconnect reason codes (`ws.close(4001, …)`) ✅
+- Aggregated health endpoint (`GET /api/health`) ✅
+- Nickname maximum length enforced (32 chars) ✅
+- `DELETE /messages/:id` returns 403 instead of misleading 404 ✅
