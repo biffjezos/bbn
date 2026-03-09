@@ -73,15 +73,18 @@ function verifyToken(req, res, next) {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// --- Location helper ----------------------------------------
-// --- Service token ------------------------------------------
+// --- Service token (cached) ----------------------------------
+let _svcToken = null;
+let _svcTokenExpiry = 0;
+
 function serviceToken() {
-  return jwt.sign(
-    { sub: 'messages', role: 'service' },
-    CFG.JWT_SECRET,
-    { expiresIn: '60s' }
-  );
+  if (Date.now() < _svcTokenExpiry - 5_000) return _svcToken;
+  _svcToken = jwt.sign({ sub: 'messages', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
+  _svcTokenExpiry = Date.now() + 60_000;
+  return _svcToken;
 }
+
+// --- Location helper -----------------------------------------
 
 async function getLocation(userId) {
   try {
@@ -111,6 +114,21 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 // --- Helpers ------------------------------------------------
 function safeObjectId(str) {
   try { return new ObjectId(str); } catch { return null; }
+}
+
+// Validate that text is an E2EE ciphertext envelope.
+// Expected format (matching the client's WebCrypto output):
+//   { ivB64: '<base64>', ciphertextB64: '<base64>' }
+// Both fields must be non-empty strings. Rejects plaintext messages.
+const BASE64_RE = /^[A-Za-z0-9+/]+=*$/;
+function isValidCiphertext(text) {
+  try {
+    const p = JSON.parse(text);
+    return (
+      typeof p.ivB64         === 'string' && BASE64_RE.test(p.ivB64)         && p.ivB64.length         > 0 &&
+      typeof p.ciphertextB64 === 'string' && BASE64_RE.test(p.ciphertextB64) && p.ciphertextB64.length > 0
+    );
+  } catch { return false; }
 }
 
 // --- Routes -------------------------------------------------
@@ -173,6 +191,8 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'text required.' });
     if (text.length > CFG.MESSAGE_MAX_CHARS)
       return res.status(400).json({ error: `Message exceeds ${CFG.MESSAGE_MAX_CHARS} characters.` });
+    if (!isValidCiphertext(text))
+      return res.status(400).json({ error: 'Message must be a valid E2EE ciphertext envelope.' });
 
     const fromId = req.auth.sub;
     const toId   = req.params.userId;

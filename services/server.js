@@ -16,6 +16,7 @@ const CFG = {
   LOC_SERVICE_URL:       process.env.LOC_SERVICE_URL       || 'http://loc',
   MSG_SERVICE_URL:       process.env.MSG_SERVICE_URL       || 'http://msg',
   FAV_SERVICE_URL:       process.env.FAV_SERVICE_URL       || 'http://fav',
+  TIERS_SERVICE_URL:     process.env.TIERS_SERVICE_URL     || 'http://tiers',
   MIGRATION_SERVICE_URL: process.env.MIGRATION_SERVICE_URL || 'http://migrations',
   JWT_SECRET:            process.env.JWT_SECRET,
 };
@@ -53,13 +54,45 @@ app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // ============================================================
 // SERVICE TOKEN — short-lived JWT identifying the gateway
+// Cached and refreshed 5 s before expiry to avoid signing on
+// every proxied request.
 // ============================================================
+let _svcToken = null;
+let _svcTokenExpiry = 0;
+
 function serviceToken() {
-  return jwt.sign(
-    { sub: 'gateway', role: 'service' },
-    CFG.JWT_SECRET,
-    { expiresIn: '60s' }
-  );
+  if (Date.now() < _svcTokenExpiry - 5_000) return _svcToken;
+  _svcToken = jwt.sign({ sub: 'gateway', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
+  _svcTokenExpiry = Date.now() + 60_000;
+  return _svcToken;
+}
+
+// ============================================================
+// TIER ENFORCEMENT — gateway calls tiers-service before proxy
+// ============================================================
+function checkTier(feature) {
+  return async (req, res, next) => {
+    const auth  = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'No token provided.' });
+
+    let payload;
+    try { payload = jwt.verify(token, CFG.JWT_SECRET); }
+    catch { return res.status(401).json({ error: 'Token invalid or expired.' }); }
+
+    try {
+      const check = await fetch(`${CFG.TIERS_SERVICE_URL}/tiers/check`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Service-Token': serviceToken() },
+        body:    JSON.stringify({ tier: payload.tier || 'guest', feature }),
+      });
+      const data = await check.json();
+      if (!check.ok) return res.status(check.status).json(data);
+      next();
+    } catch {
+      res.status(502).json({ error: 'Service unavailable.' });
+    }
+  };
 }
 
 // ============================================================
@@ -110,15 +143,15 @@ app.delete('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERV
 app.get   ('/api/location/nearby', (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location/nearby?lat=${req.query.lat}&lon=${req.query.lon}`));
 
 // --- Messages (HTTP fallback — WS is preferred) -------------
-app.get   ('/api/messages',           (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages`));
-app.get   ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
-app.post  ('/api/messages/:userId',   (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
-app.delete('/api/messages/:id',       (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.id}`));
+app.get   ('/api/messages',         checkTier('message_online'), (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages`));
+app.get   ('/api/messages/:userId', checkTier('message_online'), (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
+app.post  ('/api/messages/:userId', checkTier('message_online'), (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
+app.delete('/api/messages/:id',     checkTier('message_online'), (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.id}`));
 
 // --- Favourites ---------------------------------------------
-app.get   ('/api/favourites',         (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));
-app.post  ('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
-app.delete('/api/favourites/:userId', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
+app.get   ('/api/favourites',         checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));
+app.post  ('/api/favourites/:userId', checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
+app.delete('/api/favourites/:userId', checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
 
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));

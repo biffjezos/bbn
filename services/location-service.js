@@ -125,31 +125,45 @@ app.put('/location', requireAny, async (req, res) => {
     const id     = req.auth.sub;
     const isUser = req.auth.role === 'user';
 
-    const existing = await db.collection('locations').findOne({ userId: id });
-    if (existing && !shouldUpdate(existing, { lat, lon }))
-      return res.json({ ok: true, skipped: true });
+    const locationDoc = {
+      userId:       id,
+      lat,
+      lon,
+      location:     { type: 'Point', coordinates: [lon, lat] }, // GeoJSON is [longitude, latitude]
+      isRegistered: isUser,
+      sex:          req.auth.sex      || null,
+      nickname:     req.auth.nickname || null,
+      accuracy:     accuracy === 'ip' ? 'ip' : 'gps',
+      updatedAt:    new Date(),
+    };
 
-    await db.collection('locations').updateOne(
+    // Best-effort distance check (non-atomic, but low risk — worst case is one extra write).
+    // The time gate below is enforced atomically in the query filter.
+    const existing = await db.collection('locations').findOne(
       { userId: id },
-      {
-        $set: {
-          userId:   id,
-          lat,
-          lon,
-          location: {
-            type:        'Point',
-            coordinates: [lon, lat],   // GeoJSON is [longitude, latitude]
-          },
-          isRegistered: isUser,
-          sex:          req.auth.sex      || null,
-          nickname:     req.auth.nickname || null,
-          accuracy:     accuracy === 'ip' ? 'ip' : 'gps',
-          updatedAt:    new Date(),
-        },
-      },
-      { upsert: true }
+      { projection: { lat: 1, lon: 1, updatedAt: 1 } }
     );
 
+    if (existing) {
+      const movedFar = haversineDistance(existing.lat, existing.lon, lat, lon) >= CFG.UPDATE_DISTANCE_M;
+      if (!movedFar) {
+        // Atomic time-gated update: only writes if the record is old enough.
+        // If another concurrent request already refreshed updatedAt, matchedCount === 0.
+        const cutoff = new Date(Date.now() - CFG.UPDATE_INTERVAL_MS);
+        const result = await db.collection('locations').updateOne(
+          { userId: id, updatedAt: { $lt: cutoff } },
+          { $set: locationDoc }
+        );
+        return res.json({ ok: true, skipped: result.matchedCount === 0 });
+      }
+    }
+
+    // New user (existing === null) or user moved far enough — unconditional upsert.
+    await db.collection('locations').updateOne(
+      { userId: id },
+      { $set: locationDoc },
+      { upsert: true }
+    );
     res.json({ ok: true });
   } catch (e) {
     console.error('[location PUT]', e);
