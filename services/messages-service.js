@@ -13,13 +13,14 @@ const CFG = {
   PORT:            process.env.PORT            || 8080,
   MONGO_URI:       process.env.MONGO_URI       || '',
   DB_NAME:         process.env.DB_NAME         || 'boomboom',
-  JWT_SECRET:      process.env.JWT_SECRET      || 'change-me-in-production',
+  JWT_SECRET:      process.env.JWT_SECRET,
   LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://loc',
 
   MESSAGE_MAX_CHARS:   4096,  // encrypted payload is larger than plaintext
   MESSAGE_TTL_MS:      4 * 60 * 60 * 1000,   // 4 hours
   MESSAGE_PROXIMITY_M: 100,
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
 import express                   from 'express';

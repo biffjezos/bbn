@@ -11,7 +11,7 @@ const CFG = {
   PORT:      process.env.PORT       || 8080,
   MONGO_URI: process.env.MONGO_URI  || '',
   DB_NAME:   process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
+  JWT_SECRET: process.env.JWT_SECRET,
 
   UPDATE_INTERVAL_MS:  15_000,
   UPDATE_DISTANCE_M:   100,
@@ -24,6 +24,7 @@ const CFG = {
   MAX_VISIBLE_REGISTERED:  Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
 import express         from 'express';

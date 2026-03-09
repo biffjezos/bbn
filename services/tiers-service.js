@@ -11,8 +11,9 @@
 
 const CFG = {
   PORT:       process.env.PORT       || 8080,
-  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
+  JWT_SECRET: process.env.JWT_SECRET,
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 
 import express from 'express';
 import jwt     from 'jsonwebtoken';

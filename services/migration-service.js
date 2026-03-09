@@ -6,8 +6,9 @@ const CFG = {
   PORT:      process.env.MIGRATION_PORT || 3099,
   MONGO_URI: process.env.MONGO_URI      || '',
   DB_NAME:   process.env.DB_NAME        || 'boomboom',
-  JWT_SECRET: process.env.JWT_SECRET    || 'change-me-in-production',
+  JWT_SECRET: process.env.JWT_SECRET,
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 
 import express         from 'express';
 import { MongoClient } from 'mongodb';

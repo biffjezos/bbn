@@ -17,15 +17,17 @@ const CFG = {
   MSG_SERVICE_URL:       process.env.MSG_SERVICE_URL       || 'http://msg',
   FAV_SERVICE_URL:       process.env.FAV_SERVICE_URL       || 'http://fav',
   MIGRATION_SERVICE_URL: process.env.MIGRATION_SERVICE_URL || 'http://migrations',
-  JWT_SECRET:            process.env.JWT_SECRET            || 'change-me-in-production',
+  JWT_SECRET:            process.env.JWT_SECRET,
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
 import { createServer }    from 'http';
 import { WebSocketServer } from 'ws';
-import express from 'express';
-import cors    from 'cors';
-import jwt     from 'jsonwebtoken';
+import express   from 'express';
+import cors      from 'cors';
+import jwt       from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 
 const app = express();
 
@@ -39,6 +41,12 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '16kb' }));
+
+// Rate limiting
+app.use('/api/auth/login',    rateLimit({ windowMs: 15 * 60 * 1000, max: 10,  standardHeaders: true, legacyHeaders: false }));
+app.use('/api/auth/register', rateLimit({ windowMs: 60 * 60 * 1000, max: 5,   standardHeaders: true, legacyHeaders: false }));
+app.use('/api/auth/guest',    rateLimit({ windowMs: 60 * 60 * 1000, max: 10,  standardHeaders: true, legacyHeaders: false }));
+app.use('/api/',              rateLimit({ windowMs:       60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false }));
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
@@ -266,7 +274,18 @@ wssMsg.on('connection', (ws, userId, token) => {
 
 const httpServer = createServer(app);
 
+const WS_ALLOWED_ORIGINS = [
+  'https://bbn-e86d0c.gitlab.io',
+  'https://biffjezos.github.io',
+];
+
 httpServer.on('upgrade', (req, socket, head) => {
+  if (!WS_ALLOWED_ORIGINS.includes(req.headers['origin'])) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
   const url     = new URL(req.url, `http://${req.headers.host}`);
   const token   = url.searchParams.get('token');
   if (!token) { socket.destroy(); return; }

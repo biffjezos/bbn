@@ -11,8 +11,9 @@ const CFG = {
   PORT:       process.env.PORT       || 3002,
   MONGO_URI:  process.env.MONGO_URI  || '',
   DB_NAME:    process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
+  JWT_SECRET: process.env.JWT_SECRET,
 };
+if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
 import express                   from 'express';
@@ -82,6 +83,9 @@ app.get('/users/me', requireUser, async (req, res) => {
 // PUT /users/me
 app.put('/users/me', requireUser, async (req, res) => {
   try {
+    if (req.body.tier !== undefined)
+      return res.status(400).json({ error: 'tier cannot be modified.' });
+
     const update = {};
 
     if (req.body.nickname !== undefined) update.nickname = req.body.nickname.trim();
