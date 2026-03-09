@@ -6,7 +6,7 @@
 
 const API_BASE = window.BOOMBOOM_API_URL || 'https://bbn-e86d0c.gitlab.io/api';
 
-async function apiFetch(path, options = {}) {
+async function apiFetch(path, options = {}, _retries = 1) {
   const token = window.Auth?.getToken?.();
   const headers = {
     'Content-Type': 'application/json',
@@ -19,13 +19,24 @@ async function apiFetch(path, options = {}) {
 
   let res;
   try {
-    res = await fetch(url, { ...options, headers });
+    res = await fetch(url, { ...options, headers, signal: AbortSignal.timeout(10000) });
   } catch (networkErr) {
     console.error('[API] Network error:', networkErr.message, 'URL:', url);
+    if (_retries > 0) {
+      await new Promise(r => setTimeout(r, 1500));
+      return apiFetch(path, options, _retries - 1);
+    }
     throw networkErr;
   }
 
   const data = await res.json().catch(() => ({}));
+
+  // Retry once on 5xx — services may be waking from sleep
+  if (res.status >= 500 && _retries > 0) {
+    console.warn('[API] 5xx, retrying in 1.5 s…', res.status, url);
+    await new Promise(r => setTimeout(r, 1500));
+    return apiFetch(path, options, _retries - 1);
+  }
 
   if (!res.ok) {
     const err = new Error(data.error || `HTTP ${res.status}`);
@@ -33,6 +44,11 @@ async function apiFetch(path, options = {}) {
     err.data = data;
     if (res.status === 403 && data.required) {
       document.dispatchEvent(new CustomEvent('bbm:tier-gate', { detail: data }));
+    }
+    // Token is revoked or expired server-side — clear local session so the
+    // user is prompted to log in again instead of seeing a raw error.
+    if (res.status === 401 && (data.code === 'TOKEN_REVOKED' || data.code === 'TOKEN_INVALID')) {
+      window.Auth?.logout?.();
     }
     throw err;
   }

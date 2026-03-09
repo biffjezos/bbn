@@ -59,6 +59,7 @@ function issueUserToken(user) {
       email:    user.email,
       nickname: user.nickname,
       sex:      user.sex,
+      age:      user.age      ?? null,
       role:     'user',
       tier:     user.tier || 'regular',
       tv:       user.tokenVersion ?? 0,
@@ -71,15 +72,15 @@ function issueUserToken(user) {
 async function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  if (!token) return res.status(401).json({ error: 'No token provided.', code: 'NO_TOKEN' });
   let payload;
   try {
     payload = jwt.verify(token, CFG.JWT_SECRET);
   } catch {
-    return res.status(401).json({ error: 'Token invalid or expired.' });
+    return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
   if (requireRegistered && payload.role !== 'user')
-    return res.status(403).json({ error: 'Registered account required.' });
+    return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
 
   // Verify tokenVersion so password changes invalidate old JWTs.
   // Tokens issued before this field existed have tv=undefined; treat as 0.
@@ -87,10 +88,11 @@ async function verifyToken(req, res, next, requireRegistered = false) {
     try {
       const oid  = safeObjectId(payload.sub);
       const user = oid && await db.collection('users').findOne(
-        { _id: oid, tokenVersion: payload.tv ?? 0 },
-        { projection: { _id: 1 } }
+        { _id: oid },
+        { projection: { tokenVersion: 1 } }
       );
-      if (!user) return res.status(401).json({ error: 'Token revoked.' });
+      if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+        return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
     } catch {
       return res.status(500).json({ error: 'Internal error.' });
     }

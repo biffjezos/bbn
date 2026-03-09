@@ -53,24 +53,27 @@ app.use((req, res, next) => {
 async function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  if (!token) return res.status(401).json({ error: 'No token provided.', code: 'NO_TOKEN' });
   let payload;
   try {
     payload = jwt.verify(token, CFG.JWT_SECRET);
   } catch {
-    return res.status(401).json({ error: 'Token invalid or expired.' });
+    return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
   if (payload.role !== 'user')
-    return res.status(403).json({ error: 'Registered account required.' });
+    return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
 
   // Verify tokenVersion so password changes invalidate old JWTs.
+  // Compare in JS (not as a Mongo filter) so legacy docs without the field
+  // (which default to 0) are not incorrectly treated as revoked.
   try {
     const oid  = safeObjectId(payload.sub);
     const user = oid && await db.collection('users').findOne(
-      { _id: oid, tokenVersion: payload.tv ?? 0 },
-      { projection: { _id: 1 } }
+      { _id: oid },
+      { projection: { tokenVersion: 1 } }
     );
-    if (!user) return res.status(401).json({ error: 'Token revoked.' });
+    if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+      return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
   } catch {
     return res.status(500).json({ error: 'Internal error.' });
   }

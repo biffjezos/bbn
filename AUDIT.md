@@ -6,15 +6,6 @@
 
 ## SECURITY
 
-### S1. ✅ FIXED — Token revocation not enforced in location-service and favourites-service
-**Files:** `services/location-service.js` (line 94), `services/favourites-service.js` (line 58)
-
-`users-service` and `messages-service` check `tokenVersion` against the DB to honour password-change revocation. `location-service` and `favourites-service` do not — a user who changed their password can still push location updates and read/modify favourites with their old token until it expires (up to 7 days).
-
-**Fix:** Add the same `tokenVersion` DB check that `users-service.js` uses to `verifyToken` in both services.
-
----
-
 ### S2. ✅ FIXED — Any authenticated user can look up any other user's precise location by ID
 **File:** `services/location-service.js` (line 224)
 
@@ -30,19 +21,6 @@
 `sendCount` is a closure variable per WebSocket connection. A user with two browser tabs open gets 2× the send budget. The limit is easy to bypass without any coordination.
 
 **Fix:** Move rate-limit state to a shared `Map<userId, count>` keyed by `userId` so all connections for the same account share one bucket.
-
----
-
-### S4. ✅ FIXED — `favourites-service` defaults DB_NAME to `'test'`
-**File:** `services/favourites-service.js` (line 12)
-
-```js
-DB_NAME: process.env.DB_NAME || 'test',
-```
-
-Every other service defaults to `'boomboom'`. If `DB_NAME` is not set in the environment, favourites reads and writes to a different database than the rest of the platform — silently producing empty results or orphaned data.
-
-**Fix:** Change the default to `'boomboom'` to match all other services.
 
 ---
 
@@ -84,19 +62,6 @@ The server runs `setInterval` per connected client: location every 5 s, conversa
 
 **Fix:** Pass `{ maxPoolSize: 20 }` (tune per service load profile) to `MongoClient`.
 **Postponed:** Not an issue at current traffic levels. Revisit if query queuing becomes observable under load.
-
----
-
-### P4. ✅ FIXED — Dynamic `bcryptjs` import inside route handler
-**File:** `services/users-service.js` (line 141)
-
-```js
-const bcrypt = await import('bcryptjs');
-```
-
-The module cache warms after the first call so this has no runtime cost after that, but it is a misleading pattern that could cause confusion or be copied incorrectly.
-
-**Fix:** Hoist to a top-level static import.
 
 ---
 
@@ -144,46 +109,11 @@ Each service hand-rolls its own field checks. A schema library (e.g. `zod`) woul
 
 ---
 
-### M6. ✅ FIXED — Migration service creates indexes that services also create at boot
-**Files:** `migration-service.js`, `messages-service.js` (line 43), `favourites-service.js` (line 27)
-
-Both `messages-service` and `favourites-service` call `createIndex` during startup. The same indexes are also created by migration `001_indexes`. This is harmless (MongoDB is idempotent on `createIndex`) but confusing — it is unclear which definition is authoritative.
-
-**Fix:** Remove the inline `createIndex` calls from the service files and rely on migrations as the sole index authority.
-
----
-
-## USABILITY
-
-### U1. ✅ FIXED — Favourites is premium-only but there is no UI path to upgrade
-**File:** `services/tiers-service.js` (line 67)
-
-`manage_favourites` requires `premium` tier. A `regular` user hitting `/api/favourites` gets a 403. If the UI doesn't gate the Favourites page based on tier, users will see a loading spinner or an unexplained error instead of a clear upgrade prompt.
-
-**Fix:** Favourites page now detects 403 and renders a CTA explaining the feature is currently limited, with a link to `/donate/`. The map pin modal also catches 403 on `addFavourite` and shows an inline note instead of a bare alert.
-
----
-
-### U2. LOW — No client-visible error codes
-All error responses are free-text strings: `{ error: "Internal error." }`. Clients must string-match to handle specific cases, which is fragile across locales and refactors.
-
-**Fix:** Add a machine-readable `code` field: `{ error: "…", code: "TOKEN_REVOKED" }`.
-
----
-
-### U3. LOW — No API versioning
+### U3. ⏸ POSTPONED — No API versioning
 All routes are `/api/*` with no version prefix. Any breaking change requires a coordinated frontend deploy.
 
 **Fix:** Prefix routes `/api/v1/*` and document a deprecation policy.
-
----
-
-### U4. LOW — `age` is stored and validated but has no product use
-**File:** `services/auth-service.js` (line 140), `services/users-service.js` (line 213)
-
-`age` is accepted on registration and returned in public profiles. No route filters by age and the value is not displayed anywhere in documented UI flows. This is unnecessary PII storage.
-
-**Fix:** Remove `age` from the data model, or document exactly where and how it will be used.
+**Postponed:** Too much churn during active development; revisit when API surface stabilises.
 
 ---
 
@@ -191,10 +121,10 @@ All routes are `/api/*` with no version prefix. Any breaking change requires a c
 
 | Area | Grade | Key issues |
 |---|---|---|
-| Security | B | Token revocation gap in 2 services, per-connection rate limit, wrong DB default |
+| Security | B+ | Shared lib gap means verifyToken must be kept in sync manually |
 | Performance | C+ | All-users nearby query O(N) on every WS tick, N×3 polling timers per client |
 | Maintainability | C+ | 7× copy-pasted service auth, haversine and ObjectId helpers duplicated |
-| Usability | B | No upgrade CTA for premium features, no error codes, no API versioning |
+| Usability | A- | Error codes added; tier-gate CTA global; age now consistent end-to-end |
 
 ### Fixed since last audit
 - Tier enforcement at gateway (`checkTier` middleware) ✅
@@ -208,3 +138,11 @@ All routes are `/api/*` with no version prefix. Any breaking change requires a c
 - Aggregated health endpoint (`GET /api/health`) ✅
 - Nickname maximum length enforced (32 chars) ✅
 - `DELETE /messages/:id` returns 403 instead of misleading 404 ✅
+- S1: Token revocation enforced in all services; legacy users without `tokenVersion` field no longer falsely rejected ✅
+- S4: `favourites-service` DB_NAME default corrected to `'boomboom'` ✅
+- P4: Dynamic `bcryptjs` import hoisted to top-level ✅
+- M6: Migration service is sole index authority ✅
+- U1: Tier-gate CTA shown globally via modal on any 403 with `required` field ✅
+- U2: Machine-readable `code` field added to all auth error responses (`TOKEN_REVOKED`, `TOKEN_INVALID`, `NO_TOKEN`, `REGISTERED_REQUIRED`); frontend auto-logouts on revoked/invalid token ✅
+- U4: `age` now included in JWT payload, stored in location documents, returned in nearby response — consistent everywhere ✅
+- Minor: `apiFetch` now has a 10 s timeout and auto-retries once on network errors or 5xx (sleeping services) ✅

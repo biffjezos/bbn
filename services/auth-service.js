@@ -36,6 +36,7 @@ function issueUserToken(user) {
       email:    user.email,
       nickname: user.nickname,
       sex:      user.sex,
+      age:      user.age      ?? null,
       role:     'user',
       tier:     user.tier || 'regular',
       tv:       user.tokenVersion ?? 0,
