@@ -8,10 +8,11 @@
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:       process.env.PORT       || 3002,
-  MONGO_URI:  process.env.MONGO_URI  || '',
-  DB_NAME:    process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET: process.env.JWT_SECRET,
+  PORT:            process.env.PORT       || 3002,
+  MONGO_URI:       process.env.MONGO_URI  || '',
+  DB_NAME:         process.env.DB_NAME    || 'boomboom',
+  JWT_SECRET:      process.env.JWT_SECRET,
+  JWT_EXPIRY_USER: '7d',
 };
 if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
@@ -50,19 +51,52 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
-function verifyToken(req, res, next, requireRegistered = false) {
+function issueUserToken(user) {
+  return jwt.sign(
+    {
+      sub:      user._id.toString(),
+      email:    user.email,
+      nickname: user.nickname,
+      sex:      user.sex,
+      role:     'user',
+      tier:     user.tier || 'regular',
+      tv:       user.tokenVersion ?? 0,
+    },
+    CFG.JWT_SECRET,
+    { expiresIn: CFG.JWT_EXPIRY_USER }
+  );
+}
+
+async function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided.' });
+  let payload;
   try {
-    const payload = jwt.verify(token, CFG.JWT_SECRET);
-    if (requireRegistered && payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
+    payload = jwt.verify(token, CFG.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token invalid or expired.' });
   }
+  if (requireRegistered && payload.role !== 'user')
+    return res.status(403).json({ error: 'Registered account required.' });
+
+  // Verify tokenVersion so password changes invalidate old JWTs.
+  // Tokens issued before this field existed have tv=undefined; treat as 0.
+  if (payload.role === 'user') {
+    try {
+      const oid  = safeObjectId(payload.sub);
+      const user = oid && await db.collection('users').findOne(
+        { _id: oid, tokenVersion: payload.tv ?? 0 },
+        { projection: { _id: 1 } }
+      );
+      if (!user) return res.status(401).json({ error: 'Token revoked.' });
+    } catch {
+      return res.status(500).json({ error: 'Internal error.' });
+    }
+  }
+
+  req.auth = payload;
+  next();
 }
 
 const requireUser = (req, res, next) => verifyToken(req, res, next, true);
@@ -102,7 +136,8 @@ app.put('/users/me', requireUser, async (req, res) => {
     if (req.body.age      !== undefined) update.age      = parseInt(req.body.age, 10);
     if (req.body.sex      !== undefined) update.sex      = req.body.sex;
     if (req.body.email    !== undefined) update.email    = req.body.email.toLowerCase().trim();
-    if (req.body.password !== undefined && req.body.password.length >= 8) {
+    const changingPassword = req.body.password !== undefined && req.body.password.length >= 8;
+    if (changingPassword) {
       const bcrypt = await import('bcryptjs');
       update.passwordHash = await bcrypt.default.hash(req.body.password, 12);
     }
@@ -115,9 +150,13 @@ app.put('/users/me', requireUser, async (req, res) => {
     if (update.sex && !['m', 'f'].includes(update.sex))
       return res.status(400).json({ error: "sex must be 'm' or 'f'." });
 
+    const mongoUpdate = { $set: update };
+    // Increment tokenVersion on password change so all existing JWTs are invalidated.
+    if (changingPassword) mongoUpdate.$inc = { tokenVersion: 1 };
+
     await db.collection('users').updateOne(
       { _id: new ObjectId(req.auth.sub) },
-      { $set: update }
+      mongoUpdate
     );
 
     // Keep location doc in sync so map icon updates without re-login
@@ -129,6 +168,15 @@ app.put('/users/me', requireUser, async (req, res) => {
         { userId: req.auth.sub },
         { $set: locUpdate }
       );
+    }
+
+    // Return a fresh JWT after password change so the client can keep working.
+    if (changingPassword) {
+      const updatedUser = await db.collection('users').findOne(
+        { _id: new ObjectId(req.auth.sub) },
+        { projection: { passwordHash: 0 } }
+      );
+      return res.json({ ok: true, token: issueUserToken(updatedUser) });
     }
 
     res.json({ ok: true });

@@ -38,6 +38,7 @@ function issueUserToken(user) {
       sex:      user.sex,
       role:     'user',
       tier:     user.tier || 'regular',
+      tv:       user.tokenVersion ?? 0,
     },
     CFG.JWT_SECRET,
     { expiresIn: CFG.JWT_EXPIRY_USER }
@@ -148,8 +149,9 @@ app.post('/auth/register', async (req, res) => {
       passwordHash: hash,
       age,
       sex,
-      tier:      'regular',
-      createdAt: new Date(),
+      tier:         'regular',
+      tokenVersion: 0,
+      createdAt:    new Date(),
     });
 
     const user = {

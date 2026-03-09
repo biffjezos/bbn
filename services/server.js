@@ -213,18 +213,39 @@ function svcHeaders(token) {
 // ============================================================
 // WEBSOCKET — Location
 // Any authenticated role (guest or registered user) may connect.
+// Auth: client sends { type: 'auth', token } as the first message.
+// Connection is closed with code 4001 if auth is not received
+// within WS_AUTH_TIMEOUT_MS or the token is invalid.
 // Client sends:  { type: 'position', lat, lon, accuracy }
 // Server pushes: { type: 'nearby',   users: [...] }  every 5 s
 // On disconnect: gateway deletes the client's location record.
 // ============================================================
 
-const WS_MAX_BYTES    = 4096;   // max incoming message size per frame
-const WS_SEND_LIMIT   = 10;     // max message sends per connection per window
-const WS_SEND_WINDOW  = 10_000; // window length in ms
+const WS_MAX_BYTES        = 4096;   // max incoming message size per frame
+const WS_SEND_LIMIT       = 10;     // max message sends per connection per window
+const WS_SEND_WINDOW      = 10_000; // window length in ms
+const WS_AUTH_TIMEOUT_MS  = 3000;   // ms to wait for first-message auth
 
 const wssLoc = new WebSocketServer({ noServer: true });
 
-wssLoc.on('connection', (ws, userId, token) => {
+wssLoc.on('connection', ws => {
+  // ── Auth phase ─────────────────────────────────────────────
+  const authTimeout = setTimeout(() => ws.close(4001, 'Auth timeout'), WS_AUTH_TIMEOUT_MS);
+
+  ws.once('message', raw => {
+    clearTimeout(authTimeout);
+    let msg;
+    try { msg = JSON.parse(raw); } catch { ws.close(4001, 'Bad auth'); return; }
+    if (msg.type !== 'auth' || !msg.token) { ws.close(4001, 'Auth required'); return; }
+
+    const payload = verifyToken(msg.token);
+    if (!payload) { ws.close(4001, 'Invalid token'); return; }
+
+    setupLocConnection(ws, payload.sub, msg.token);
+  });
+});
+
+function setupLocConnection(ws, userId, token) {
   console.log('[WS:loc] +', userId);
   let lastPos        = null;
   let lastNearbyHash = null;
@@ -270,11 +291,12 @@ wssLoc.on('connection', (ws, userId, token) => {
       });
     } catch { /* silent */ }
   });
-});
+}
 
 // ============================================================
 // WEBSOCKET — Messages
 // Registered users only.
+// Auth: same first-message pattern as location WS.
 // Client sends:  { type: 'view', userId }   — subscribe to thread
 //                { type: 'send', toUserId, text } — send a message
 // Server pushes: { type: 'conversations', messages: [...] } every 3 s
@@ -284,7 +306,25 @@ wssLoc.on('connection', (ws, userId, token) => {
 
 const wssMsg = new WebSocketServer({ noServer: true });
 
-wssMsg.on('connection', (ws, userId, token) => {
+wssMsg.on('connection', ws => {
+  // ── Auth phase ─────────────────────────────────────────────
+  const authTimeout = setTimeout(() => ws.close(4001, 'Auth timeout'), WS_AUTH_TIMEOUT_MS);
+
+  ws.once('message', raw => {
+    clearTimeout(authTimeout);
+    let msg;
+    try { msg = JSON.parse(raw); } catch { ws.close(4001, 'Bad auth'); return; }
+    if (msg.type !== 'auth' || !msg.token) { ws.close(4001, 'Auth required'); return; }
+
+    const payload = verifyToken(msg.token);
+    if (!payload)                  { ws.close(4001, 'Invalid token'); return; }
+    if (payload.role !== 'user')   { ws.close(4003, 'Registered account required'); return; }
+
+    setupMsgConnection(ws, payload.sub, msg.token);
+  });
+});
+
+function setupMsgConnection(ws, userId, token) {
   console.log('[WS:msg] +', userId);
   let viewingUserId = null;
   let threadTimer   = null;
@@ -358,12 +398,12 @@ wssMsg.on('connection', (ws, userId, token) => {
     if (threadTimer) clearInterval(threadTimer);
     console.log('[WS:msg] -', userId);
   });
-});
+}
 
 // ============================================================
 // HTTP UPGRADE ROUTING
-// Token must be provided as a query parameter because the browser
-// WebSocket API does not support custom request headers.
+// Token is NOT accepted in the URL query string (Sec #1).
+// Auth happens as the first WebSocket message after connection.
 // ============================================================
 
 const httpServer = createServer(app);
@@ -375,20 +415,12 @@ httpServer.on('upgrade', (req, socket, head) => {
     return;
   }
 
-  const url     = new URL(req.url, `http://${req.headers.host}`);
-  const token   = url.searchParams.get('token');
-  if (!token) { socket.destroy(); return; }
-
-  const payload = verifyToken(token);
-  if (!payload) { socket.destroy(); return; }
-
-  const userId = payload.sub;
+  const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === '/ws/location') {
-    wssLoc.handleUpgrade(req, socket, head, ws => wssLoc.emit('connection', ws, userId, token));
+    wssLoc.handleUpgrade(req, socket, head, ws => wssLoc.emit('connection', ws));
   } else if (url.pathname === '/ws/messages') {
-    if (payload.role !== 'user') { socket.destroy(); return; }
-    wssMsg.handleUpgrade(req, socket, head, ws => wssMsg.emit('connection', ws, userId, token));
+    wssMsg.handleUpgrade(req, socket, head, ws => wssMsg.emit('connection', ws));
   } else {
     socket.destroy();
   }

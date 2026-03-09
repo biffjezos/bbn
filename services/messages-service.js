@@ -57,19 +57,33 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
-function verifyToken(req, res, next) {
+async function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No token provided.' });
+  let payload;
   try {
-    const payload = jwt.verify(token, CFG.JWT_SECRET);
-    if (payload.role !== 'user')
-      return res.status(403).json({ error: 'Registered account required.' });
-    req.auth  = payload;
-    next();
-  } catch (e) {
-    res.status(401).json({ error: 'Token invalid or expired.' });
+    payload = jwt.verify(token, CFG.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Token invalid or expired.' });
   }
+  if (payload.role !== 'user')
+    return res.status(403).json({ error: 'Registered account required.' });
+
+  // Verify tokenVersion so password changes invalidate old JWTs.
+  try {
+    const oid  = safeObjectId(payload.sub);
+    const user = oid && await db.collection('users').findOne(
+      { _id: oid, tokenVersion: payload.tv ?? 0 },
+      { projection: { _id: 1 } }
+    );
+    if (!user) return res.status(401).json({ error: 'Token revoked.' });
+  } catch {
+    return res.status(500).json({ error: 'Internal error.' });
+  }
+
+  req.auth = payload;
+  next();
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -199,7 +213,17 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     );
     if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
 
-    // Proximity enforcement disabled — all users can message regardless of distance
+    // Proximity enforcement — both users must be online and within MESSAGE_PROXIMITY_M metres.
+    const svcAuth = { Authorization: `Bearer ${serviceToken()}`, 'X-Service-Token': serviceToken() };
+    const [fromLocRes, toLocRes] = await Promise.all([
+      fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(fromId)}`,  { headers: svcAuth }),
+      fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(toId)}`,    { headers: svcAuth }),
+    ]);
+    if (fromLocRes.status !== 200 || toLocRes.status !== 200)
+      return res.status(403).json({ error: 'Both users must be sharing location to message.' });
+    const [fromLoc, toLoc] = await Promise.all([fromLocRes.json(), toLocRes.json()]);
+    if (haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon) > CFG.MESSAGE_PROXIMITY_M)
+      return res.status(403).json({ error: 'You are too far away to message this user.' });
 
     const now       = new Date();
     const expiresAt = new Date(now.getTime() + CFG.MESSAGE_TTL_MS);
