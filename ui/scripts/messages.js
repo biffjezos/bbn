@@ -89,10 +89,9 @@ let _wsRetry    = 1000;
 let _wsRetryTmr = null;
 
 function msgWsUrl() {
-  const api   = window.BOOMBOOM_API_URL || '';
-  const base  = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
-  const token = window.Auth?.getToken?.() || '';
-  return `${base}/ws/messages?token=${encodeURIComponent(token)}`;
+  const api  = window.BOOMBOOM_API_URL || '';
+  const base = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
+  return `${base}/ws/messages`;
 }
 
 function wsSend(obj) {
@@ -112,6 +111,8 @@ function connectMsgWS() {
   _msgWs.onopen = function () {
     _wsRetry = 1000;
     console.log('[Msg] WS connected');
+    // First message must be auth (gateway requirement)
+    wsSend({ type: 'auth', token: window.Auth?.getToken?.() || '' });
     // If we're on the thread page, subscribe immediately
     const params = new URLSearchParams(window.location.search);
     const uid    = params.get('uid');
