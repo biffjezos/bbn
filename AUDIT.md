@@ -67,12 +67,13 @@ All active location records are loaded into Node.js memory and distance is compu
 
 ---
 
-### P2. HIGH — Polling instead of push (WS intervals)
+### P2. ⏸ POSTPONED — Polling instead of push (WS intervals)
 **File:** `services/server.js` (location WS line 253, message WS lines 360, 377)
 
 The server runs `setInterval` per connected client: location every 5 s, conversation list every 3 s, message thread every 2 s. With N clients that's N × 3 live timers, each doing a service fetch regardless of whether anything changed. The hash-comparison optimisation avoids unnecessary WS frames but not the upstream service calls.
 
 **Fix:** Use MongoDB change streams or a lightweight pub/sub (e.g. Redis) to push on change. Fall back to longer polling intervals (15–30 s) until then.
+**Postponed:** Requires infrastructure changes (change streams or pub/sub layer). Partially mitigated by the 5m movement threshold that suppresses redundant location forwards when users are stationary.
 
 ---
 
