@@ -1,6 +1,6 @@
 # Migrations
 
-*[← Tiers](tiers.md) · [← README](README.md)*
+*[← Tiers](tiers.md) · [← README (Technical Reference)](README.md#api-documentation)*
 
 ---
 
@@ -73,4 +73,4 @@ To re-run a migration: delete its record from `_migrations` and redeploy.
 
 ---
 
-*[← Tiers](tiers.md) · [← README](README.md)*
+*[← Tiers](tiers.md) · [← README (Technical Reference)](README.md#api-documentation)*

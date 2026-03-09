@@ -1,6 +1,6 @@
 # Authentication
 
-*[← README](README.md) · [User Profiles →](users.md)*
+*[← README (Technical Reference)](README.md#api-documentation) · [User Profiles →](users.md)*
 
 ---
 
@@ -153,4 +153,4 @@ See [Messages — Session Lock](messages.md#session-lock) for full details.
 
 ---
 
-*[← README](README.md) · [User Profiles →](users.md)*
+*[← README (Technical Reference)](README.md#api-documentation) · [User Profiles →](users.md)*
