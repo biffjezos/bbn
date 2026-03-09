@@ -68,6 +68,16 @@ const FEATURES = {
     minTier: 'regular',
   },
 
+  // Visible radius on map (metres). Shown as a circle around the user's pin.
+  view_radius: {
+    minTier: 'guest',
+    radius: {
+      guest:   0,
+      regular: 1000,
+      premium: 3000,
+    },
+  },
+
   // ── ADD NEW FEATURES HERE ───────────────────────────────────
   // search_users: {
   //   minTier: 'premium',
