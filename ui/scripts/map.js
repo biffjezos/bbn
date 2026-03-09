@@ -18,8 +18,8 @@
   let lastNearbyUsers = [];
   let meetControl     = null;
 
-  // View radius per tier — mirrors tiers-service.js FEATURES.see_nearby.radius
-  const VIEW_RADIUS = { guest: 1000, regular: 1000, premium: 3000 };
+  // Populated after auth resolves from /tiers/radius/nearby/:tier
+  let viewRadius = 0;
 
   const TILE_URL     = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
   const TILE_ATTR    = '&copy; OpenStreetMap contributors &copy; CARTO';
@@ -122,8 +122,7 @@
 
   function placeSelfMarker(lat, lng) {
     const sex    = window.Auth?.getSex?.() || null;
-    const tier   = window.Auth?.getTier?.() || 'guest';
-    const radius = VIEW_RADIUS[tier] ?? 0;
+    const radius = viewRadius;
 
     if (selfMarker) {
       selfMarker.setLatLng([lat, lng]);
@@ -362,6 +361,14 @@
 
   // GeoState may already have a position if geo resolved before map.js ran
   window.__authReady.then(function () {
+    const tier = window.Auth?.getTier?.() || 'guest';
+    window.Api.getNearbyRadius(tier).then(function (data) {
+      // null means Infinity (no cap) — treat as no visible circle
+      viewRadius = data.radiusM ?? 0;
+      const pos = window.GeoState?.pos;
+      if (map && pos) placeSelfMarker(pos.lat, pos.lng);
+    }).catch(function () {});
+
     const pos = window.GeoState?.pos;
     if (pos) initMap(pos.lat, pos.lng);
 

@@ -133,6 +133,10 @@ const Api = {
     return apiFetch(`/location/nearby?lat=${lat}&lon=${lon}`);
   },
 
+  getNearbyRadius(tier) {
+    return apiFetch(`/tiers/radius/nearby/${encodeURIComponent(tier)}`);
+  },
+
   // ---- Messages -------------------------------------------
 
   getConversations() {
