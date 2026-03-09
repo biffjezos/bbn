@@ -125,11 +125,9 @@ function safeObjectId(str) {
 }
 
 // Validate that text is an E2EE ciphertext envelope.
-// Format (matching the client's WebCrypto AES-GCM dual-encryption output):
-//   {
-//     forRecipient: { ivB64: '<base64>', cipherB64: '<base64>' },
-//     forSender:    { ivB64: '<base64>', cipherB64: '<base64>' }
-//   }
+// Format (ECDH AES-GCM — sender and recipient derive the same shared key, so
+// a single ciphertext is readable by both parties):
+//   { cipher: { ivB64: '<base64>', cipherB64: '<base64>' }, recipientId: '<userId>' }
 // Rejects plaintext and malformed payloads before they reach the DB.
 const BASE64_RE = /^[A-Za-z0-9+/]+=*$/;
 function isBase64(s) { return typeof s === 'string' && s.length > 0 && BASE64_RE.test(s); }
@@ -137,7 +135,7 @@ function isValidCipherHalf(h) { return h && isBase64(h.ivB64) && isBase64(h.ciph
 function isValidCiphertext(text) {
   try {
     const p = JSON.parse(text);
-    return isValidCipherHalf(p.forRecipient) && isValidCipherHalf(p.forSender);
+    return isValidCipherHalf(p.cipher);
   } catch { return false; }
 }
 
