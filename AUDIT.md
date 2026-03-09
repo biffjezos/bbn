@@ -144,7 +144,7 @@ Each service hand-rolls its own field checks. A schema library (e.g. `zod`) woul
 
 ---
 
-### M6. LOW — Migration service creates indexes that services also create at boot
+### M6. ✅ FIXED — Migration service creates indexes that services also create at boot
 **Files:** `migration-service.js`, `messages-service.js` (line 43), `favourites-service.js` (line 27)
 
 Both `messages-service` and `favourites-service` call `createIndex` during startup. The same indexes are also created by migration `001_indexes`. This is harmless (MongoDB is idempotent on `createIndex`) but confusing — it is unclear which definition is authoritative.

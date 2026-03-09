@@ -40,11 +40,6 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[messages] DB connected.');
 
-await db.collection('messages').createIndex(
-  { expiresAt: 1 },
-  { expireAfterSeconds: 0, background: true }
-);
-
 // --- Express ------------------------------------------------
 const app = express();
 app.use(express.json({ limit: '16kb' }));

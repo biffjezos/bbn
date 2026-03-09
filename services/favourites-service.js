@@ -24,11 +24,6 @@ import jwt                       from 'jsonwebtoken';
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[favourites] DB connected.');
 
-await db.collection('favourites').createIndex(
-  { ownerUserId: 1, favouriteUserId: 1 },
-  { unique: true, background: true }
-);
-
 // --- Helpers ------------------------------------------------
 function safeObjectId(str) {
   try { return new ObjectId(str); } catch { return null; }
