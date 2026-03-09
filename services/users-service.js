@@ -205,6 +205,59 @@ app.delete('/users/me', requireUser, async (req, res) => {
   }
 });
 
+// GET /users/search — global user search (registered users only)
+// Query params: nickname, ageMin, ageMax, sex, online (yes|no)
+app.get('/users/search', requireUser, async (req, res) => {
+  try {
+    const { nickname, ageMin, ageMax, sex, online } = req.query;
+
+    const filter = {};
+    if (nickname) {
+      // Substring (contains) match — escape special regex chars
+      const esc = nickname.trim().replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+      filter.nickname = { $regex: esc, $options: 'i' };
+    }
+    if (sex && ['m', 'f'].includes(sex)) filter.sex = sex;
+    if (ageMin || ageMax) {
+      filter.age = {};
+      if (ageMin) filter.age.$gte = parseInt(ageMin, 10);
+      if (ageMax) filter.age.$lte = parseInt(ageMax, 10);
+    }
+
+    const users = await db.collection('users').find(filter, {
+      projection: { nickname: 1, age: 1, sex: 1 },
+      limit: 50,
+    }).toArray();
+
+    if (users.length === 0) return res.json({ users: [] });
+
+    // Determine online status: location updated within 10 min
+    const userIds = users.map(u => u._id.toString());
+    const cutoff  = new Date(Date.now() - 10 * 60 * 1000);
+    const onlineDocs = await db.collection('locations').find(
+      { userId: { $in: userIds }, updatedAt: { $gt: cutoff } },
+      { projection: { userId: 1 } }
+    ).toArray();
+    const onlineSet = new Set(onlineDocs.map(l => l.userId));
+
+    let results = users.map(u => ({
+      userId:   u._id.toString(),
+      nickname: u.nickname,
+      age:      u.age  ?? null,
+      sex:      u.sex  ?? null,
+      online:   onlineSet.has(u._id.toString()),
+    }));
+
+    if (online === 'yes') results = results.filter(u => u.online);
+    if (online === 'no')  results = results.filter(u => !u.online);
+
+    res.json({ users: results });
+  } catch (e) {
+    console.error('[users/search]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
 // GET /users/:userId/profile — public profile for map modal
 // Uses userId (not nickname) — nickname is display-only
 app.get('/users/:userId/profile', requireAny, async (req, res) => {

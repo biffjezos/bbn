@@ -137,6 +137,16 @@ const Api = {
     return apiFetch(`/tiers/radius/nearby/${encodeURIComponent(tier)}`);
   },
 
+  searchUsers({ nickname, ageMin, ageMax, sex, online } = {}) {
+    const qs = new URLSearchParams();
+    if (nickname != null && nickname !== '') qs.set('nickname', nickname);
+    if (ageMin   != null) qs.set('ageMin', ageMin);
+    if (ageMax   != null) qs.set('ageMax', ageMax);
+    if (sex      != null) qs.set('sex', sex);
+    if (online   != null) qs.set('online', online ? 'yes' : 'no');
+    return apiFetch(`/users/search?${qs.toString()}`);
+  },
+
   // ---- Messages -------------------------------------------
 
   getConversations() {

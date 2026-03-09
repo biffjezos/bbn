@@ -171,6 +171,7 @@ app.put   ('/api/users/me',                  (req, res) => proxy(req, res, `${CF
 app.delete('/api/users/me',                  (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me`));
 app.get   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me/keys`));
 app.put   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me/keys`));
+app.get   ('/api/users/search',              (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/search?${new URLSearchParams(req.query).toString()}`));
 app.get   ('/api/users/:userId/profile',     (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.userId}/profile`));
 
 // --- Location (HTTP fallback — WS is preferred) -------------
