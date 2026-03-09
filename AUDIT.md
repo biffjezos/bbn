@@ -99,40 +99,45 @@ The module cache warms after the first call so this has no runtime cost after th
 
 ## MAINTAINABILITY
 
-### M1. HIGH — `requireServiceToken` copy-pasted into every service
+### M1. ⏸ POSTPONED — `requireServiceToken` copy-pasted into every service
 **Files:** `auth-service.js`, `users-service.js`, `location-service.js`, `messages-service.js`, `favourites-service.js`, `tiers-service.js`, `migration-service.js`
 
 Identical 10-line function in every file. A bug fix or security change must be applied 7 times.
 
 **Fix:** Extract to `services/lib/serviceAuth.js` and import it.
+**Postponed:** Requires a shared lib — not feasible while each service must be self-contained on Railway.
 
 ---
 
-### M2. MEDIUM — `haversineDistance` inlined in two services
+### M2. ⏸ POSTPONED — `haversineDistance` inlined in two services
 **Files:** `services/location-service.js` (line 34), `services/messages-service.js` (line 30)
 
 `services/lib/geo.js` exists but is not used. Both services carry an identical copy of the function.
 
 **Fix:** Import from `./lib/geo.js` in both services and delete the inlined copies.
+**Postponed:** Requires a shared lib — not feasible while each service must be self-contained on Railway.
 
 ---
 
-### M3. MEDIUM — `safeObjectId` duplicated across three services
+### M3. ⏸ POSTPONED — `safeObjectId` duplicated across three services
 **Files:** `users-service.js`, `messages-service.js`, `favourites-service.js`
 
 **Fix:** Move to `services/lib/db.js` alongside a shared MongoClient factory (which would also solve P3).
+**Postponed:** Requires a shared lib — not feasible while each service must be self-contained on Railway.
 
 ---
 
-### M4. MEDIUM — `verifyToken` implementations diverge across services
+### M4. ⏸ POSTPONED — `verifyToken` implementations diverge across services
 Each service implements its own `verifyToken` with subtle differences (tokenVersion check: yes in users/messages, no in location/favourites; `requireRegistered` flag: present in users/location, absent in messages/favourites). This makes it hard to reason about auth correctness globally and caused S1 above.
 
 **Fix:** Extract a single `makeVerifyToken(db, jwtSecret, options)` factory to a shared lib.
+**Postponed:** Requires a shared lib — not feasible while each service must be self-contained on Railway. The concrete divergence issue (tokenVersion gap) is tracked separately as S1.
 
 ---
 
-### M5. LOW — No shared request validation
+### M5. ⏸ POSTPONED — No shared request validation
 Each service hand-rolls its own field checks. A schema library (e.g. `zod`) would reduce boilerplate and standardise error shapes.
+**Postponed:** Requires a shared lib — not feasible while each service must be self-contained on Railway.
 
 ---
 
