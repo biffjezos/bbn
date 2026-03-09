@@ -354,6 +354,7 @@
     _locWs.onopen = function () {
       _locWsRetry = 1000;
       console.log('[Geo] WS connected');
+      _locWs.send(JSON.stringify({ type: 'auth', token: window.Auth?.getToken?.() || '' }));
       var pos = window.GeoState.pos;
       if (pos) sendLocWS(pos.lat, pos.lng, window.GeoState.accuracy);
     };
