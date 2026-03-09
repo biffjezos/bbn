@@ -23,21 +23,28 @@ const CFG = {
 if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
 
-import { createServer }    from 'http';
-import { WebSocketServer } from 'ws';
+import { createServer }             from 'http';
+import { WebSocketServer }          from 'ws';
+import { Agent, setGlobalDispatcher } from 'undici';
 import express   from 'express';
 import cors      from 'cors';
 import jwt       from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 
+// Keep TCP connections alive to internal services — avoids a new handshake
+// on every proxied request and every WS service fetch.
+setGlobalDispatcher(new Agent({ connections: 50, keepAliveTimeout: 30_000 }));
+
 const app = express();
 app.set('trust proxy', 1);
 
+const ALLOWED_ORIGINS = [
+  'https://bbn-e86d0c.gitlab.io',
+  'https://biffjezos.github.io',
+];
+
 app.use(cors({
-  origin: [
-    'https://bbn-e86d0c.gitlab.io',
-    'https://biffjezos.github.io',
-  ],
+  origin: ALLOWED_ORIGINS,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -51,6 +58,35 @@ app.use('/api/auth/guest',    rateLimit({ windowMs: 60 * 60 * 1000, max: 10,  st
 app.use('/api/',              rateLimit({ windowMs:       60 * 1000, max: 120, standardHeaders: true, legacyHeaders: false }));
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
+// GET /api/health — aggregated health across all internal services
+app.get('/api/health', async (_req, res) => {
+  const services = {
+    auth:       `${CFG.AUTH_SERVICE_URL}/health`,
+    users:      `${CFG.USER_SERVICE_URL}/health`,
+    location:   `${CFG.LOC_SERVICE_URL}/health`,
+    messages:   `${CFG.MSG_SERVICE_URL}/health`,
+    favourites: `${CFG.FAV_SERVICE_URL}/health`,
+    tiers:      `${CFG.TIERS_SERVICE_URL}/health`,
+  };
+
+  const results = await Promise.allSettled(
+    Object.entries(services).map(async ([name, url]) => {
+      const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      return [name, r.ok ? 'ok' : 'degraded'];
+    })
+  );
+
+  const status = Object.fromEntries(
+    results.map((r, i) => {
+      const name = Object.keys(services)[i];
+      return [name, r.status === 'fulfilled' ? r.value[1] : 'down'];
+    })
+  );
+
+  const allOk = Object.values(status).every(s => s === 'ok');
+  res.status(allOk ? 200 : 503).json({ ok: allOk, services: status, ts: Date.now() });
+});
 
 // ============================================================
 // SERVICE TOKEN — short-lived JWT identifying the gateway
@@ -190,7 +226,8 @@ const wssLoc = new WebSocketServer({ noServer: true });
 
 wssLoc.on('connection', (ws, userId, token) => {
   console.log('[WS:loc] +', userId);
-  let lastPos = null;
+  let lastPos        = null;
+  let lastNearbyHash = null;
 
   const nearbyTimer = setInterval(async () => {
     if (!lastPos) return;
@@ -200,6 +237,9 @@ wssLoc.on('connection', (ws, userId, token) => {
         { headers: svcHeaders(token) }
       );
       const data = await res.json();
+      const hash = JSON.stringify(data.users);
+      if (hash === lastNearbyHash) return;  // nothing changed — skip the WS frame
+      lastNearbyHash = hash;
       wsSend(ws, { type: 'nearby', users: data.users || [] });
     } catch { /* silent — client retains last-known state */ }
   }, 5000);
@@ -248,11 +288,16 @@ wssMsg.on('connection', (ws, userId, token) => {
   console.log('[WS:msg] +', userId);
   let viewingUserId = null;
   let threadTimer   = null;
+  let lastListHash   = null;
+  let lastThreadHash = null;
 
   async function pushList() {
     try {
       const res  = await fetch(`${CFG.MSG_SERVICE_URL}/messages`, { headers: svcHeaders(token) });
       const data = await res.json();
+      const hash = JSON.stringify(data.messages);
+      if (hash === lastListHash) return;  // nothing changed — skip the WS frame
+      lastListHash = hash;
       wsSend(ws, { type: 'conversations', messages: data.messages || [] });
     } catch { /* silent */ }
   }
@@ -265,6 +310,9 @@ wssMsg.on('connection', (ws, userId, token) => {
         { headers: svcHeaders(token) }
       );
       const data = await res.json();
+      const hash = JSON.stringify(data.messages);
+      if (hash === lastThreadHash) return;  // nothing changed — skip the WS frame
+      lastThreadHash = hash;
       wsSend(ws, { type: 'thread', userId: viewingUserId, messages: data.messages || [] });
     } catch { /* silent */ }
   }
@@ -281,7 +329,8 @@ wssMsg.on('connection', (ws, userId, token) => {
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.type === 'view') {
-      viewingUserId = msg.userId || null;
+      viewingUserId  = msg.userId || null;
+      lastThreadHash = null;  // reset so the first push of a new thread always fires
       if (threadTimer) { clearInterval(threadTimer); threadTimer = null; }
       if (viewingUserId) {
         await pushThread();  // immediate push for the opened thread
@@ -319,13 +368,8 @@ wssMsg.on('connection', (ws, userId, token) => {
 
 const httpServer = createServer(app);
 
-const WS_ALLOWED_ORIGINS = [
-  'https://bbn-e86d0c.gitlab.io',
-  'https://biffjezos.github.io',
-];
-
 httpServer.on('upgrade', (req, socket, head) => {
-  if (!WS_ALLOWED_ORIGINS.includes(req.headers['origin'])) {
+  if (!ALLOWED_ORIGINS.includes(req.headers['origin'])) {
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     socket.destroy();
     return;

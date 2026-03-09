@@ -26,6 +26,7 @@ if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(
 import express                   from 'express';
 import { MongoClient, ObjectId } from 'mongodb';
 import jwt                       from 'jsonwebtoken';
+import { haversineDistance }     from './lib/geo.js';
 
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
@@ -98,36 +99,25 @@ async function getLocation(userId) {
   }
 }
 
-// --- Haversine ----------------------------------------------
-const EARTH_RADIUS_M = 6_371_000;
-const toRad = deg => deg * Math.PI / 180;
-
-function haversineDistance(lat1, lon1, lat2, lon2) {
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 // --- Helpers ------------------------------------------------
 function safeObjectId(str) {
   try { return new ObjectId(str); } catch { return null; }
 }
 
 // Validate that text is an E2EE ciphertext envelope.
-// Expected format (matching the client's WebCrypto output):
-//   { ivB64: '<base64>', ciphertextB64: '<base64>' }
-// Both fields must be non-empty strings. Rejects plaintext messages.
+// Format (matching the client's WebCrypto AES-GCM dual-encryption output):
+//   {
+//     forRecipient: { ivB64: '<base64>', cipherB64: '<base64>' },
+//     forSender:    { ivB64: '<base64>', cipherB64: '<base64>' }
+//   }
+// Rejects plaintext and malformed payloads before they reach the DB.
 const BASE64_RE = /^[A-Za-z0-9+/]+=*$/;
+function isBase64(s) { return typeof s === 'string' && s.length > 0 && BASE64_RE.test(s); }
+function isValidCipherHalf(h) { return h && isBase64(h.ivB64) && isBase64(h.cipherB64); }
 function isValidCiphertext(text) {
   try {
     const p = JSON.parse(text);
-    return (
-      typeof p.ivB64         === 'string' && BASE64_RE.test(p.ivB64)         && p.ivB64.length         > 0 &&
-      typeof p.ciphertextB64 === 'string' && BASE64_RE.test(p.ciphertextB64) && p.ciphertextB64.length > 0
-    );
+    return isValidCipherHalf(p.forRecipient) && isValidCipherHalf(p.forSender);
   } catch { return false; }
 }
 

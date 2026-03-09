@@ -193,3 +193,21 @@ Some services use `new ObjectId(id)` with a try-catch, others pass the raw strin
 | Maintainability | B- | Duplicated code, no shared validation, no structured logging |
 
 **Tomorrow's focus (Security 5–8):** tier enforcement at gateway, service token caching, plaintext message storage, location race condition.
+
+---
+
+## BATCH 5 — Pending
+
+### Sec #7 follow-up — Frontend ciphertext format ✅ verified & fixed
+Frontend (`ui/scripts/crypto-worker.js`) already encrypts every message before sending, using AES-GCM dual-encryption (one copy for the recipient, one for the sender). The actual envelope sent as `text` is:
+
+```json
+{
+  "forRecipient": { "ivB64": "<base64 IV>", "cipherB64": "<base64 ciphertext>" },
+  "forSender":    { "ivB64": "<base64 IV>", "cipherB64": "<base64 ciphertext>" }
+}
+```
+
+The server-side `isValidCiphertext()` was corrected to match this exact format — both halves (`forRecipient` and `forSender`) must be present with non-empty base64 `ivB64` and `cipherB64` fields. No frontend changes required.
+
+**Status: closed.**
