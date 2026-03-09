@@ -260,20 +260,24 @@ function setupThreadUI(userId) {
       if (!text) return;
       errEl?.classList.add('d-none');
 
-      if (!window.requireUnlocked?.()) return;
+      if (!window.requireUnlocked?.()) { console.warn('[Send] blocked: crypto not unlocked'); return; }
 
       try {
+        console.log('[Send] encrypting for', userId);
         const encrypted = await encryptFor(text, userId);
         const body      = JSON.stringify(encrypted);
 
         // Try WS first; fall back to HTTP
-        if (!wsSend({ type: 'send', toUserId: userId, text: body })) {
+        const sentViaWs = wsSend({ type: 'send', toUserId: userId, text: body });
+        console.log('[Send] via', sentViaWs ? 'WS' : 'HTTP');
+        if (!sentViaWs) {
           await window.Api.sendMessage(userId, body);
         }
 
         if (input)  input.value = '';
         if (cc)     cc.textContent = '144';
       } catch (err) {
+        console.error('[Send] error:', err);
         if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
       }
     });
