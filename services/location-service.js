@@ -43,6 +43,11 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[location] DB connected.');
 
+// Short-lived cache for the active-users list shared across all concurrent nearby polls.
+// TTL is well under the minimum location update interval (15 s) so data stays fresh.
+const NEARBY_CACHE_TTL_MS = 2_000;
+let _activeUsersCache = null; // { users: Array, expiresAt: number }
+
 function shouldUpdate(prev, next) {
   if (!prev) return true;
   const timePassed = Date.now() - new Date(prev.updatedAt).getTime() >= CFG.UPDATE_INTERVAL_MS;
@@ -107,13 +112,22 @@ async function verifyToken(req, res, next, requireRegistered = false) {
   // Verify tokenVersion so password changes invalidate old JWTs.
   if (payload.role === 'user') {
     try {
-      let oid;
-      try { oid = new ObjectId(payload.sub); } catch { oid = null; }
-      const user = oid && await db.collection('users').findOne(
-        { _id: oid },
-        { projection: { tokenVersion: 1 } }
-      );
-      if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+      const cached = _tvCache.get(payload.sub);
+      let dbTv;
+      if (cached && cached.exp > Date.now()) {
+        dbTv = cached.tv;
+      } else {
+        let oid;
+        try { oid = new ObjectId(payload.sub); } catch { oid = null; }
+        const user = oid && await db.collection('users').findOne(
+          { _id: oid },
+          { projection: { tokenVersion: 1 } }
+        );
+        if (!user) return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
+        dbTv = user.tokenVersion ?? 0;
+        _tvCache.set(payload.sub, { tv: dbTv, exp: Date.now() + TV_CACHE_TTL_MS });
+      }
+      if (dbTv !== (payload.tv ?? 0))
         return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
     } catch {
       return res.status(500).json({ error: 'Internal error.' });
@@ -123,6 +137,12 @@ async function verifyToken(req, res, next, requireRegistered = false) {
   req.auth = payload;
   next();
 }
+
+// tokenVersion cache — avoids a DB round-trip on every authenticated request.
+// TTL trade-off: a revoked token may continue to work for up to TV_CACHE_TTL_MS
+// after a password change (until the cache entry expires and the DB is re-read).
+const _tvCache = new Map(); // userId -> { tv: number, exp: number }
+const TV_CACHE_TTL_MS = 15_000;
 
 const requireAny = (req, res, next) => verifyToken(req, res, next, false);
 
@@ -205,14 +225,15 @@ app.get('/location/nearby', requireAny, async (req, res) => {
     if (isNaN(lat) || isNaN(lon))
       return res.status(400).json({ error: 'lat and lon query params required.' });
 
-    const callerId     = req.auth.sub;
-    const cutoff       = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
+    const callerId = req.auth.sub;
+    const now      = Date.now();
 
-    // Infinite radius — plain query, no geo filter needed
-    const nearby = await db.collection('locations').find({
-      userId:    { $ne: callerId },
-      updatedAt: { $gt: cutoff },
-    }).toArray();
+    if (!_activeUsersCache || _activeUsersCache.expiresAt <= now) {
+      const cutoff = new Date(now - CFG.LOCATION_TTL_SEC * 1000);
+      const all    = await db.collection('locations').find({ updatedAt: { $gt: cutoff } }).toArray();
+      _activeUsersCache = { users: all, expiresAt: now + NEARBY_CACHE_TTL_MS };
+    }
+    const nearby = _activeUsersCache.users.filter(u => u.userId !== callerId);
 
     const tier = req.auth.tier || 'guest';
     const tiersRes = await fetch(`${CFG.TIERS_SERVICE_URL}/tiers/radius/nearby/${encodeURIComponent(tier)}`);

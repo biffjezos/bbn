@@ -69,6 +69,9 @@ function issueUserToken(user) {
   );
 }
 
+const _tvCache = new Map(); // userId -> { tv: number, exp: number }
+const TV_CACHE_TTL_MS = 15_000;
+
 async function verifyToken(req, res, next, requireRegistered = false) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -86,12 +89,21 @@ async function verifyToken(req, res, next, requireRegistered = false) {
   // Tokens issued before this field existed have tv=undefined; treat as 0.
   if (payload.role === 'user') {
     try {
-      const oid  = safeObjectId(payload.sub);
-      const user = oid && await db.collection('users').findOne(
-        { _id: oid },
-        { projection: { tokenVersion: 1 } }
-      );
-      if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+      const cached = _tvCache.get(payload.sub);
+      let dbTv;
+      if (cached && cached.exp > Date.now()) {
+        dbTv = cached.tv;
+      } else {
+        const oid  = safeObjectId(payload.sub);
+        const user = oid && await db.collection('users').findOne(
+          { _id: oid },
+          { projection: { tokenVersion: 1 } }
+        );
+        if (!user) return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
+        dbTv = user.tokenVersion ?? 0;
+        _tvCache.set(payload.sub, { tv: dbTv, exp: Date.now() + TV_CACHE_TTL_MS });
+      }
+      if (dbTv !== (payload.tv ?? 0))
         return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
     } catch {
       return res.status(500).json({ error: 'Internal error.' });
@@ -162,7 +174,10 @@ app.put('/users/me', requireUser, async (req, res) => {
 
     const mongoUpdate = { $set: update };
     // Increment tokenVersion on password change so all existing JWTs are invalidated.
-    if (changingPassword) mongoUpdate.$inc = { tokenVersion: 1 };
+    if (changingPassword) {
+      mongoUpdate.$inc = { tokenVersion: 1 };
+      _tvCache.delete(req.auth.sub); // evict so next request re-reads the new version
+    }
 
     await db.collection('users').updateOne(
       { _id: new ObjectId(req.auth.sub) },
