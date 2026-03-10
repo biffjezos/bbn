@@ -308,14 +308,16 @@ The double-entry is a real friction point for logged-out returning users on Chro
 
 **Code duplication across services.** The following utilities are copy-pasted across 3–4 files each:
 
+**Note:** All duplication in this table is intentional at this stage. A shared internal library is not currently possible (no private package registry, no monorepo tooling). Each service is intentionally self-contained. Consolidation is deferred until the infrastructure to support a shared lib is in place.
+
 | Utility | Duplicated in |
 |---|---|
-| `verifyToken` | auth, users, messages, location, favourites |
-| `requireServiceToken` | all 6 services |
-| `serviceToken` (caching) | server.js, messages-service.js |
-| `haversineDistance` | server.js, messages-service.js, location-service.js — **copies are intentional**: MongoDB geospatial indexes are unavailable (free tier RAM limits + migration 002 failure), so distance filtering must happen in JS in each service. Consolidating into a shared lib is deferred with 2.4. |
-| `safeObjectId` | users, messages, favourites |
-| `issueUserToken` | auth-service.js, users-service.js |
+| `verifyToken` | auth, users, messages, location, favourites — intentional copy per service |
+| `requireServiceToken` | all 6 services — intentional copy per service |
+| `serviceToken` (caching) | server.js, messages-service.js — intentional copy per service |
+| `haversineDistance` | server.js, messages-service.js, location-service.js — intentional: MongoDB geospatial indexes unavailable (free tier RAM + migration 002 failure), distance filtering must run in JS per service; deferred with 2.4 |
+| `safeObjectId` | users, messages, favourites — intentional copy per service |
+| `issueUserToken` | auth-service.js, users-service.js — intentional copy per service |
 
 `services/lib/geo.js` exists but only geo.js is in it; the other utilities live inline. If the JWT payload structure changes (e.g., adding a field), every `issueUserToken` and `verifyToken` in every service must be updated. This is a recurring maintenance risk.
 
