@@ -693,8 +693,102 @@
    .fav-avatar.female { background: var(--bbm-pink-dim);  border: 1px solid rgba(232,24,109,0.3); }
    
    .fav-name { font-weight: 600; font-size: 0.95rem; }
-   .fav-actions { margin-left: auto; display: flex; gap: 0.5rem; }
-   
+   .fav-actions { margin-left: auto; display: flex; gap: 0.4rem; align-items: center; flex-shrink: 0; }
+
+   /* ── Fav action buttons — equal square size ── */
+   .fav-actions .btn {
+     width: 2.4rem;
+     height: 2.4rem;
+     padding: 0;
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     font-size: 0.9rem;
+     flex-shrink: 0;
+     background: transparent;
+     border: 1px solid var(--bbm-border);
+     color: var(--bbm-text-muted);
+     border-radius: var(--r-sm);
+     transition: border-color 0.2s, background 0.2s, color 0.2s, box-shadow 0.2s;
+   }
+   .fav-actions .btn:hover {
+     background: rgba(255,255,255,0.05);
+     border-color: rgba(255,255,255,0.2);
+     color: var(--bbm-text);
+   }
+
+   /* Sex-coloured borders and icons — based on the favourite's sex */
+   .fav-item.male .fav-actions .btn {
+     border-color: rgba(14,184,232,0.35);
+     color: var(--bbm-blue-light);
+   }
+   .fav-item.male .fav-actions .btn:hover {
+     border-color: var(--bbm-blue);
+     background: var(--bbm-blue-dim);
+   }
+   .fav-item.female .fav-actions .btn {
+     border-color: rgba(232,24,109,0.35);
+     color: var(--bbm-pink-light);
+   }
+   .fav-item.female .fav-actions .btn:hover {
+     border-color: var(--bbm-pink);
+     background: var(--bbm-pink-dim);
+   }
+
+   /* Message button — gray border by default, sex-colour only when unread */
+   .fav-msg-btn {
+     border-color: rgba(255,255,255,0.1) !important;
+     color: var(--bbm-text-muted) !important;
+   }
+   .fav-msg-btn:hover {
+     border-color: rgba(255,255,255,0.2) !important;
+     color: var(--bbm-text) !important;
+     background: rgba(255,255,255,0.05) !important;
+   }
+   .fav-item.male   .fav-msg-btn.fav-msg--unread {
+     border-color: var(--bbm-blue) !important;
+     color: var(--bbm-blue-light) !important;
+     box-shadow: 0 0 8px rgba(14,184,232,0.3);
+   }
+   .fav-item.female .fav-msg-btn.fav-msg--unread {
+     border-color: var(--bbm-pink) !important;
+     color: var(--bbm-pink-light) !important;
+     box-shadow: 0 0 8px rgba(232,24,109,0.3);
+   }
+
+   /* Compass/meet button — neutral by default, sex-aware only when active */
+   .fav-meet-btn {
+     border-color: rgba(255,255,255,0.1) !important;
+     color: var(--bbm-text-muted) !important;
+   }
+   .fav-meet-btn:hover {
+     border-color: rgba(255,255,255,0.2) !important;
+     color: var(--bbm-text) !important;
+     background: rgba(255,255,255,0.05) !important;
+   }
+   .fav-item.male   .fav-meet-btn.active {
+     border-color: var(--bbm-blue) !important;
+     color: var(--bbm-blue-light) !important;
+     background: var(--bbm-blue-dim) !important;
+     box-shadow: 0 0 8px rgba(14,184,232,0.3);
+   }
+   .fav-item.female .fav-meet-btn.active {
+     border-color: var(--bbm-pink) !important;
+     color: var(--bbm-pink-light) !important;
+     background: var(--bbm-pink-dim) !important;
+     box-shadow: 0 0 8px rgba(232,24,109,0.3);
+   }
+
+   /* Narrow screens: wrap actions below avatar+info as a full-width row */
+   @media (max-width: 480px) {
+     .fav-item { flex-wrap: wrap; }
+     .fav-item > .flex-grow-1 { flex: 1 1 0; min-width: 0; }
+     .fav-actions { margin-left: 0; width: 100%; justify-content: flex-end;
+                    padding-top: 0.4rem; border-top: 1px solid var(--bbm-border-soft);
+                    margin-top: 0.25rem; }
+   }
+
+
    /* ============================================================
       PROFILE PAGE (my profile — edit form)
       ============================================================ */
@@ -955,3 +1049,32 @@
 
    /* Meet toggle button in favourites list */
    .fav-meet-btn.active { color: var(--bbm-pink-light) !important; }
+
+   /* ── Meeting pill — sex-specific border ── */
+   .bbm-meet-pill.bbm-meet-pill--male {
+     border-color: rgba(14,184,232,0.45);
+     box-shadow: 0 4px 20px rgba(0,0,0,0.55), 0 0 0 1px rgba(14,184,232,0.12);
+   }
+   .bbm-meet-pill.bbm-meet-pill--male .bbm-meet-dist { color: var(--bbm-blue-light); }
+   /* --female already matches the existing pink default */
+
+   /* ── Favourites search bar — sex-colour theming ── */
+   .bbm-search-icon {
+     background: var(--bbm-surface-2) !important;
+     border-color: var(--bbm-border) !important;
+     color: var(--bbm-text-muted);
+     transition: color 0.2s, border-color 0.2s;
+   }
+   #favSearchWrap.bbm-search--male  .bbm-search-icon {
+     color: var(--bbm-blue-light);
+     border-color: rgba(14,184,232,0.3) !important;
+   }
+   #favSearchWrap.bbm-search--female .bbm-search-icon {
+     color: var(--bbm-pink-light);
+     border-color: rgba(232,24,109,0.3) !important;
+   }
+   #favSearchWrap.bbm-search--male .form-control:focus {
+     border-color: var(--bbm-blue) !important;
+     box-shadow: 0 0 0 3px rgba(14,184,232,0.15) !important;
+   }
+   /* bbm-search--female reuses the existing pink focus from .form-control:focus */

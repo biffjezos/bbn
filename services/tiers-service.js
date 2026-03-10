@@ -39,9 +39,9 @@ const FEATURES = {
   see_nearby: {
     minTier: 'guest',
     radius: {
-      guest:   Infinity,
-      regular: Infinity,
-      premium: Infinity,
+      guest:   23000,
+      regular: 23000,
+      premium: 23000,
     },
   },
 
@@ -59,8 +59,8 @@ const FEATURES = {
   message_radius: {
     minTier: 'regular',
     radius: {
-      regular: Infinity,
-      premium: Infinity,
+      regular: 23000,
+      premium: 23000,
     },
   },
 
