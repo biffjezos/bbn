@@ -59,8 +59,18 @@ app.use('/api/',              rateLimit({ windowMs:       60 * 1000, max: 120, s
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
-// GET /api/health — aggregated health across all internal services
+// GET /api/health — aggregated health across all internal services.
+// Responses are cached for HEALTH_CACHE_TTL_MS so concurrent warm-up
+// pings from many users trigger only one round of downstream fetches.
+const HEALTH_CACHE_TTL_MS = 30_000;
+let _healthCache = null; // { body, status, expiresAt }
+
 app.get('/api/health', async (_req, res) => {
+  const now = Date.now();
+  if (_healthCache && _healthCache.expiresAt > now) {
+    return res.status(_healthCache.status).json(_healthCache.body);
+  }
+
   const services = {
     auth:       `${CFG.AUTH_SERVICE_URL}/health`,
     users:      `${CFG.USER_SERVICE_URL}/health`,
@@ -85,7 +95,13 @@ app.get('/api/health', async (_req, res) => {
   );
 
   const allOk = Object.values(status).every(s => s === 'ok');
-  res.status(allOk ? 200 : 503).json({ ok: allOk, services: status, ts: Date.now() });
+  const body  = { ok: allOk, services: status, ts: now };
+  const httpStatus = allOk ? 200 : 503;
+
+  // Cache successful results; don't cache failures so the next request retries.
+  if (allOk) _healthCache = { body, status: httpStatus, expiresAt: now + HEALTH_CACHE_TTL_MS };
+
+  res.status(httpStatus).json(body);
 });
 
 // ============================================================
@@ -173,6 +189,9 @@ app.get   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CF
 app.put   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/me/keys`));
 app.get   ('/api/users/search',              (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/search?${new URLSearchParams(req.query).toString()}`));
 app.get   ('/api/users/:userId/profile',     (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.userId}/profile`));
+
+// --- Tiers --------------------------------------------------
+app.get('/api/tiers/radius/nearby/:tier', (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/tiers/radius/nearby/${encodeURIComponent(req.params.tier)}`));
 
 // --- Location (HTTP fallback — WS is preferred) -------------
 app.put   ('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));
@@ -286,22 +305,51 @@ wssLoc.on('connection', ws => {
 function setupLocConnection(ws, userId, token) {
   console.log('[WS:loc] +', userId);
   let lastPos        = null;  // most recent client position (used for nearby queries)
-  let lastSentPos    = null;  // last position actually forwarded to location-service
+  let lastSentPos    = null;  // last position CONFIRMED stored in location-service
+  let lastPosAcc     = 'gps';
   let lastNearbyHash = null;
 
   const nearbyTimer = setInterval(async () => {
     if (!lastPos) return;
+
+    // Retry a failed (e.g. cold-start) location PUT before querying nearby.
+    const needsPush = !lastSentPos ||
+      geoDistM(lastSentPos.lat, lastSentPos.lon, lastPos.lat, lastPos.lon) >= LOC_MIN_SEND_M;
+    if (needsPush) {
+      try {
+        const putRes = await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
+          body:    JSON.stringify({ lat: lastPos.lat, lon: lastPos.lon, accuracy: lastPosAcc }),
+        });
+        if (putRes.ok) {
+          lastSentPos = { lat: lastPos.lat, lon: lastPos.lon };
+        } else {
+          console.warn(`[WS:loc] PUT /location ${putRes.status} for ${userId} — will retry`);
+        }
+      } catch (e) {
+        console.warn(`[WS:loc] PUT /location network error for ${userId}: ${e.message} — will retry`);
+      }
+    }
+
     try {
       const res  = await fetch(
         `${CFG.LOC_SERVICE_URL}/location/nearby?lat=${lastPos.lat}&lon=${lastPos.lon}`,
         { headers: svcHeaders(token) }
       );
       const data = await res.json();
+      if (!Array.isArray(data.users)) {
+        console.warn(`[WS:loc] nearby ${res.status} for ${userId}:`, data.error || data);
+        return;
+      }
       const hash = JSON.stringify(data.users);
       if (hash === lastNearbyHash) return;  // nothing changed — skip the WS frame
       lastNearbyHash = hash;
-      wsSend(ws, { type: 'nearby', users: data.users || [] });
-    } catch { /* silent — client retains last-known state */ }
+      console.log(`[WS:loc] nearby changed for ${userId}: ${data.users.length} users`);
+      wsSend(ws, { type: 'nearby', users: data.users });
+    } catch (e) {
+      console.warn(`[WS:loc] nearby network error for ${userId}: ${e.message}`);
+    }
   }, 5000);
 
   ws.on('message', async raw => {
@@ -310,17 +358,22 @@ function setupLocConnection(ws, userId, token) {
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.type === 'position' && msg.lat != null && msg.lon != null) {
-      lastPos = { lat: msg.lat, lon: msg.lon };
+      lastPos    = { lat: msg.lat, lon: msg.lon };
+      lastPosAcc = msg.accuracy || 'gps';
       const moved = !lastSentPos || geoDistM(lastSentPos.lat, lastSentPos.lon, msg.lat, msg.lon) >= LOC_MIN_SEND_M;
       if (moved) {
-        lastSentPos = { lat: msg.lat, lon: msg.lon };
         try {
-          await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+          const putRes = await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
-            body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: msg.accuracy || 'gps' }),
+            body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: lastPosAcc }),
           });
-        } catch { /* silent */ }
+          if (putRes.ok) {
+            lastSentPos = { lat: msg.lat, lon: msg.lon };  // only set on confirmed success
+          } else {
+            console.warn(`[WS:loc] PUT /location ${putRes.status} for ${userId} — nearbyTimer will retry`);
+          }
+        } catch { /* network error — nearbyTimer will retry */ }
       }
     }
   });

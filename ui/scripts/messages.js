@@ -38,12 +38,14 @@ function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '
 
 // ── Crypto helpers ────────────────────────────────────────
 const _pubKeyCache = {};
+const _CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function getPublicKey(userId) {
-  if (_pubKeyCache[userId]) return _pubKeyCache[userId];
+  const hit = _pubKeyCache[userId];
+  if (hit && hit.exp > Date.now()) return hit.value;
   const profile = await window.Api.getProfile(userId);
   if (!profile.publicKey) throw new Error('User has no public key — not yet logged in since E2EE update.');
-  _pubKeyCache[userId] = profile.publicKey;
+  _pubKeyCache[userId] = { value: profile.publicKey, exp: Date.now() + _CACHE_TTL_MS };
   return profile.publicKey;
 }
 
@@ -142,7 +144,7 @@ function connectMsgWS() {
 }
 
 // ── Conversation list ─────────────────────────────────────
-const _profileCache = {};
+const _profileCache = {}; // entries: { value, exp }
 
 async function handleConversationsUpdate(messages) {
   const wrap = document.getElementById('convListWrap');
@@ -167,12 +169,15 @@ async function handleConversationsUpdate(messages) {
 
   // Fetch profiles (cached)
   await Promise.allSettled(partnerIds.map(async uid => {
-    if (!_profileCache[uid]) {
-      try { _profileCache[uid] = await window.Api.getProfile(uid); } catch { _profileCache[uid] = {}; }
+    const cached = _profileCache[uid];
+    if (!cached || cached.exp <= Date.now()) {
+      try { _profileCache[uid] = { value: await window.Api.getProfile(uid), exp: Date.now() + _CACHE_TTL_MS }; }
+      catch { _profileCache[uid] = { value: {}, exp: Date.now() + _CACHE_TTL_MS }; }
     }
-    threads[uid].nickname  = _profileCache[uid].nickname  || uid;
-    threads[uid].sex       = _profileCache[uid].sex       || null;
-    threads[uid].publicKey = _profileCache[uid].publicKey || null;
+    const profile = _profileCache[uid].value;
+    threads[uid].nickname  = profile.nickname  || uid;
+    threads[uid].sex       = profile.sex       || null;
+    threads[uid].publicKey = profile.publicKey || null;
   }));
 
   // Decrypt previews

@@ -10,8 +10,8 @@ const CFG = {
   PORT:             process.env.PORT             || 3006,
   MONGO_URI:        process.env.MONGO_URI        || '',
   DB_NAME:          process.env.DB_NAME          || 'boomboom',
-  JWT_SECRET:       process.env.JWT_SECRET,
-  LOCATION_TTL_SEC: 10 * 60,   // must match location-service
+  JWT_SECRET:      process.env.JWT_SECRET,
+  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://loc',
 };
 if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
@@ -23,6 +23,16 @@ import jwt                       from 'jsonwebtoken';
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[favourites] DB connected.');
+
+// --- Service token ------------------------------------------
+let _svcToken = null;
+let _svcTokenExpiry = 0;
+function serviceToken() {
+  if (Date.now() < _svcTokenExpiry - 5_000) return _svcToken;
+  _svcToken = jwt.sign({ sub: 'favourites', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
+  _svcTokenExpiry = Date.now() + 60_000;
+  return _svcToken;
+}
 
 // --- Helpers ------------------------------------------------
 function safeObjectId(str) {
@@ -49,6 +59,9 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
+const _tvCache = new Map(); // userId -> { tv: number, exp: number }
+const TV_CACHE_TTL_MS = 15_000;
+
 // Verify Bearer token — registered users only
 async function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
@@ -67,12 +80,21 @@ async function verifyToken(req, res, next) {
   // Compare in JS (not as a Mongo filter) so legacy docs without the field
   // (which default to 0) are not incorrectly treated as revoked.
   try {
-    const oid  = safeObjectId(payload.sub);
-    const user = oid && await db.collection('users').findOne(
-      { _id: oid },
-      { projection: { tokenVersion: 1 } }
-    );
-    if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+    const cached = _tvCache.get(payload.sub);
+    let dbTv;
+    if (cached && cached.exp > Date.now()) {
+      dbTv = cached.tv;
+    } else {
+      const oid  = safeObjectId(payload.sub);
+      const user = oid && await db.collection('users').findOne(
+        { _id: oid },
+        { projection: { tokenVersion: 1 } }
+      );
+      if (!user) return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
+      dbTv = user.tokenVersion ?? 0;
+      _tvCache.set(payload.sub, { tv: dbTv, exp: Date.now() + TV_CACHE_TTL_MS });
+    }
+    if (dbTv !== (payload.tv ?? 0))
       return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
   } catch {
     return res.status(500).json({ error: 'Internal error.' });
@@ -104,13 +126,13 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
 
-    const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
-    const locations = await db.collection('locations')
-      .find({ userId: { $in: entries.map(e => e.favouriteUserId) }, updatedAt: { $gt: cutoff } })
-      .project({ userId: 1 })
-      .toArray();
-
-    const onlineSet = new Set(locations.map(l => l.userId));
+    const onlineBatch = await fetch(`${CFG.LOC_SERVICE_URL}/location/online-batch`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Service-Token': serviceToken() },
+      body:    JSON.stringify({ userIds: entries.map(e => e.favouriteUserId) }),
+    });
+    const { online = [] } = await onlineBatch.json();
+    const onlineSet = new Set(online);
 
     const favourites = entries
       .filter(e => userMap[e.favouriteUserId])

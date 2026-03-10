@@ -17,7 +17,10 @@ let _publicKey  = null;  // extractable: true  — public by definition
 // ── Helpers ──────────────────────────────────────────────────
 
 function buf2b64(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 }
 
 function b642buf(b64) {

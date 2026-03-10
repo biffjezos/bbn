@@ -120,6 +120,7 @@ function favItemHtml(f, isFav, unreadIds = new Set()) {
       <div class="mt-1">${badge}</div>
     </div>
     <div class="fav-actions">${rightBtns}</div>
+    <div class="fav-status">${badge}</div>
   </div>`;
 }
 

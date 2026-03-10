@@ -39,9 +39,9 @@ const FEATURES = {
   see_nearby: {
     minTier: 'guest',
     radius: {
-      guest:   23000,
-      regular: 23000,
-      premium: 23000,
+      guest:   23_000,
+      regular: 9_700_000,
+      premium: 9_700_000,
     },
   },
 
@@ -55,7 +55,9 @@ const FEATURES = {
     minTier: 'regular',
   },
 
-  // Distance cap when messaging — premium has no limit
+  // Distance cap when messaging.
+  // Infinity → returned as -1 from the API → messages-service skips the online/distance check
+  // so registered users can message anyone (online or offline).
   message_radius: {
     minTier: 'regular',
     radius: {

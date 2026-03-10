@@ -25,6 +25,21 @@
 })();
 // ------------------------------------------------------------
 
+// Pre-warm all backend services (they may be sleeping on Railway free tier).
+// Skipped if already pinged in this browser session (sessionStorage flag).
+(function () {
+  var WARM_KEY = 'bbm_warm';
+  var WARM_TTL = 5 * 60 * 1000; // 5 min — re-warm if tab is idle for a long time
+  var last = parseInt(sessionStorage.getItem(WARM_KEY) || '0', 10);
+  if (Date.now() - last < WARM_TTL) return;
+  fetch((window.BOOMBOOM_API_URL || 'https://boom.up.railway.app/api') + '/health')
+    .then(function (r) {
+      console.log('[warm-up] ' + r.status + (r.status === 503 ? ' (cold-start)' : ' — ready'));
+      sessionStorage.setItem(WARM_KEY, Date.now());
+    })
+    .catch(function () { console.log('[warm-up] ping failed (network error)'); });
+})();
+
 // ============================================================
 // bOOmbOOm.NOW! — app.js  (plain script, NOT a module)
 // Runs synchronously after auth.js loads.
@@ -330,10 +345,9 @@
   var _locWsTimer = null;
 
   function locWsUrl() {
-    var api   = window.BOOMBOOM_API_URL || '';
-    var base  = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
-    var token = window.Auth?.getToken?.() || '';
-    return base + '/ws/location?token=' + encodeURIComponent(token);
+    var api  = window.BOOMBOOM_API_URL || '';
+    var base = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
+    return base + '/ws/location';
   }
 
   function sendLocWS(lat, lon, accuracy) {
@@ -363,6 +377,7 @@
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'nearby') {
+          console.log('[Geo] WS nearby push:', (msg.users || []).length, 'users');
           window.dispatchEvent(new CustomEvent('geo:nearby', { detail: { users: msg.users || [] } }));
         }
       } catch { /* silent */ }
@@ -524,9 +539,17 @@
 
   var _origOnLogout = Auth.onLogout;
   Auth.onLogout = function () {
+    window.MapModule && window.MapModule.onLogout();  // clear markers + pill immediately
     closeLocWS();
     window.Api.deleteLocation().catch(function() {});
     if (_origOnLogout) _origOnLogout();
+  };
+
+  var _origOnGuestReady = Auth.onGuestReady;
+  Auth.onGuestReady = function () {
+    if (_origOnGuestReady) _origOnGuestReady();
+    connectLocWS();                               // reconnect as guest after logout/init
+    window.MapModule && window.MapModule.refreshSelf();  // update self-pin to guest style
   };
 
   var _origOnGuestExpired = Auth.onGuestExpired;

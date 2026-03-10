@@ -60,6 +60,9 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
+const _tvCache = new Map(); // userId -> { tv: number, exp: number }
+const TV_CACHE_TTL_MS = 15_000;
+
 async function verifyToken(req, res, next) {
   const header = req.headers['authorization'] || '';
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -77,12 +80,21 @@ async function verifyToken(req, res, next) {
   // Compare in JS (not as a Mongo filter) so legacy docs without the field
   // (which default to 0) are not incorrectly treated as revoked.
   try {
-    const oid  = safeObjectId(payload.sub);
-    const user = oid && await db.collection('users').findOne(
-      { _id: oid },
-      { projection: { tokenVersion: 1 } }
-    );
-    if (!user || (user.tokenVersion ?? 0) !== (payload.tv ?? 0))
+    const cached = _tvCache.get(payload.sub);
+    let dbTv;
+    if (cached && cached.exp > Date.now()) {
+      dbTv = cached.tv;
+    } else {
+      const oid  = safeObjectId(payload.sub);
+      const user = oid && await db.collection('users').findOne(
+        { _id: oid },
+        { projection: { tokenVersion: 1 } }
+      );
+      if (!user) return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
+      dbTv = user.tokenVersion ?? 0;
+      _tvCache.set(payload.sub, { tv: dbTv, exp: Date.now() + TV_CACHE_TTL_MS });
+    }
+    if (dbTv !== (payload.tv ?? 0))
       return res.status(401).json({ error: 'Token revoked.', code: 'TOKEN_REVOKED' });
   } catch {
     return res.status(500).json({ error: 'Internal error.' });
