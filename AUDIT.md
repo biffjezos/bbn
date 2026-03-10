@@ -359,7 +359,7 @@ Steps 3 and 4 can fail independently. If step 3 succeeds but step 4 fails, the p
 | ✅ | 3.3 | Performance | MEDIUM | TokenVersion DB lookup on every authenticated request |
 | ⏸️ | 3.5 | Performance | LOW | Send-rate bucket is in-process — not safe for multi-instance gateway |
 | 🔲 | 4 | Usability | MEDIUM | Users enter password twice in cold login → messages flow |
-| 🔲 | 5.2a | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated across all services |
-| 🔲 | 5.2b | Maintainability | LOW | app.js mixes three distinct module concerns (718 lines) |
+| ⏸️ | 5.2a | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated across all services |
+| ⏸️ | 5.2b | Maintainability | LOW | app.js mixes three distinct module concerns (718 lines) |
 | 🔲 | 5.2c | Maintainability | LOW | LOCATION_TTL_SEC duplicated in favourites-service with no enforcement |
 | 🔲 | 5.2d | Maintainability | LOW | Password-change flow lacks rollback if step 3 or 4 fails independently |
