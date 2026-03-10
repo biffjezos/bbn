@@ -296,10 +296,11 @@ function setupLocConnection(ws, userId, token) {
         { headers: svcHeaders(token) }
       );
       const data = await res.json();
+      if (!Array.isArray(data.users)) return;  // error response — skip, don't cache
       const hash = JSON.stringify(data.users);
       if (hash === lastNearbyHash) return;  // nothing changed — skip the WS frame
       lastNearbyHash = hash;
-      wsSend(ws, { type: 'nearby', users: data.users || [] });
+      wsSend(ws, { type: 'nearby', users: data.users });
     } catch { /* silent — client retains last-known state */ }
   }, 5000);
 

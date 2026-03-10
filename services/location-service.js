@@ -17,8 +17,6 @@ const CFG = {
   UPDATE_DISTANCE_M:   100,
   LOCATION_TTL_SEC:    10 * 60,
 
-  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL || 'http://tiers',
-
   MAX_VISIBLE_GUESTS:      Infinity,
   MAX_VISIBLE_REGISTERED:  Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
@@ -235,9 +233,10 @@ app.get('/location/nearby', requireAny, async (req, res) => {
     }
     const nearby = _activeUsersCache.users.filter(u => u.userId !== callerId);
 
-    const tier = req.auth.tier || 'guest';
-    const tiersRes = await fetch(`${CFG.TIERS_SERVICE_URL}/tiers/radius/nearby/${encodeURIComponent(tier)}`);
-    const { radiusM } = await tiersRes.json();
+    // Inline radius table — avoids a cross-service call on every nearby query.
+    // guest=23 km, all registered tiers=unlimited (null).
+    const tier    = req.auth.tier || 'guest';
+    const radiusM = tier === 'guest' ? 23_000 : null;
 
     const withDist = nearby
       .map(u => ({ ...u, _dist: haversineDistance(lat, lon, u.lat, u.lon) }))
