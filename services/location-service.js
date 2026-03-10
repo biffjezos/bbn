@@ -17,8 +17,7 @@ const CFG = {
   UPDATE_DISTANCE_M:   100,
   LOCATION_TTL_SEC:    10 * 60,
 
-  RADIUS_GUEST_M:      23_000,
-  RADIUS_REGISTERED_M: Infinity,
+  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL || 'http://tiers',
 
   MAX_VISIBLE_GUESTS:      Infinity,
   MAX_VISIBLE_REGISTERED:  Infinity,
@@ -215,11 +214,13 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       updatedAt: { $gt: cutoff },
     }).toArray();
 
-    const radiusM  = req.auth.role === 'user' ? CFG.RADIUS_REGISTERED_M : CFG.RADIUS_GUEST_M;
+    const tier = req.auth.tier || 'guest';
+    const tiersRes = await fetch(`${CFG.TIERS_SERVICE_URL}/tiers/radius/nearby/${encodeURIComponent(tier)}`);
+    const { radiusM } = await tiersRes.json();
 
     const withDist = nearby
       .map(u => ({ ...u, _dist: haversineDistance(lat, lon, u.lat, u.lon) }))
-      .filter(u => u._dist <= radiusM);
+      .filter(u => radiusM === null || u._dist <= radiusM);
 
     const visible = applyStrategy(withDist, Infinity, CFG.VISIBLE_SELECTION_STRATEGY);
 
