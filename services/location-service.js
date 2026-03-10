@@ -264,6 +264,29 @@ app.get('/location/nearby', requireAny, async (req, res) => {
   }
 });
 
+// POST /location/online-batch — called internally by favourites-service
+// Body: { userIds: string[] }
+// Returns: { online: string[] }  — subset that have an active location within TTL
+app.post('/location/online-batch', (req, res, next) => {
+  if (req.serviceAuth?.sub !== 'favourites')
+    return res.status(403).json({ error: 'Not authorised.' });
+  next();
+}, async (req, res) => {
+  try {
+    const { userIds } = req.body;
+    if (!Array.isArray(userIds)) return res.status(400).json({ error: 'userIds must be an array.' });
+    const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
+    const docs = await db.collection('locations')
+      .find({ userId: { $in: userIds }, updatedAt: { $gt: cutoff } })
+      .project({ userId: 1 })
+      .toArray();
+    res.json({ online: docs.map(d => d.userId) });
+  } catch (e) {
+    console.error('[location/online-batch]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
 // GET /location/user/:userId — called internally by messages-service only
 app.get('/location/user/:userId', (req, res, next) => {
   if (req.serviceAuth?.sub !== 'messages')

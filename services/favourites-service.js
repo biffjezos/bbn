@@ -10,8 +10,8 @@ const CFG = {
   PORT:             process.env.PORT             || 3006,
   MONGO_URI:        process.env.MONGO_URI        || '',
   DB_NAME:          process.env.DB_NAME          || 'boomboom',
-  JWT_SECRET:       process.env.JWT_SECRET,
-  LOCATION_TTL_SEC: 10 * 60,   // must match location-service
+  JWT_SECRET:      process.env.JWT_SECRET,
+  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL || 'http://loc',
 };
 if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
 // ============================================================
@@ -23,6 +23,16 @@ import jwt                       from 'jsonwebtoken';
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[favourites] DB connected.');
+
+// --- Service token ------------------------------------------
+let _svcToken = null;
+let _svcTokenExpiry = 0;
+function serviceToken() {
+  if (Date.now() < _svcTokenExpiry - 5_000) return _svcToken;
+  _svcToken = jwt.sign({ sub: 'favourites', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
+  _svcTokenExpiry = Date.now() + 60_000;
+  return _svcToken;
+}
 
 // --- Helpers ------------------------------------------------
 function safeObjectId(str) {
@@ -116,13 +126,13 @@ app.get('/favourites', verifyToken, async (req, res) => {
 
     const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
 
-    const cutoff = new Date(Date.now() - CFG.LOCATION_TTL_SEC * 1000);
-    const locations = await db.collection('locations')
-      .find({ userId: { $in: entries.map(e => e.favouriteUserId) }, updatedAt: { $gt: cutoff } })
-      .project({ userId: 1 })
-      .toArray();
-
-    const onlineSet = new Set(locations.map(l => l.userId));
+    const onlineBatch = await fetch(`${CFG.LOC_SERVICE_URL}/location/online-batch`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Service-Token': serviceToken() },
+      body:    JSON.stringify({ userIds: entries.map(e => e.favouriteUserId) }),
+    });
+    const { online = [] } = await onlineBatch.json();
+    const onlineSet = new Set(online);
 
     const favourites = entries
       .filter(e => userMap[e.favouriteUserId])
