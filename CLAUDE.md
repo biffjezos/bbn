@@ -11,3 +11,4 @@
 
 - **If a session begins:** Read `AUDIT.md` first. Do not read the entire codebase. Greet me, present the last `AUDIT.md`, and ask what to do. Only then load files relevant to the task.
 - **If you identify a change you are not allowed to make** (e.g. requires backend changes, infrastructure, or affects the business model), add it to `AUDIT.md` under a section **"Suggested Changes / Features"** with a short rationale and prerequisites. Do not implement it.
+- After each commit, tell me which files in (/services) must be redeployed and if any environment variables must be added, updated or can be removed from a serivce.
