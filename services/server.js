@@ -301,11 +301,27 @@ wssLoc.on('connection', ws => {
 function setupLocConnection(ws, userId, token) {
   console.log('[WS:loc] +', userId);
   let lastPos        = null;  // most recent client position (used for nearby queries)
-  let lastSentPos    = null;  // last position actually forwarded to location-service
+  let lastSentPos    = null;  // last position CONFIRMED stored in location-service
+  let lastPosAcc     = 'gps';
   let lastNearbyHash = null;
 
   const nearbyTimer = setInterval(async () => {
     if (!lastPos) return;
+
+    // Retry a failed (e.g. cold-start) location PUT before querying nearby.
+    const needsPush = !lastSentPos ||
+      geoDistM(lastSentPos.lat, lastSentPos.lon, lastPos.lat, lastPos.lon) >= LOC_MIN_SEND_M;
+    if (needsPush) {
+      try {
+        await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
+          body:    JSON.stringify({ lat: lastPos.lat, lon: lastPos.lon, accuracy: lastPosAcc }),
+        });
+        lastSentPos = { lat: lastPos.lat, lon: lastPos.lon };
+      } catch { /* silent — will retry next tick */ }
+    }
+
     try {
       const res  = await fetch(
         `${CFG.LOC_SERVICE_URL}/location/nearby?lat=${lastPos.lat}&lon=${lastPos.lon}`,
@@ -326,17 +342,18 @@ function setupLocConnection(ws, userId, token) {
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.type === 'position' && msg.lat != null && msg.lon != null) {
-      lastPos = { lat: msg.lat, lon: msg.lon };
+      lastPos    = { lat: msg.lat, lon: msg.lon };
+      lastPosAcc = msg.accuracy || 'gps';
       const moved = !lastSentPos || geoDistM(lastSentPos.lat, lastSentPos.lon, msg.lat, msg.lon) >= LOC_MIN_SEND_M;
       if (moved) {
-        lastSentPos = { lat: msg.lat, lon: msg.lon };
         try {
           await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
-            body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: msg.accuracy || 'gps' }),
+            body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: lastPosAcc }),
           });
-        } catch { /* silent */ }
+          lastSentPos = { lat: msg.lat, lon: msg.lon };  // only set on success
+        } catch { /* silent — nearbyTimer will retry */ }
       }
     }
   });
