@@ -26,7 +26,7 @@
 // ------------------------------------------------------------
 
 // Pre-warm all backend services (they may be sleeping on Railway free tier)
-fetch((window.BOOMBOOM_API_URL || 'https://boom.up.railway.app/api') + '/health').then(function(r){ console.log('[warm-up] services health:', r.status); }).catch(function(){ console.log('[warm-up] health ping failed (gateway may be starting)'); });
+fetch((window.BOOMBOOM_API_URL || 'https://boom.up.railway.app/api') + '/health').then(function(r){ console.log('[warm-up] ping ' + r.status + (r.status === 503 ? ' (cold-start — services waking up)' : ' — services ready')); }).catch(function(){ console.log('[warm-up] health ping failed (network error)'); });
 
 // ============================================================
 // bOOmbOOm.NOW! — app.js  (plain script, NOT a module)
