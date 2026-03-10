@@ -162,6 +162,13 @@ app.put('/users/me', requireUser, async (req, res) => {
       if (!existing || !(await bcrypt.compare(req.body.currentPassword, existing.passwordHash)))
         return res.status(403).json({ error: 'Current password is incorrect.' });
       update.passwordHash = await bcrypt.hash(req.body.password, 12);
+      // Accept re-encrypted key blob so the password hash and key blob are
+      // written atomically — prevents permanent key loss if a separate
+      // saveKeys call succeeds but the password update then fails.
+      if (req.body.publicKey && req.body.encryptedPrivateKey) {
+        update.publicKey           = req.body.publicKey;
+        update.encryptedPrivateKey = req.body.encryptedPrivateKey;
+      }
     }
 
     if (!Object.keys(update).length)

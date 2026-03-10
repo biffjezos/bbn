@@ -144,13 +144,17 @@ async function renderMyProfile() {
         alertEl.className = 'alert alert-danger'; alertEl.textContent = 'New passwords do not match.'; alertEl.classList.remove('d-none'); return;
       }
       try {
-        // Re-encrypt the private key blob with the new password
+        // Re-encrypt the private key blob and update the password atomically.
+        // Both are sent in a single PUT /users/me so the key blob and password
+        // hash are never out of sync even if the request fails partway through.
         const keys = await window.Api.getMyKeys();
+        const updatePayload = { currentPassword: curr, password: nw };
         if (keys.encryptedPrivateKey) {
           const newEncBlob = await window.BBMCrypto.reencrypt(curr, nw, keys.encryptedPrivateKey);
-          await window.Api.saveKeys(keys.publicKey, newEncBlob);
+          updatePayload.publicKey           = keys.publicKey;
+          updatePayload.encryptedPrivateKey = newEncBlob;
         }
-        await window.Api.updateMe({ currentPassword: curr, password: nw });
+        await window.Api.updateMe(updatePayload);
         alertEl.className = 'alert alert-success'; alertEl.textContent = 'Password updated.'; alertEl.classList.remove('d-none');
         ['currentPw','newPw','confirmPw'].forEach(id => document.getElementById(id).value = '');
       } catch (err) {
