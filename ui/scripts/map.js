@@ -332,11 +332,31 @@
     if (meetControl) { meetControl.remove(); meetControl = null; }
   }
 
+  function onLogout() {
+    Object.values(markers).forEach(m => map?.removeLayer(m));
+    markers = {};
+    Object.values(favLines).forEach(fl => {
+      map?.removeLayer(fl.polyline);
+      map?.removeLayer(fl.labelMarker);
+    });
+    favLines = {};
+    if (meetControl) { meetControl.remove(); meetControl = null; }
+    lastNearbyUsers = [];
+    favIds = new Set();
+    viewRadius = 23_000;  // revert to guest radius immediately
+  }
+
+  function refreshSelf() {
+    const pos = window.GeoState?.pos;
+    if (pos && map) placeSelfMarker(pos.lat, pos.lng);
+  }
+
   // ── Events ────────────────────────────────────────────────────
 
   window.addEventListener('geo:nearby', function (e) {
-    if (!map) return;
+    if (!map) { console.warn('[Map] geo:nearby fired but map not ready — dropping'); return; }
     lastNearbyUsers = e.detail.users || [];
+    console.log('[Map] rendering', lastNearbyUsers.length, 'nearby users');
     renderMarkers(lastNearbyUsers);
     const pos = window.GeoState?.pos;
     if (pos) {
@@ -359,7 +379,7 @@
     }
   });
 
-  window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired };
+  window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired, onLogout, refreshSelf };
 
   // GeoState may already have a position if geo resolved before map.js ran
   window.__authReady.then(function () {

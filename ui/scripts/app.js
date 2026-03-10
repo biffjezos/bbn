@@ -365,6 +365,7 @@ fetch((window.BOOMBOOM_API_URL || 'https://boom.up.railway.app/api') + '/health'
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'nearby') {
+          console.log('[Geo] WS nearby push:', (msg.users || []).length, 'users');
           window.dispatchEvent(new CustomEvent('geo:nearby', { detail: { users: msg.users || [] } }));
         }
       } catch { /* silent */ }
@@ -526,9 +527,17 @@ fetch((window.BOOMBOOM_API_URL || 'https://boom.up.railway.app/api') + '/health'
 
   var _origOnLogout = Auth.onLogout;
   Auth.onLogout = function () {
+    window.MapModule && window.MapModule.onLogout();  // clear markers + pill immediately
     closeLocWS();
     window.Api.deleteLocation().catch(function() {});
     if (_origOnLogout) _origOnLogout();
+  };
+
+  var _origOnGuestReady = Auth.onGuestReady;
+  Auth.onGuestReady = function () {
+    if (_origOnGuestReady) _origOnGuestReady();
+    connectLocWS();                               // reconnect as guest after logout/init
+    window.MapModule && window.MapModule.refreshSelf();  // update self-pin to guest style
   };
 
   var _origOnGuestExpired = Auth.onGuestExpired;

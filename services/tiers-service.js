@@ -55,12 +55,14 @@ const FEATURES = {
     minTier: 'regular',
   },
 
-  // Distance cap when messaging — premium has no limit
+  // Distance cap when messaging.
+  // Infinity → returned as -1 from the API → messages-service skips the online/distance check
+  // so registered users can message anyone (online or offline).
   message_radius: {
     minTier: 'regular',
     radius: {
-      regular: 9_700_000,
-      premium: 9_700_000,
+      regular: Infinity,
+      premium: Infinity,
     },
   },
 
