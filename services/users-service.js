@@ -167,7 +167,7 @@ app.put('/users/me', requireUser, async (req, res) => {
     if (!Object.keys(update).length)
       return res.status(400).json({ error: 'Nothing to update.' });
 
-    if (update.age && (update.age < 18 || update.age > 120))
+    if (update.age !== undefined && (!Number.isInteger(update.age) || update.age < 18 || update.age > 120))
       return res.status(400).json({ error: 'Age must be 18-120.' });
     if (update.sex && !['m', 'f'].includes(update.sex))
       return res.status(400).json({ error: "sex must be 'm' or 'f'." });
