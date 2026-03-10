@@ -692,8 +692,27 @@
    .fav-avatar.male   { background: var(--bbm-blue-dim);  border: 1px solid rgba(14,184,232,0.3); }
    .fav-avatar.female { background: var(--bbm-pink-dim);  border: 1px solid rgba(232,24,109,0.3); }
    
-   .fav-name { font-weight: 600; font-size: 0.95rem; }
-   .fav-actions { margin-left: auto; display: flex; gap: 0.5rem; }
+   .fav-info    { flex: 1; min-width: 0; }
+   .fav-status  { flex-shrink: 0; }
+   .fav-name    { font-weight: 600; font-size: 0.95rem; }
+   .fav-actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+
+   /* Small screens: stack name / actions / status in a 2-col grid so
+      the action buttons sit between the nickname and the online badge  */
+   @media (max-width: 480px) {
+     .fav-item {
+       display: grid;
+       grid-template-columns: 2.75rem 1fr;
+       grid-template-rows: auto auto auto;
+       column-gap: 1rem;
+       row-gap: 0.15rem;
+       align-items: start;
+     }
+     .fav-avatar  { grid-column: 1; grid-row: 1 / 4; align-self: center; }
+     .fav-info    { grid-column: 2; grid-row: 1; flex: unset; }
+     .fav-actions { grid-column: 2; grid-row: 2; margin-left: 0; justify-content: flex-start; }
+     .fav-status  { grid-column: 2; grid-row: 3; }
+   }
    
    /* ============================================================
       PROFILE PAGE (my profile — edit form)

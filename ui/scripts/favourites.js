@@ -111,10 +111,11 @@ function favItemHtml(f, isFav) {
 
   return `<div class="fav-item" data-userid="${escHtml(f.userId)}">
     <a href="${profileHref}" class="fav-avatar ${sexClass(f.sex)}" style="text-decoration:none">${sexEmoji(f.sex)}</a>
-    <div class="flex-grow-1 min-w-0">
-      <a href="${profileHref}" class="fav-name text-decoration-none text-white">${escHtml(f.nickname)}</a>${ageBadge}${badge}
+    <div class="fav-info">
+      <a href="${profileHref}" class="fav-name text-decoration-none text-white">${escHtml(f.nickname)}</a>${ageBadge}
     </div>
     <div class="fav-actions">${rightBtns}</div>
+    <div class="fav-status">${badge}</div>
   </div>`;
 }
 
