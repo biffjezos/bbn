@@ -4,6 +4,13 @@
 // BASE_URL is injected at build time by CI (see _config.yml / env).
 // ============================================================
 
+// ── Debug flag ───────────────────────────────────────────────
+// Set to true to log every request, response, key event, and
+// WebSocket message to the browser console.
+// Must be false in production.
+var DEBUG = false;
+// ─────────────────────────────────────────────────────────────
+
 const API_BASE = window.BOOMBOOM_API_URL || 'https://bbn-e86d0c.gitlab.io/api';
 
 async function apiFetch(path, options = {}, _retries = 1) {
@@ -15,13 +22,13 @@ async function apiFetch(path, options = {}, _retries = 1) {
   };
 
   const url = `${API_BASE}${path}`;
-  console.log('[API] Fetching:', options.method || 'GET', url);
+  if (DEBUG) console.log('[API] →', options.method || 'GET', url, options.body ? JSON.parse(options.body) : '');
 
   let res;
   try {
     res = await fetch(url, { ...options, headers, signal: AbortSignal.timeout(10000) });
   } catch (networkErr) {
-    console.error('[API] Network error:', networkErr.message, 'URL:', url);
+    if (DEBUG) console.error('[API] Network error:', networkErr.message, 'URL:', url);
     if (_retries > 0) {
       await new Promise(r => setTimeout(r, 1500));
       return apiFetch(path, options, _retries - 1);
@@ -30,10 +37,11 @@ async function apiFetch(path, options = {}, _retries = 1) {
   }
 
   const data = await res.json().catch(() => ({}));
+  if (DEBUG) console.log('[API] ←', res.status, url, data);
 
   // Retry once on 5xx — services may be waking from sleep
   if (res.status >= 500 && _retries > 0) {
-    console.warn('[API] 5xx, retrying in 1.5 s…', res.status, url);
+    if (DEBUG) console.warn('[API] 5xx, retrying in 1.5 s…', res.status, url);
     await new Promise(r => setTimeout(r, 1500));
     return apiFetch(path, options, _retries - 1);
   }

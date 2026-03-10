@@ -74,7 +74,14 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', async (_req, res) => {
+  try {
+    await db.command({ ping: 1 });
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false, error: 'DB unreachable' });
+  }
+});
 
 // POST /migrate/run — called by gateway on boot
 app.post('/migrate/run', async (req, res) => {
