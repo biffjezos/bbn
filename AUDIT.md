@@ -216,9 +216,12 @@ const nearby = await db.collection('locations').find({
 
 This is a **full collection scan** — the 2dsphere index is unused. With 1,000 active users, the gateway polls this endpoint every 5 seconds per connected client. At 500 concurrent clients: 500 × 12/min = 6,000 reads/min, each loading the full collection. This is the single biggest scalability risk.
 
+**Context:** Migration `002` failed in production, so the 2dsphere index does not exist. Additionally, MongoDB's free tier RAM limits make large geospatial indexes impractical anyway. The in-process `haversineDistance` function is therefore the correct approach for distance filtering for now. We do not currently have Redis, but adding one is planned when the app scales — at that point change-stream or pub/sub patterns become viable.
+
 **Fix options:**
-- Use a bounded radius (e.g. 5 km) for all tiers and use the 2dsphere `$nearSphere` query (already has the index from migration `002`).
-- Or keep the infinite radius but paginate/cap results (e.g. `MAX_VISIBLE_REGISTERED` config is present but set to `Infinity`).
+- ~~Use a bounded radius (e.g. 5 km) for all tiers and use the 2dsphere `$nearSphere` query~~ — not viable without the index.
+- Keep the bounded radius (now enforced per-tier) and cap `MAX_VISIBLE_REGISTERED` to limit collection scan size as user count grows.
+- Add Redis as a change-notification bus to eliminate polling entirely (deferred — see 3.5).
 
 ### 3.2 Poll-based WebSocket pushes hit MongoDB on every tick
 
@@ -260,6 +263,8 @@ const _wsSendCounts = new Map(); // userId -> { count, connections, timer }
 ```
 
 If the gateway scales to multiple instances, two connections from the same user on different instances will have separate buckets, doubling the effective send rate. As long as Railway runs a single gateway instance this is fine, but it's worth noting before horizontal scaling.
+
+**Context:** Redis is not currently available. Adding Redis is planned when the app scales, at which point the bucket can be migrated to a shared store (e.g. Redis `INCR` with a TTL key).
 
 ---
 
@@ -308,7 +313,7 @@ The double-entry is a real friction point for logged-out returning users on Chro
 | `verifyToken` | auth, users, messages, location, favourites |
 | `requireServiceToken` | all 6 services |
 | `serviceToken` (caching) | server.js, messages-service.js |
-| `haversineDistance` | server.js, messages-service.js, location-service.js |
+| `haversineDistance` | server.js, messages-service.js, location-service.js — **copies are intentional**: MongoDB geospatial indexes are unavailable (free tier RAM limits + migration 002 failure), so distance filtering must happen in JS in each service. Consolidating into a shared lib is deferred with 2.4. |
 | `safeObjectId` | users, messages, favourites |
 | `issueUserToken` | auth-service.js, users-service.js |
 
