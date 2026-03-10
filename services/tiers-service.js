@@ -40,8 +40,8 @@ const FEATURES = {
     minTier: 'guest',
     radius: {
       guest:   23_000,
-      regular: Infinity,
-      premium: Infinity,
+      regular: 97000000,
+      premium: 97000000,
     },
   },
 
@@ -59,8 +59,8 @@ const FEATURES = {
   message_radius: {
     minTier: 'regular',
     radius: {
-      regular: Infinity,
-      premium: Infinity,
+      regular: 97000000,
+      premium: 97000000,
     },
   },
 
