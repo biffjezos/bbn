@@ -974,3 +974,32 @@
 
    /* Meet toggle button in favourites list */
    .fav-meet-btn.active { color: var(--bbm-pink-light) !important; }
+
+   /* ── Meeting pill — sex-specific border ── */
+   .bbm-meet-pill.bbm-meet-pill--male {
+     border-color: rgba(14,184,232,0.45);
+     box-shadow: 0 4px 20px rgba(0,0,0,0.55), 0 0 0 1px rgba(14,184,232,0.12);
+   }
+   .bbm-meet-pill.bbm-meet-pill--male .bbm-meet-dist { color: var(--bbm-blue-light); }
+   /* --female already matches the existing pink default */
+
+   /* ── Favourites search bar — sex-colour theming ── */
+   .bbm-search-icon {
+     background: var(--bbm-surface-2) !important;
+     border-color: var(--bbm-border) !important;
+     color: var(--bbm-text-muted);
+     transition: color 0.2s, border-color 0.2s;
+   }
+   #favSearchWrap.bbm-search--male  .bbm-search-icon {
+     color: var(--bbm-blue-light);
+     border-color: rgba(14,184,232,0.3) !important;
+   }
+   #favSearchWrap.bbm-search--female .bbm-search-icon {
+     color: var(--bbm-pink-light);
+     border-color: rgba(232,24,109,0.3) !important;
+   }
+   #favSearchWrap.bbm-search--male .form-control:focus {
+     border-color: var(--bbm-blue) !important;
+     box-shadow: 0 0 0 3px rgba(14,184,232,0.15) !important;
+   }
+   /* bbm-search--female reuses the existing pink focus from .form-control:focus */

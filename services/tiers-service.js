@@ -61,8 +61,8 @@ const FEATURES = {
   message_radius: {
     minTier: 'regular',
     radius: {
-      regular: Infinity,
-      premium: Infinity,
+      regular: 23000,
+      premium: 23000,
     },
   },
 

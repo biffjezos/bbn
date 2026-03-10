@@ -18,6 +18,8 @@
   let favLines        = {}; // userId → { polyline, labelMarker }
   let lastNearbyUsers = [];
   let meetControl     = null;
+  let lastBearing     = null; // cached so bearing survives setIcon() DOM replacement
+  let lastSex         = undefined; // cached to avoid redundant setIcon() calls
 
   // Populated after auth resolves from /tiers/radius/nearby/:tier
   let viewRadius = 0;
@@ -128,8 +130,17 @@
 
     if (selfMarker) {
       selfMarker.setLatLng([lat, lng]);
-      selfMarker.setIcon(makeLeafIcon(sex, true));
+      // Only rebuild the icon when sex changes — setIcon() replaces the DOM element,
+      // wiping CSS variables (including --bbm-bearing) and resetting CSS transitions.
+      // Rebuilding on every position update would prevent the compass from stabilising.
+      if (sex !== lastSex) {
+        lastSex = sex;
+        selfMarker.setIcon(makeLeafIcon(sex, true));
+        // Reapply cached bearing after DOM replacement.
+        if (lastBearing !== null) setSelfBearing(lastBearing);
+      }
     } else {
+      lastSex = sex;
       selfMarker = L.marker([lat, lng], {
         icon:        makeLeafIcon(sex, true),
         zIndexOffset: -1000,   // render below all other markers so nearby pins stay clickable
@@ -261,7 +272,8 @@
       return;
     }
 
-    const partner = users.find(u => u.userId === meet.uid);
+    const partner   = users.find(u => u.userId === meet.uid);
+    const targetSex = partner?.sex || meet.sex || null;
 
     // Create pill control if not yet added
     if (!meetControl) {
@@ -274,8 +286,11 @@
       meetControl.addTo(map);
     }
 
-    // Update pill contents
+    // Update pill contents and apply target sex class for border colour
     const pillEl = meetControl.getContainer();
+    pillEl.classList.remove('bbm-meet-pill--male', 'bbm-meet-pill--female');
+    if (targetSex === 'm') pillEl.classList.add('bbm-meet-pill--male');
+    else if (targetSex === 'f') pillEl.classList.add('bbm-meet-pill--female');
     const distHtml = partner
       ? `<span class="bbm-meet-dist">${fmtDist(haversineM(selfPos.lat, selfPos.lng, partner.lat, partner.lon ?? partner.lng))}</span>`
       : `<span class="bbm-meet-dist bbm-meet-absent">not visible</span>`;
@@ -302,6 +317,7 @@
   }
 
   function setSelfBearing(deg) {
+    lastBearing = deg;
     const inner = selfMarker?.getElement()?.querySelector('.bbm-marker');
     if (!inner) return;
     inner.style.setProperty('--bbm-bearing', deg != null ? deg + 'deg' : '0deg');
@@ -369,6 +385,11 @@
     const { lat, lng } = e.detail;
     if (!map) initMap(lat, lng);
     else placeSelfMarker(lat, lng);
+    // If geo:nearby already fired but pos was null at the time, the pill was skipped.
+    // Catch that here: only when the pill doesn't exist yet and we have nearby data.
+    if (!meetControl && lastNearbyUsers.length) {
+      updateMeetingMode({ lat, lng }, lastNearbyUsers);
+    }
   });
 
   // Sync meeting mode changes made from the favourites page
