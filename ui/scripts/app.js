@@ -330,10 +330,9 @@
   var _locWsTimer = null;
 
   function locWsUrl() {
-    var api   = window.BOOMBOOM_API_URL || '';
-    var base  = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
-    var token = window.Auth?.getToken?.() || '';
-    return base + '/ws/location?token=' + encodeURIComponent(token);
+    var api  = window.BOOMBOOM_API_URL || '';
+    var base = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
+    return base + '/ws/location';
   }
 
   function sendLocWS(lat, lon, accuracy) {

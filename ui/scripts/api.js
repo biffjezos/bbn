@@ -75,10 +75,10 @@ const Api = {
     });
   },
 
-  login({ email, password }) {
+  login({ email, password, guestId }) {
     return apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, guestId }),
     });
   },
 

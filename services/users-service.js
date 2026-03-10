@@ -141,6 +141,14 @@ app.put('/users/me', requireUser, async (req, res) => {
     if (req.body.email    !== undefined) update.email    = req.body.email.toLowerCase().trim();
     const changingPassword = req.body.password !== undefined && req.body.password.length >= 8;
     if (changingPassword) {
+      if (!req.body.currentPassword)
+        return res.status(400).json({ error: 'currentPassword is required to change your password.' });
+      const existing = await db.collection('users').findOne(
+        { _id: new ObjectId(req.auth.sub) },
+        { projection: { passwordHash: 1 } }
+      );
+      if (!existing || !(await bcrypt.compare(req.body.currentPassword, existing.passwordHash)))
+        return res.status(403).json({ error: 'Current password is incorrect.' });
       update.passwordHash = await bcrypt.hash(req.body.password, 12);
     }
 
