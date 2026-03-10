@@ -1,5 +1,9 @@
 # Claude Code — Standing Instructions
 
+## On Session Start
+
+- Create a new branch and pull from the main branch.
+
 ## Things You Must Never Do
 
 - **Do not change the business model.** No changes to account types, tier definitions, or the features available per tier.
