@@ -59,8 +59,18 @@ app.use('/api/',              rateLimit({ windowMs:       60 * 1000, max: 120, s
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
-// GET /api/health — aggregated health across all internal services
+// GET /api/health — aggregated health across all internal services.
+// Responses are cached for HEALTH_CACHE_TTL_MS so concurrent warm-up
+// pings from many users trigger only one round of downstream fetches.
+const HEALTH_CACHE_TTL_MS = 30_000;
+let _healthCache = null; // { body, status, expiresAt }
+
 app.get('/api/health', async (_req, res) => {
+  const now = Date.now();
+  if (_healthCache && _healthCache.expiresAt > now) {
+    return res.status(_healthCache.status).json(_healthCache.body);
+  }
+
   const services = {
     auth:       `${CFG.AUTH_SERVICE_URL}/health`,
     users:      `${CFG.USER_SERVICE_URL}/health`,
@@ -85,7 +95,13 @@ app.get('/api/health', async (_req, res) => {
   );
 
   const allOk = Object.values(status).every(s => s === 'ok');
-  res.status(allOk ? 200 : 503).json({ ok: allOk, services: status, ts: Date.now() });
+  const body  = { ok: allOk, services: status, ts: now };
+  const httpStatus = allOk ? 200 : 503;
+
+  // Cache successful results; don't cache failures so the next request retries.
+  if (allOk) _healthCache = { body, status: httpStatus, expiresAt: now + HEALTH_CACHE_TTL_MS };
+
+  res.status(httpStatus).json(body);
 });
 
 // ============================================================
