@@ -313,13 +313,19 @@ function setupLocConnection(ws, userId, token) {
       geoDistM(lastSentPos.lat, lastSentPos.lon, lastPos.lat, lastPos.lon) >= LOC_MIN_SEND_M;
     if (needsPush) {
       try {
-        await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+        const putRes = await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
           body:    JSON.stringify({ lat: lastPos.lat, lon: lastPos.lon, accuracy: lastPosAcc }),
         });
-        lastSentPos = { lat: lastPos.lat, lon: lastPos.lon };
-      } catch { /* silent — will retry next tick */ }
+        if (putRes.ok) {
+          lastSentPos = { lat: lastPos.lat, lon: lastPos.lon };
+        } else {
+          console.warn(`[WS:loc] PUT /location ${putRes.status} for ${userId} — will retry`);
+        }
+      } catch (e) {
+        console.warn(`[WS:loc] PUT /location network error for ${userId}: ${e.message} — will retry`);
+      }
     }
 
     try {
@@ -328,12 +334,18 @@ function setupLocConnection(ws, userId, token) {
         { headers: svcHeaders(token) }
       );
       const data = await res.json();
-      if (!Array.isArray(data.users)) return;  // error response — skip, don't cache
+      if (!Array.isArray(data.users)) {
+        console.warn(`[WS:loc] nearby ${res.status} for ${userId}:`, data.error || data);
+        return;
+      }
       const hash = JSON.stringify(data.users);
       if (hash === lastNearbyHash) return;  // nothing changed — skip the WS frame
       lastNearbyHash = hash;
+      console.log(`[WS:loc] nearby changed for ${userId}: ${data.users.length} users`);
       wsSend(ws, { type: 'nearby', users: data.users });
-    } catch { /* silent — client retains last-known state */ }
+    } catch (e) {
+      console.warn(`[WS:loc] nearby network error for ${userId}: ${e.message}`);
+    }
   }, 5000);
 
   ws.on('message', async raw => {
@@ -347,13 +359,17 @@ function setupLocConnection(ws, userId, token) {
       const moved = !lastSentPos || geoDistM(lastSentPos.lat, lastSentPos.lon, msg.lat, msg.lon) >= LOC_MIN_SEND_M;
       if (moved) {
         try {
-          await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
+          const putRes = await fetch(`${CFG.LOC_SERVICE_URL}/location`, {
             method:  'PUT',
             headers: { 'Content-Type': 'application/json', ...svcHeaders(token) },
             body:    JSON.stringify({ lat: msg.lat, lon: msg.lon, accuracy: lastPosAcc }),
           });
-          lastSentPos = { lat: msg.lat, lon: msg.lon };  // only set on success
-        } catch { /* silent — nearbyTimer will retry */ }
+          if (putRes.ok) {
+            lastSentPos = { lat: msg.lat, lon: msg.lon };  // only set on confirmed success
+          } else {
+            console.warn(`[WS:loc] PUT /location ${putRes.status} for ${userId} — nearbyTimer will retry`);
+          }
+        } catch { /* network error — nearbyTimer will retry */ }
       }
     }
   });
