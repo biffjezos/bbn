@@ -336,23 +336,23 @@ Steps 3 and 4 can fail independently. If step 3 succeeds but step 4 fails, the p
 
 ## 6. Summary Table
 
-| # | Area | Severity | Finding |
-|---|---|---|---|
-| 1.1 | Security | HIGH | Password change accepts new password without verifying current password on server |
-| 1.2 | Security | MEDIUM | Ghost marker after login — guest location not cleaned up (guestId dropped by api.js) |
-| 1.3 | Security | LOW | Location WS URL includes JWT in query string |
-| 1.4 | Security | LOW | Meeting mode pill (`bbm_meet`) persists in localStorage after logout |
-| 2.1 | Bug | HIGH | `/api/tiers/*` routes missing from gateway — getNearbyRadius always 404s |
-| 2.3 | Bug | LOW | Public key and profile caches never invalidated |
-| 2.4 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
-| 2.5 | Bug | LOW | `buf2b64` spread can overflow call stack on large payloads |
-| 2.6 | Bug | LOW | Age validation uses truthiness check — age 0 skips validation |
-| 3.1 | Performance | HIGH | Nearby query is full collection scan when radius is Infinity |
-| 3.2 | Performance | MEDIUM | Poll-based WebSocket pushes hit MongoDB every tick with no caching |
-| 3.3 | Performance | MEDIUM | TokenVersion DB lookup on every authenticated request |
-| 3.5 | Performance | LOW | Send-rate bucket is in-process — not safe for multi-instance gateway |
-| 4 | Usability | MEDIUM | Users enter password twice in cold login → messages flow |
-| 5.2a | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated across all services |
-| 5.2b | Maintainability | LOW | app.js mixes three distinct module concerns (718 lines) |
-| 5.2c | Maintainability | LOW | LOCATION_TTL_SEC duplicated in favourites-service with no enforcement |
-| 5.2d | Maintainability | LOW | Password-change flow lacks rollback if step 3 or 4 fails independently |
+| Status | # | Area | Severity | Finding |
+|---|---|---|---|---|
+| ✅ | 1.1 | Security | HIGH | Password change accepts new password without verifying current password on server |
+| ✅ | 1.2 | Security | MEDIUM | Ghost marker after login — guest location not cleaned up (guestId dropped by api.js) |
+| ✅ | 1.3 | Security | LOW | Location WS URL includes JWT in query string |
+| ✅ | 1.4 | Security | LOW | Meeting mode pill (`bbm_meet`) persists in localStorage after logout |
+| ✅ | 2.1 | Bug | HIGH | `/api/tiers/*` routes missing from gateway — getNearbyRadius always 404s |
+| 🔲 | 2.3 | Bug | LOW | Public key and profile caches never invalidated |
+| 🔲 | 2.4 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
+| 🔲 | 2.5 | Bug | LOW | `buf2b64` spread can overflow call stack on large payloads |
+| 🔲 | 2.6 | Bug | LOW | Age validation uses truthiness check — age 0 skips validation |
+| ✅ | 3.1 | Performance | HIGH | Nearby query is full collection scan when radius is Infinity |
+| 🔲 | 3.2 | Performance | MEDIUM | Poll-based WebSocket pushes hit MongoDB every tick with no caching |
+| 🔲 | 3.3 | Performance | MEDIUM | TokenVersion DB lookup on every authenticated request |
+| 🔲 | 3.5 | Performance | LOW | Send-rate bucket is in-process — not safe for multi-instance gateway |
+| 🔲 | 4 | Usability | MEDIUM | Users enter password twice in cold login → messages flow |
+| 🔲 | 5.2a | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated across all services |
+| 🔲 | 5.2b | Maintainability | LOW | app.js mixes three distinct module concerns (718 lines) |
+| 🔲 | 5.2c | Maintainability | LOW | LOCATION_TTL_SEC duplicated in favourites-service with no enforcement |
+| 🔲 | 5.2d | Maintainability | LOW | Password-change flow lacks rollback if step 3 or 4 fails independently |
