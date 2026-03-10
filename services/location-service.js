@@ -17,7 +17,7 @@ const CFG = {
   UPDATE_DISTANCE_M:   100,
   LOCATION_TTL_SEC:    10 * 60,
 
-  RADIUS_GUEST_M:      Infinity,
+  RADIUS_GUEST_M:      23_000,
   RADIUS_REGISTERED_M: Infinity,
 
   MAX_VISIBLE_GUESTS:      Infinity,
@@ -215,10 +215,11 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       updatedAt: { $gt: cutoff },
     }).toArray();
 
-    const withDist = nearby.map(u => ({
-      ...u,
-      _dist: haversineDistance(lat, lon, u.lat, u.lon),
-    }));
+    const radiusM  = req.auth.role === 'user' ? CFG.RADIUS_REGISTERED_M : CFG.RADIUS_GUEST_M;
+
+    const withDist = nearby
+      .map(u => ({ ...u, _dist: haversineDistance(lat, lon, u.lat, u.lon) }))
+      .filter(u => u._dist <= radiusM);
 
     const visible = applyStrategy(withDist, Infinity, CFG.VISIBLE_SELECTION_STRATEGY);
 
