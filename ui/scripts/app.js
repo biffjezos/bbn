@@ -25,6 +25,9 @@
 })();
 // ------------------------------------------------------------
 
+// Pre-warm all backend services (they may be sleeping on Railway free tier)
+fetch('/api/health').then(function(r){ console.log('[warm-up] services health:', r.status); }).catch(function(){ console.log('[warm-up] health ping failed (gateway may be starting)'); });
+
 // ============================================================
 // bOOmbOOm.NOW! — app.js  (plain script, NOT a module)
 // Runs synchronously after auth.js loads.
