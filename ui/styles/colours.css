@@ -42,7 +42,6 @@
   --bbm-danger-border:       rgba(192,57,43,0.4);
 
   /* ── Success / Green ─────────────────────────────────────── */
-  --bbm-success:              #27ae60;
   --bbm-success-light:        #6fcf97;
   --bbm-success-dim:          rgba(39,174,96,0.15);
   --bbm-success-border:       rgba(39,174,96,0.4);
@@ -51,7 +50,6 @@
 
   /* ── Guest / Gold ────────────────────────────────────────── */
   --bbm-gold-dim:    rgba(255,210,0,0.2);
-  --bbm-gold-mid:    rgba(255,210,0,0.5);
   --bbm-gold-border: rgba(255,210,0,0.8);
 
   /* ── Self-marker backgrounds ─────────────────────────────── */
