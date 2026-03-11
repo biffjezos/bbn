@@ -8,12 +8,12 @@
 // ============================================================
 const CFG = {
   PORT:             process.env.PORT             || 3006,
-  MONGO_URI:        process.env.MONGO_URI        || '',
+  MONGO_URI:        process.env.MONGO_URI,
   DB_NAME:          process.env.DB_NAME          || 'boomboom',
-  JWT_SECRET:      process.env.JWT_SECRET,
-  LOC_SERVICE_URL: process.env.LOC_SERVICE_URL,
+  JWT_SECRET:       process.env.JWT_SECRET,
+  LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL,
 };
-const _missingCfg = ['JWT_SECRET','LOC_SERVICE_URL'].filter(k => !CFG[k]);
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI', 'LOC_SERVICE_URL'].filter(k => !CFG[k]);
 if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 

@@ -11,8 +11,8 @@
 // ============================================================
 const CFG = {
   PORT:             process.env.PORT             || 8080,
-  MONGO_URI:        process.env.MONGO_URI        || '',
-  DB_NAME:          process.env.DB_NAME          || 'boomboom',
+  MONGO_URI:         process.env.MONGO_URI,
+  DB_NAME:           process.env.DB_NAME          || 'boomboom',
   JWT_SECRET:        process.env.JWT_SECRET,
   LOC_SERVICE_URL:   process.env.LOC_SERVICE_URL,
   TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL,
@@ -20,7 +20,7 @@ const CFG = {
   MESSAGE_MAX_CHARS: 4096,  // encrypted payload is larger than plaintext
   MESSAGE_TTL_MS:    4 * 60 * 60 * 1000,   // 4 hours
 };
-const _missingCfg = ['JWT_SECRET','LOC_SERVICE_URL','TIERS_SERVICE_URL'].filter(k => !CFG[k]);
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI', 'LOC_SERVICE_URL', 'TIERS_SERVICE_URL'].filter(k => !CFG[k]);
 if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
@@ -239,13 +239,21 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
 
     // Proximity enforcement — consult tiers-service for the sender's allowed radius.
     // A radius of -1 means Infinity (no restriction), skipping the check entirely.
+    // Fail closed: if tiers-service is unreachable, refuse the message rather than skip the check.
     const svcAuth = { Authorization: `Bearer ${serviceToken()}`, 'X-Service-Token': serviceToken() };
     const senderTier = req.auth.tier || 'regular';
-    const tierRes    = await fetch(
-      `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(senderTier)}`,
-      { headers: svcAuth }
-    ).catch(() => null);
-    const radiusM = tierRes?.ok ? (await tierRes.json()).radiusM : -1;
+    let radiusM;
+    try {
+      const tierRes = await fetch(
+        `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(senderTier)}`,
+        { headers: svcAuth }
+      );
+      if (!tierRes.ok) throw new Error(`tiers-service responded ${tierRes.status}`);
+      radiusM = (await tierRes.json()).radiusM;
+    } catch (err) {
+      console.error('[messages] tiers-service unreachable:', err.message);
+      return res.status(503).json({ error: 'Tier service unavailable. Try again shortly.' });
+    }
 
     if (radiusM !== -1) {
       // Finite radius: both users must be online and within the allowed distance.

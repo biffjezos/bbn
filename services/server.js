@@ -192,9 +192,6 @@ app.put   ('/api/users/me/keys',             (req, res) => proxy(req, res, `${CF
 app.get   ('/api/users/search',              (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/search?${new URLSearchParams(req.query).toString()}`));
 app.get   ('/api/users/:userId/profile',     (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/users/${req.params.userId}/profile`));
 
-// --- Tiers --------------------------------------------------
-app.get('/api/tiers/radius/nearby/:tier', (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/tiers/radius/nearby/${encodeURIComponent(req.params.tier)}`));
-
 // --- Location (HTTP fallback — WS is preferred) -------------
 app.put   ('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));
 app.delete('/api/location',        (req, res) => proxy(req, res, `${CFG.LOC_SERVICE_URL}/location`));
