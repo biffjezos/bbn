@@ -170,7 +170,7 @@ async function renderFavourites(forceReload = false) {
   const hasQuery = rawQuery.trim().length > 0;
 
   if (!hasQuery) {
-    renderFavList(wrap, cachedFavourites);
+    await renderFavList(wrap, cachedFavourites);
   } else {
     await renderSearchResults(wrap, q, rawQuery);
   }
