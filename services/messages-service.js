@@ -13,14 +13,15 @@ const CFG = {
   PORT:             process.env.PORT             || 8080,
   MONGO_URI:        process.env.MONGO_URI        || '',
   DB_NAME:          process.env.DB_NAME          || 'boomboom',
-  JWT_SECRET:       process.env.JWT_SECRET,
-  LOC_SERVICE_URL:  process.env.LOC_SERVICE_URL  || 'http://loc',
-  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL || 'http://tiers',
+  JWT_SECRET:        process.env.JWT_SECRET,
+  LOC_SERVICE_URL:   process.env.LOC_SERVICE_URL,
+  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL,
 
   MESSAGE_MAX_CHARS: 4096,  // encrypted payload is larger than plaintext
   MESSAGE_TTL_MS:    4 * 60 * 60 * 1000,   // 4 hours
 };
-if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
+const _missingCfg = ['JWT_SECRET','LOC_SERVICE_URL','TIERS_SERVICE_URL'].filter(k => !CFG[k]);
+if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
 import express                   from 'express';

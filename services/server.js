@@ -11,16 +11,18 @@
 // ============================================================
 const CFG = {
   PORT:                  process.env.PORT                  || 3000,
-  AUTH_SERVICE_URL:      process.env.AUTH_SERVICE_URL      || 'http://auth',
-  USER_SERVICE_URL:      process.env.USER_SERVICE_URL      || 'http://usr',
-  LOC_SERVICE_URL:       process.env.LOC_SERVICE_URL       || 'http://loc',
-  MSG_SERVICE_URL:       process.env.MSG_SERVICE_URL       || 'http://msg',
-  FAV_SERVICE_URL:       process.env.FAV_SERVICE_URL       || 'http://fav',
-  TIERS_SERVICE_URL:     process.env.TIERS_SERVICE_URL     || 'http://tiers',
-  MIGRATION_SERVICE_URL: process.env.MIGRATION_SERVICE_URL || 'http://migrations',
+  AUTH_SERVICE_URL:      process.env.AUTH_SERVICE_URL,
+  USER_SERVICE_URL:      process.env.USER_SERVICE_URL,
+  LOC_SERVICE_URL:       process.env.LOC_SERVICE_URL,
+  MSG_SERVICE_URL:       process.env.MSG_SERVICE_URL,
+  FAV_SERVICE_URL:       process.env.FAV_SERVICE_URL,
+  TIERS_SERVICE_URL:     process.env.TIERS_SERVICE_URL,
+  MIGRATION_SERVICE_URL: process.env.MIGRATION_SERVICE_URL,
   JWT_SECRET:            process.env.JWT_SECRET,
 };
-if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
+const _missingCfg = ['AUTH_SERVICE_URL','USER_SERVICE_URL','LOC_SERVICE_URL','MSG_SERVICE_URL',
+  'FAV_SERVICE_URL','TIERS_SERVICE_URL','MIGRATION_SERVICE_URL','JWT_SECRET'].filter(k => !CFG[k]);
+if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
 import { createServer }             from 'http';
