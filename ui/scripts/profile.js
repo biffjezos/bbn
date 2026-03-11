@@ -217,7 +217,7 @@ async function renderMyProfile() {
       <div class="mb-4"><label class="form-label" for="confirmPw">Confirm New Password</label>
         <input type="password" class="form-control" id="confirmPw" autocomplete="new-password" /></div>
       <button class="btn btn-bbm-primary" id="savePwBtn"><i class="bi bi-check2 me-2"></i>Update Password</button>`;
-    wrap.appendChild(section);
+    document.getElementById('deleteAccountBtn').closest('.bbm-profile-form').before(section);
 
     document.getElementById('savePwBtn').addEventListener('click', async () => {
       const alertEl = document.getElementById('pwAlert');
