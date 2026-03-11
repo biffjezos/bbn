@@ -203,19 +203,31 @@
       });
     }
 
-    // Delete account
-    var deleteBtn = $('deleteAccountBtn');
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', function () {
-        var oc = bootstrap.Offcanvas.getInstance($('appMenu'));
-        if (oc) oc.hide();
-        new bootstrap.Modal($('deleteConfirmModal')).show();
+    // Delete account — button lives on /profile, modal wired here globally
+    var deleteConfirmModal = $('deleteConfirmModal');
+    if (deleteConfirmModal) {
+      deleteConfirmModal.addEventListener('shown.bs.modal', function () {
+        var input = $('deleteNicknameInput');
+        var btn   = $('confirmDeleteBtn');
+        if (!input || !btn) return;
+        input.focus();
+        input.addEventListener('input', function () {
+          btn.disabled = input.value.trim() !== (Auth.getNickname() || '');
+        });
+      });
+      deleteConfirmModal.addEventListener('hidden.bs.modal', function () {
+        var input = $('deleteNicknameInput');
+        var btn   = $('confirmDeleteBtn');
+        if (input) input.value = '';
+        if (btn)   btn.disabled = true;
       });
     }
 
     var confirmDeleteBtn = $('confirmDeleteBtn');
     if (confirmDeleteBtn) {
       confirmDeleteBtn.addEventListener('click', async function () {
+        var input = $('deleteNicknameInput');
+        if (!input || input.value.trim() !== (Auth.getNickname() || '')) return;
         try {
           await Auth.deleteAccount();
           var modal = bootstrap.Modal.getInstance($('deleteConfirmModal'));
