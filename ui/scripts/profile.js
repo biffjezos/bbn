@@ -28,6 +28,29 @@ function loadingHtml(text = 'Loading…') {
 }
 
 // ── My Profile ────────────────────────────────────────────
+const TIER_DISPLAY = {
+  guest:   { label: 'Guest',   cls: 'secondary' },
+  regular: { label: 'Regular', cls: 'primary'   },
+  premium: { label: 'Premium', cls: 'warning'   },
+};
+
+function tierFeatureHtml(tier) {
+  const nearbyKm = tier === 'guest' ? '23 km' : '9,700 km';
+  const items = [
+    `<li>See the map and nearby users</li>`,
+    `<li>Nearby radius: <strong>${nearbyKm}</strong></li>`,
+  ];
+  if (tier === 'guest') {
+    items.push(`<li class="text-muted">Messaging — requires an account</li>`);
+    items.push(`<li class="text-muted">Favourites — requires an account</li>`);
+  } else {
+    items.push(`<li>Manage favourites</li>`);
+    items.push(`<li>Message mutual favourites within range</li>`);
+    items.push(`<li style="font-size:0.8rem;opacity:0.7">Messaging only works when both users have each other as favourites and are within each other's range. The <em>smaller</em> of the two ranges applies — if the other user has a tighter range, their limit is what counts.</li>`);
+  }
+  return `<ul class="mb-0 ps-3 text-start" style="font-size:0.85rem">${items.join('')}</ul>`;
+}
+
 async function renderMyProfile() {
   const wrap = document.getElementById('profileFormWrap');
   if (!wrap) return;
@@ -42,6 +65,11 @@ async function renderMyProfile() {
   }
 
   wrap.innerHTML = loadingHtml('Loading profile…');
+
+  const tier      = getJwtField('tier') || 'regular';
+  const tierDef   = TIER_DISPLAY[tier] || TIER_DISPLAY.regular;
+  const tierLabel = tierDef.label;
+  const tierCls   = tierDef.cls;
 
   // Always fetch from API — authoritative source
   let current = {};
@@ -73,6 +101,16 @@ async function renderMyProfile() {
   wrap.innerHTML = `
     <div class="bbm-profile-form">
       <div id="profileAlert" class="d-none mb-4"></div>
+
+      <div class="mb-4 d-flex align-items-center gap-2">
+        <span class="text-muted-bb small">Account type</span>
+        <span id="tierBadge"
+          class="badge bg-${escHtml(tierCls)} d-inline-flex align-items-center gap-1"
+          style="cursor:pointer;font-size:0.8rem;user-select:none"
+          tabindex="0" role="button" aria-label="Show tier features">
+          ${escHtml(tierLabel)}&nbsp;<i class="bi bi-info-circle"></i>
+        </span>
+      </div>
 
       <div class="mb-3">
         <label class="form-label" for="editNickname">Nickname</label>
@@ -115,6 +153,24 @@ async function renderMyProfile() {
         <i class="bi bi-trash3 me-2"></i>Delete Account
       </button>
     </div>`;
+
+  const tierBadgeEl = document.getElementById('tierBadge');
+  if (tierBadgeEl && window.bootstrap?.Popover) {
+    new bootstrap.Popover(tierBadgeEl, {
+      trigger:   'click',
+      html:      true,
+      sanitize:  false,
+      title:     escHtml(tierLabel) + ' plan',
+      content:   tierFeatureHtml(tier),
+      placement: 'bottom',
+    });
+    // Close when clicking outside
+    document.addEventListener('click', function hidePop(e) {
+      if (!tierBadgeEl.contains(e.target)) {
+        bootstrap.Popover.getInstance(tierBadgeEl)?.hide();
+      }
+    }, { capture: true, passive: true });
+  }
 
   document.getElementById('saveProfileBtn').addEventListener('click', async () => {
     const alertEl  = document.getElementById('profileAlert');
