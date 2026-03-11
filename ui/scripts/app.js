@@ -100,7 +100,7 @@
   // ── Auth hooks — set NOW, before Auth.init() runs ─────────
   Auth.onLogin = function () {
     applyAuthState(true);
-    console.log('[App] onLogin fired, sex:', Auth.getSex());
+    if (DEBUG) console.log('[App] onLogin fired, sex:', Auth.getSex());
     if (window.MapModule) {
       window.MapModule.refreshMarkers();
       setTimeout(function() { window.MapModule && window.MapModule.refreshMarkers(); }, 1000);
@@ -367,8 +367,9 @@
 
     _locWs.onopen = function () {
       _locWsRetry = 1000;
-      console.log('[Geo] WS connected');
+      if (DEBUG) console.log('[Geo] WS connected');
       _locWs.send(JSON.stringify({ type: 'auth', token: window.Auth?.getToken?.() || '' }));
+      if (DEBUG) console.log('[Geo] WS auth sent, token tier:', window.Auth?.getTier?.() || 'unknown');
       var pos = window.GeoState.pos;
       if (pos) sendLocWS(pos.lat, pos.lng, window.GeoState.accuracy);
     };
@@ -377,7 +378,7 @@
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'nearby') {
-          console.log('[Geo] WS nearby push:', (msg.users || []).length, 'users');
+          if (DEBUG) console.log('[Geo] WS ← nearby:', (msg.users || []).length, 'users', msg.users);
           window.dispatchEvent(new CustomEvent('geo:nearby', { detail: { users: msg.users || [] } }));
         }
       } catch { /* silent */ }
@@ -389,7 +390,7 @@
       if (_locWsTimer) clearTimeout(_locWsTimer);
       _locWsTimer = setTimeout(connectLocWS, _locWsRetry);
       _locWsRetry = Math.min(_locWsRetry * 2, 30000);
-      console.log('[Geo] WS closed, retrying in', _locWsRetry + 'ms');
+      if (DEBUG) console.log('[Geo] WS closed, retrying in', _locWsRetry + 'ms');
     };
   }
 
@@ -402,11 +403,15 @@
 
   async function pushLocation(lat, lng, accuracy) {
     if (!window.Auth?.getToken()) return;
-    if (sendLocWS(lat, lng, accuracy)) return;
+    if (sendLocWS(lat, lng, accuracy)) {
+      if (DEBUG) console.log('[Geo] WS → position sent:', lat, lng, accuracy);
+      return;
+    }
+    if (DEBUG) console.log('[Geo] WS not open, falling back to HTTP PUT:', lat, lng, accuracy);
     try {
       await window.Api.putLocation(lat, lng, accuracy || 'gps');
     } catch (e) {
-      console.warn('[Geo] HTTP location push failed:', e.message);
+      if (DEBUG) console.warn('[Geo] HTTP location push failed:', e.message);
     }
   }
 
@@ -466,7 +471,7 @@
         var lat  = data[services[i].lat];
         var lon  = data[services[i].lon];
         if (lat && lon) {
-          console.log('[Geo] IP location from', services[i].url);
+          if (DEBUG) console.log('[Geo] IP location from', services[i].url);
           window.GeoState.accuracy = 'ip';
           dispatchPosition(lat, lon);
           setStatus('approximate location', 'live');
@@ -474,10 +479,10 @@
           return;
         }
       } catch (e) {
-        console.warn('[Geo] IP fallback failed for', services[i].url, e.message);
+        if (DEBUG) console.warn('[Geo] IP fallback failed for', services[i].url, e.message);
       }
     }
-    console.warn('[Geo] All IP fallbacks failed');
+    if (DEBUG) console.warn('[Geo] All IP fallbacks failed');
     setStatus('location unavailable', 'off');
   }
 
@@ -491,7 +496,7 @@
     navigator.geolocation.getCurrentPosition(
       function (pos) {
         var acc = pos.coords.accuracy;
-        console.log('[Geo] Low-accuracy fix:', Math.round(acc) + 'm');
+        if (DEBUG) console.log('[Geo] Low-accuracy fix:', Math.round(acc) + 'm');
         onPosition(pos, acc < 5000);
         navigator.geolocation.watchPosition(
           function (pos) { onPosition(pos, true); },
@@ -500,11 +505,11 @@
         );
       },
       function (err) {
-        console.warn('[Geo] Low-accuracy failed:', err.code, err.message);
+        if (DEBUG) console.warn('[Geo] Low-accuracy failed:', err.code, err.message);
         navigator.geolocation.getCurrentPosition(
           function (pos) { onPosition(pos, true); },
           function (err2) {
-            console.warn('[Geo] High-accuracy failed:', err2.code, err2.message, '— falling back to IP');
+            if (DEBUG) console.warn('[Geo] High-accuracy failed:', err2.code, err2.message, '— falling back to IP');
             tryIpFallback();
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -517,7 +522,7 @@
   // ── Boot ──────────────────────────────────────────────────
 
   window.__authReady.then(function () {
-    console.log('[Geo] Auth ready, starting geolocation');
+    if (DEBUG) console.log('[Geo] Auth ready, starting geolocation');
     connectLocWS();
     startWatch();
   });
@@ -596,7 +601,7 @@
     _locked = true;
     clearInactivityTimer();
     window.BBMCrypto?.lock();
-    console.log('[Lock] Session locked.');
+    if (DEBUG) console.log('[Lock] Keys locked.');
     var modal = getModal();
     if (modal) modal.show();
   }
@@ -609,7 +614,7 @@
     var modal = getModal();
     if (modal) modal.hide();
     window.dispatchEvent(new CustomEvent('bbm:unlocked'));
-    console.log('[Lock] Session unlocked.');
+    if (DEBUG) console.log('[Lock] Keys unlocked.');
   }
 
   // ── Inactivity timer ──────────────────────────────────────
@@ -635,7 +640,7 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       _hiddenTimer = setTimeout(function () {
-        if (document.hidden) { console.log('[Lock] Tab hidden too long — locking.'); lock(); }
+        if (document.hidden) { if (DEBUG) console.log('[Lock] Tab hidden too long — locking.'); lock(); }
       }, HIDE_LOCK_MS);
     } else {
       if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
@@ -666,18 +671,26 @@
       clearError();
       if (unlockBtn) { unlockBtn.disabled = true; unlockBtn.textContent = 'Unlocking…'; }
       try {
+        if (DEBUG) console.log('[Lock] Fetching encrypted key blob from server…');
         var keys = await window.Api.getMyKeys();
+        if (DEBUG) console.log('[Lock] Key blob received, encryptedPrivateKey:', !!keys.encryptedPrivateKey, 'publicKey:', !!keys.publicKey);
         if (keys.encryptedPrivateKey && keys.publicKey) {
+          if (DEBUG) console.log('[Lock] Decrypting private key with PBKDF2…');
           var ok = await window.BBMCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
           if (!ok) throw new Error('Wrong password.');
+          if (DEBUG) console.log('[Lock] Keys unlocked successfully.');
         } else {
           // No keys on server yet (legacy account) — generate and save now
+          if (DEBUG) console.log('[Lock] No keys on server — generating new key pair…');
           var setup = await window.BBMCrypto.setup(password);
+          if (DEBUG) console.log('[Lock] Key pair generated, saving to server…');
           await window.Api.saveKeys(setup.publicKeyB64, setup.encBlob);
+          if (DEBUG) console.log('[Lock] New keys saved to server.');
         }
         if (pwInput) pwInput.value = '';
         unlock();
       } catch (e) {
+        if (DEBUG) console.warn('[Lock] Unlock failed:', e.message);
         showError(e.message || 'Unlock failed.');
       } finally {
         if (unlockBtn) { unlockBtn.disabled = false; unlockBtn.innerHTML = '<i class="bi bi-unlock me-2"></i>Unlock'; }
@@ -689,10 +702,12 @@
     if (logoutBtn) logoutBtn.addEventListener('click', function () {
       if (pwInput) pwInput.value = '';
       clearError();
-      var modal = getModal();
-      if (modal) modal.hide();
       _locked = false;
       window.Auth.logout();
+      // modal will be hidden by Auth.onLogout → clearInactivityTimer path,
+      // but force-hide here too in case logout races with Bootstrap state
+      var modal = getModal();
+      if (modal) modal.hide();
     });
   });
 
@@ -727,6 +742,8 @@
       window.dispatchEvent(new CustomEvent('bbm:unlocked'));
     } else {
       _locked = true;
+      var modal = getModal();
+      if (modal) modal.show();
     }
   };
 

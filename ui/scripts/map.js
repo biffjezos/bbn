@@ -115,7 +115,7 @@
 
   function initMap(lat, lng) {
     if (map) return;
-    console.log('[Map] Initialising at', lat, lng);
+    if (DEBUG) console.log('[Map] Initialising at', lat, lng);
     map = L.map('map', { center: [lat, lng], zoom: DEFAULT_ZOOM, zoomControl: true });
     L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
     canvasRenderer = L.canvas({ padding: 0.5 });
@@ -370,9 +370,9 @@
   // ── Events ────────────────────────────────────────────────────
 
   window.addEventListener('geo:nearby', function (e) {
-    if (!map) { console.warn('[Map] geo:nearby fired but map not ready — dropping'); return; }
+    if (!map) { if (DEBUG) console.warn('[Map] geo:nearby fired but map not ready — dropping'); return; }
     lastNearbyUsers = e.detail.users || [];
-    console.log('[Map] rendering', lastNearbyUsers.length, 'nearby users');
+    if (DEBUG) console.log('[Map] rendering', lastNearbyUsers.length, 'nearby users', lastNearbyUsers);
     renderMarkers(lastNearbyUsers);
     const pos = window.GeoState?.pos;
     if (pos) {

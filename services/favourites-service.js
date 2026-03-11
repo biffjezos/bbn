@@ -105,7 +105,14 @@ async function verifyToken(req, res, next) {
 }
 
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', async (_req, res) => {
+  try {
+    await db.command({ ping: 1 });
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false, error: 'DB unreachable' });
+  }
+});
 
 // GET /favourites — list all favourites with live nickname + online status
 app.get('/favourites', verifyToken, async (req, res) => {
