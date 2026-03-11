@@ -48,7 +48,8 @@ function parseSearchQuery(raw) {
   // Normalise spaces within filter tokens so "age: < 49" → "age:<49"
   const normalised = raw
     .replace(/\b(age|sex|online)\s*:\s*/gi, (_, k) => k.toLowerCase() + ':')
-    .replace(/\bage:([<>]=?)\s*(\d)/g, 'age:$1$2');
+    .replace(/\bage:([<>]=?)\s*(\d)/g, 'age:$1$2')
+    .replace(/\bage:(\d+)\s*-\s*(\d+)/g, 'age:$1-$2');
 
   for (const part of normalised.trim().split(/\s+/).filter(Boolean)) {
     const lo = part.toLowerCase();
