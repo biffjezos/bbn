@@ -173,11 +173,13 @@ app.get('/favourites', verifyToken, async (req, res) => {
       .map(e => {
         const u = userMap[e.favouriteUserId];
         return {
-          userId:   e.favouriteUserId,
-          nickname: u.nickname,
-          sex:      u.sex,
-          online:   onlineSet.has(e.favouriteUserId),
-          addedAt:  e.addedAt,
+          userId:        e.favouriteUserId,
+          nickname:      u.nickname,
+          sex:           u.sex,
+          online:        onlineSet.has(e.favouriteUserId),
+          addedAt:       e.addedAt,
+          withinRange:   e.withinRange    ?? null,
+          withinRangeAt: e.withinRangeAt  ?? null,
         };
       });
 
@@ -329,15 +331,16 @@ app.post('/favourites/internal/range-sync', async (req, res) => {
       const dist = haversineDistance(lat, lon, otherLoc.lat, otherLoc.lon);
       const withinRange = (radiusA === -1 || dist <= radiusA) &&
                           (radiusB === -1 || dist <= radiusB);
+      const rangeFields = { withinRange, ...(withinRange ? { withinRangeAt: new Date() } : {}) };
 
       await Promise.all([
         db.collection('favourites').updateOne(
           { ownerUserId: userId,   favouriteUserId: otherId },
-          { $set: { withinRange } }
+          { $set: rangeFields }
         ),
         db.collection('favourites').updateOne(
           { ownerUserId: otherId, favouriteUserId: userId },
-          { $set: { withinRange } }
+          { $set: rangeFields }
         ),
       ]);
       updated++;

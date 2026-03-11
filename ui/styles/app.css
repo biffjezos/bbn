@@ -930,6 +930,28 @@ html, body {
 /* Meet toggle button in favourites list */
 .fav-meet-btn.active { color: var(--bbm-pink-light) !important; }
 
+/* Message button — disabled when out of range */
+.fav-msg--disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* In-range badge next to online/offline */
+.badge-in-range {
+  background: #198754;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+/* "Last in range" hint text */
+.fav-range-hint {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: var(--bbm-text-faint, #888);
+}
+
 /* ── Meeting pill — sex-specific border ── */
 .bbm-meet-pill.bbm-meet-pill--male {
   border-color: var(--bbm-meet-pill-border-male);
