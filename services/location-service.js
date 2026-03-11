@@ -8,10 +8,11 @@
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:      process.env.PORT       || 8080,
-  MONGO_URI:  process.env.MONGO_URI,
-  DB_NAME:    process.env.DB_NAME    || 'boomboom',
-  JWT_SECRET: process.env.JWT_SECRET,
+  PORT:           process.env.PORT           || 8080,
+  MONGO_URI:      process.env.MONGO_URI,
+  DB_NAME:        process.env.DB_NAME        || 'boomboom',
+  JWT_SECRET:     process.env.JWT_SECRET,
+  FAV_SERVICE_URL: process.env.FAV_SERVICE_URL,
 
   UPDATE_INTERVAL_MS:  15_000,
   UPDATE_DISTANCE_M:   100,
@@ -21,7 +22,7 @@ const CFG = {
   MAX_VISIBLE_REGISTERED:  Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
 };
-const _missingCfg = ['JWT_SECRET', 'MONGO_URI'].filter(k => !CFG[k]);
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI', 'FAV_SERVICE_URL'].filter(k => !CFG[k]);
 if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
@@ -41,6 +42,25 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
 // --- DB -----------------------------------------------------
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[location] DB connected.');
+
+// --- Service token ------------------------------------------
+let _svcToken = null;
+let _svcTokenExpiry = 0;
+function serviceToken() {
+  if (Date.now() < _svcTokenExpiry - 5_000) return _svcToken;
+  _svcToken = jwt.sign({ sub: 'location', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
+  _svcTokenExpiry = Date.now() + 60_000;
+  return _svcToken;
+}
+
+// --- Fire-and-forget range-sync -----------------------------
+function notifyRangeSync(userId, lat, lon) {
+  fetch(`${CFG.FAV_SERVICE_URL}/favourites/internal/range-sync`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Service-Token': serviceToken() },
+    body:    JSON.stringify({ userId, lat, lon }),
+  }).catch(err => console.error('[location] range-sync failed:', err.message));
+}
 
 // Short-lived cache for the active-users list shared across all concurrent nearby polls.
 // TTL is well under the minimum location update interval (15 s) so data stays fresh.
@@ -195,6 +215,7 @@ app.put('/location', requireAny, async (req, res) => {
           { userId: id, updatedAt: { $lt: cutoff } },
           { $set: locationDoc }
         );
+        if (result.matchedCount > 0 && isUser) notifyRangeSync(id, lat, lon);
         return res.json({ ok: true, skipped: result.matchedCount === 0 });
       }
     }
@@ -205,6 +226,7 @@ app.put('/location', requireAny, async (req, res) => {
       { $set: locationDoc },
       { upsert: true }
     );
+    if (isUser) notifyRangeSync(id, lat, lon);
     res.json({ ok: true });
   } catch (e) {
     console.error('[location PUT]', e);

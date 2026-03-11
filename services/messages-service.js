@@ -16,11 +16,12 @@ const CFG = {
   JWT_SECRET:        process.env.JWT_SECRET,
   LOC_SERVICE_URL:   process.env.LOC_SERVICE_URL,
   TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL,
+  FAV_SERVICE_URL:   process.env.FAV_SERVICE_URL,
 
   MESSAGE_MAX_CHARS: 4096,  // encrypted payload is larger than plaintext
   MESSAGE_TTL_MS:    4 * 60 * 60 * 1000,   // 4 hours
 };
-const _missingCfg = ['JWT_SECRET', 'MONGO_URI', 'LOC_SERVICE_URL', 'TIERS_SERVICE_URL'].filter(k => !CFG[k]);
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI', 'LOC_SERVICE_URL', 'TIERS_SERVICE_URL', 'FAV_SERVICE_URL'].filter(k => !CFG[k]);
 if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
@@ -233,39 +234,73 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
 
     const toUser = await db.collection('users').findOne(
       { _id: toOid },
-      { projection: { _id: 1 } }
+      { projection: { _id: 1, tier: 1 } }
     );
     if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
 
-    // Proximity enforcement — consult tiers-service for the sender's allowed radius.
-    // A radius of -1 means Infinity (no restriction), skipping the check entirely.
-    // Fail closed: if tiers-service is unreachable, refuse the message rather than skip the check.
     const svcAuth = { Authorization: `Bearer ${serviceToken()}`, 'X-Service-Token': serviceToken() };
-    const senderTier = req.auth.tier || 'regular';
-    let radiusM;
+
+    // --- Step 1: mutual favourites check + stored withinRange flag ---
+    // Fail closed: refuse if favourites-service is unreachable.
+    let pairStatus;
     try {
-      const tierRes = await fetch(
-        `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(senderTier)}`,
+      const pairRes = await fetch(
+        `${CFG.FAV_SERVICE_URL}/favourites/pair-status?sender=${encodeURIComponent(fromId)}&recipient=${encodeURIComponent(toId)}`,
         { headers: svcAuth }
       );
-      if (!tierRes.ok) throw new Error(`tiers-service responded ${tierRes.status}`);
-      radiusM = (await tierRes.json()).radiusM;
+      if (!pairRes.ok) throw new Error(`favourites-service responded ${pairRes.status}`);
+      pairStatus = await pairRes.json();
     } catch (err) {
-      console.error('[messages] tiers-service unreachable:', err.message);
-      return res.status(503).json({ error: 'Tier service unavailable. Try again shortly.' });
+      console.error('[messages] favourites-service unreachable:', err.message);
+      return res.status(503).json({ error: 'Service unavailable. Try again shortly.' });
     }
 
-    if (radiusM !== -1) {
-      // Finite radius: both users must be online and within the allowed distance.
-      const [fromLocRes, toLocRes] = await Promise.all([
-        fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(fromId)}`,  { headers: svcAuth }),
-        fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(toId)}`,    { headers: svcAuth }),
-      ]);
-      if (fromLocRes.status !== 200 || toLocRes.status !== 200)
-        return res.status(403).json({ error: 'Both users must be sharing location to message.' });
+    if (!pairStatus.mutual)
+      return res.status(403).json({ error: 'Both users must have each other as favourites to message.' });
+
+    // --- Step 2: sender must be sharing location ---
+    const fromLocRes = await fetch(
+      `${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(fromId)}`,
+      { headers: svcAuth }
+    );
+    if (fromLocRes.status !== 200)
+      return res.status(403).json({ error: 'You must be sharing your location to send messages.' });
+
+    // --- Step 3: proximity check (bidirectional) ---
+    const toLocRes = await fetch(
+      `${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(toId)}`,
+      { headers: svcAuth }
+    );
+
+    if (toLocRes.status === 200) {
+      // Recipient is online — enforce bidirectional range (both must be within each other's radius).
+      const senderTier    = req.auth.tier    || 'regular';
+      const recipientTier = toUser.tier      || 'regular';
+
+      let senderRadiusM, recipientRadiusM;
+      try {
+        const [sRes, rRes] = await Promise.all([
+          fetch(`${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(senderTier)}`,    { headers: svcAuth }),
+          fetch(`${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${encodeURIComponent(recipientTier)}`, { headers: svcAuth }),
+        ]);
+        if (!sRes.ok || !rRes.ok) throw new Error('tiers-service non-ok');
+        ([senderRadiusM, recipientRadiusM] = await Promise.all([sRes.json(), rRes.json()])
+          .then(([s, r]) => [s.radiusM, r.radiusM]));
+      } catch (err) {
+        console.error('[messages] tiers-service unreachable:', err.message);
+        return res.status(503).json({ error: 'Tier service unavailable. Try again shortly.' });
+      }
+
       const [fromLoc, toLoc] = await Promise.all([fromLocRes.json(), toLocRes.json()]);
-      if (haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon) > radiusM)
+      const dist = haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon);
+      const senderOk    = senderRadiusM    === -1 || dist <= senderRadiusM;
+      const recipientOk = recipientRadiusM === -1 || dist <= recipientRadiusM;
+      if (!senderOk || !recipientOk)
         return res.status(403).json({ error: 'You are too far away to message this user.' });
+    } else {
+      // Recipient is offline — fall back to the stored withinRange flag.
+      if (pairStatus.withinRange !== true)
+        return res.status(403).json({ error: 'Recipient is out of range.' });
     }
 
     const now       = new Date();
