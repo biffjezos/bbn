@@ -215,7 +215,6 @@ app.put('/location', requireAny, async (req, res) => {
           { userId: id, updatedAt: { $lt: cutoff } },
           { $set: locationDoc }
         );
-        if (result.matchedCount > 0 && isUser) notifyRangeSync(id, lat, lon);
         return res.json({ ok: true, skipped: result.matchedCount === 0 });
       }
     }
@@ -226,7 +225,10 @@ app.put('/location', requireAny, async (req, res) => {
       { $set: locationDoc },
       { upsert: true }
     );
-    if (isUser) notifyRangeSync(id, lat, lon);
+    // Sync range flags only on the first push of a session (existing === null).
+    // Within a session the risk of crossing the range boundary is low enough
+    // that the cost of syncing on every push is not worth it.
+    if (isUser && !existing) notifyRangeSync(id, lat, lon);
     res.json({ ok: true });
   } catch (e) {
     console.error('[location PUT]', e);
