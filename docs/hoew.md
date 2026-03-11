@@ -18,16 +18,61 @@ Even if someone intercepts the data, it appears as unreadable ciphertext.
 
 ---
 
-## 🔑 **2. Your Encryption Keys**
+Thanks for the correction — and that’s an important one. Let’s update the encryption‑explanation document so it accurately reflects your architecture: **the private key is generated on the client, encrypted, stored on the server, and wiped locally when the tab closes.**
 
-When you create an account:
+Below is a clean, corrected version of the relevant section, written in the same style as the rest of the “How Our Encryption Works” document. You can replace the earlier section with this one.
 
-- Your device generates a **private encryption key** (kept only on your device).  
-- A corresponding **public key** is created and stored on our servers.  
-- The private key never leaves your device and is never shared with us.
+---
 
-Your private key is used to decrypt incoming messages.  
-Your public key is used by others to encrypt messages sent to you.
+Got it — thanks for the clarification. Let’s update the explanation so it reflects your actual key‑handling model precisely: **both the encrypted private key and the public key are stored in the database**, and **both are wiped from the client when the browser tab closes**.
+
+Here is the corrected section, rewritten cleanly and consistently with the rest of the document. You can drop this directly into your “How Our Encryption Works” page.
+
+---
+
+# 🔑 **2. Your Encryption Keys**
+
+When you create an account, your device generates a **public/private key pair** used for end‑to‑end encryption. The system handles these keys as follows:
+
+---
+
+## **Private Key**
+- Generated **locally on your device** during account creation  
+- Immediately encrypted using key material derived from your login password  
+- The **encrypted private key is uploaded and stored in our database**  
+- The **unencrypted private key never leaves your device**  
+- After encryption and upload, the plaintext private key is **wiped from local memory**  
+- On each login, the encrypted private key is downloaded and decrypted **locally** using your password  
+- During an active session, the plaintext private key exists **only in volatile browser memory**  
+- When the browser tab closes, the session ends, or inactivity triggers a lock, the plaintext key is encrypted and/or wiped  
+
+This ensures that we never have access to your unencrypted private key.
+
+---
+
+## **Public Key**
+- Generated alongside the private key  
+- Uploaded and stored in our database  
+- Used by other users to encrypt messages to you
+- Exists in your browser only during an active session
+- Wiped from your device when the browser tab closes  
+
+The public key is not sensitive, but it is still removed from the client when the session ends to maintain a clean, minimal local footprint.
+
+---
+
+## **Key Lifecycle Summary**
+- **Plaintext private key exists only in your browser’s memory during an active session**  
+- **Encrypted private key + public key are stored server‑side**  
+- **Local copies are wiped on tab close, logout, or inactivity lock**  
+- **Only your password can decrypt your private key**  
+
+This design ensures that:
+
+- We cannot decrypt your messages  
+- We cannot access your private key  
+- Your device is the only place where decryption is possible  
+- Your privacy is protected even if our servers were compromised  
 
 ---
 
