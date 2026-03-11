@@ -1,6 +1,6 @@
 # **How Our Encryption Works**
 
-*Last updated: 13 May 2026*
+*Last updated: 11 March 2026*
 
 This document explains, in clear and accessible terms, how encryption and security work within our Service. It is intended for users who want to understand how their data is protected.
 
