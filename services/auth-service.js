@@ -8,14 +8,15 @@
 // ============================================================
 const CFG = {
   PORT:             process.env.PORT       || 8080,
-  MONGO_URI:        process.env.MONGO_URI  || '',
+  MONGO_URI:        process.env.MONGO_URI,
   DB_NAME:          process.env.DB_NAME    || 'boomboom',
   JWT_SECRET:       process.env.JWT_SECRET,
   JWT_EXPIRY_USER:  '7d',
   JWT_EXPIRY_GUEST: '15m',
   GUEST_TTL_SEC:    15 * 60,
 };
-if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI'].filter(k => !CFG[k]);
+if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
 import express         from 'express';

@@ -9,8 +9,8 @@
 // ============================================================
 const CFG = {
   PORT:      process.env.PORT       || 8080,
-  MONGO_URI: process.env.MONGO_URI  || '',
-  DB_NAME:   process.env.DB_NAME    || 'boomboom',
+  MONGO_URI:  process.env.MONGO_URI,
+  DB_NAME:    process.env.DB_NAME    || 'boomboom',
   JWT_SECRET: process.env.JWT_SECRET,
 
   UPDATE_INTERVAL_MS:  15_000,
@@ -21,7 +21,8 @@ const CFG = {
   MAX_VISIBLE_REGISTERED:  Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
 };
-if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI'].filter(k => !CFG[k]);
+if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
 import express                        from 'express';
