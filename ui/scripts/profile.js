@@ -59,6 +59,17 @@ async function renderMyProfile() {
     };
   }
 
+  const dangerBorderColor = current.sex === 'f'
+    ? 'var(--bbm-meet-pill-border)'
+    : current.sex === 'm'
+    ? 'var(--bbm-meet-pill-border-male)'
+    : 'var(--bbm-danger-border)';
+  const dangerLabelColor = current.sex === 'f'
+    ? 'var(--bbm-pink-light)'
+    : current.sex === 'm'
+    ? 'var(--bbm-blue-light)'
+    : 'var(--bbm-danger-text)';
+
   wrap.innerHTML = `
     <div class="bbm-profile-form">
       <div id="profileAlert" class="d-none mb-4"></div>
@@ -93,6 +104,16 @@ async function renderMyProfile() {
           <i class="bi bi-key me-2"></i>Change Password
         </button>
       </div>
+    </div>
+
+    <div class="bbm-profile-form mt-5"
+      style="border:1px solid ${dangerBorderColor};border-radius:var(--bbm-radius,12px);padding:1.25rem">
+      <h6 style="font-size:0.75rem;letter-spacing:0.08em;text-transform:uppercase;
+                 color:${dangerLabelColor};margin-bottom:0.75rem">Danger Zone</h6>
+      <p class="text-muted-bb small mb-3">Permanently deletes your account, messages and favourites.</p>
+      <button class="btn btn-bbm-danger" id="deleteAccountBtn">
+        <i class="bi bi-trash3 me-2"></i>Delete Account
+      </button>
     </div>`;
 
   document.getElementById('saveProfileBtn').addEventListener('click', async () => {
@@ -113,6 +134,14 @@ async function renderMyProfile() {
       alertEl.textContent = err.message;
       alertEl.classList.remove('d-none');
     }
+  });
+
+  document.getElementById('deleteAccountBtn').addEventListener('click', () => {
+    const input = document.getElementById('deleteNicknameInput');
+    if (input) input.value = '';
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    if (confirmBtn) confirmBtn.disabled = true;
+    new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
   });
 
   document.getElementById('changePasswordBtn').addEventListener('click', () => {

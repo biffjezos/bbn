@@ -1,0 +1,109 @@
+/* ============================================================
+   bOOmbOOm.NOW! — Colour Palette & Design Tokens
+   All colour values live here. app.css references only var().
+   ============================================================ */
+
+:root {
+  /* ── Base surfaces ───────────────────────────────────────── */
+  --bbm-black:        #0a0a0f;
+  --bbm-surface:      #12121a;
+  --bbm-surface-2:    #1a1a26;
+  --bbm-surface-3:    #22223a;
+  --bbm-border:       rgba(255,255,255,0.08);
+  --bbm-border-soft:  rgba(255,255,255,0.04);
+
+  /* ── Brand accents ───────────────────────────────────────── */
+  --bbm-pink:         #e8186d;
+  --bbm-pink-light:   #ff4d9e;
+  --bbm-pink-dim:     rgba(232,24,109,0.15);
+  --bbm-blue:         #0eb8e8;
+  --bbm-blue-light:   #4dd4f7;
+  --bbm-blue-dim:     rgba(14,184,232,0.15);
+
+  /* ── Gradients ───────────────────────────────────────────── */
+  --bbm-gradient:      linear-gradient(135deg, var(--bbm-pink) 0%, #a020c8 50%, var(--bbm-blue) 100%);
+  --bbm-gradient-text: linear-gradient(135deg, var(--bbm-pink-light) 0%, #c94cf5 50%, var(--bbm-blue-light) 100%);
+
+  /* ── Text ────────────────────────────────────────────────── */
+  --bbm-text:         #f0f0f8;
+  --bbm-text-muted:   rgba(240,240,248,0.45);
+  --bbm-text-faint:   rgba(240,240,248,0.2);
+
+  /* ── Shadows ─────────────────────────────────────────────── */
+  --shadow-pink:      0 0 24px rgba(232,24,109,0.25);
+  --shadow-blue:      0 0 24px rgba(14,184,232,0.25);
+  --shadow-card:      0 8px 40px rgba(0,0,0,0.6);
+
+  /* ── Danger / Red ────────────────────────────────────────── */
+  --bbm-danger:              #c0392b;
+  --bbm-danger-light:        #e74c3c;
+  --bbm-danger-text:         #ff8a80;
+  --bbm-danger-dim:          rgba(192,57,43,0.15);
+  --bbm-danger-border:       rgba(192,57,43,0.4);
+
+  /* ── Success / Green ─────────────────────────────────────── */
+  --bbm-success-light:        #6fcf97;
+  --bbm-success-dim:          rgba(39,174,96,0.15);
+  --bbm-success-border:       rgba(39,174,96,0.4);
+  --bbm-success-bg:           rgba(39,174,96,0.2);
+  --bbm-success-badge-border: rgba(39,174,96,0.35);
+
+  /* ── Guest / Gold ────────────────────────────────────────── */
+  --bbm-gold-dim:    rgba(255,210,0,0.2);
+  --bbm-gold-border: rgba(255,210,0,0.8);
+
+  /* ── Self-marker backgrounds ─────────────────────────────── */
+  --bbm-blue-self-bg: rgba(14,184,232,0.32);
+  --bbm-pink-self-bg: rgba(232,24,109,0.32);
+
+  /* ── Self-marker glows ───────────────────────────────────── */
+  --shadow-blue-self: 0 0 18px rgba(14,184,232,0.65), 0 0 36px rgba(14,184,232,0.2);
+  --shadow-pink-self: 0 0 18px rgba(232,24,109,0.65), 0 0 36px rgba(232,24,109,0.2);
+  --shadow-gold-self: 0 0 18px rgba(255,210,0,0.5),   0 0 36px rgba(255,210,0,0.15);
+
+  /* ── Donate badge (distinct pink: #ff5a8c) ───────────────── */
+  --bbm-donate-bg:           rgba(255,90,140,0.1);
+  --bbm-donate-border:       rgba(255,90,140,0.25);
+  --bbm-donate-bg-hover:     rgba(255,90,140,0.2);
+  --bbm-donate-border-hover: rgba(255,90,140,0.5);
+
+  /* ── Structural overlays ─────────────────────────────────── */
+  --bbm-white:             #fff;
+  --bbm-marker-border:     rgba(255,255,255,0.12);
+  --bbm-ghost-hover-border:rgba(255,255,255,0.25);
+  --bbm-ghost-hover-bg:    rgba(255,255,255,0.05);
+  --bbm-item-hover-bg:     rgba(255,255,255,0.03);
+  --bbm-scrollbar-hover:   rgba(255,255,255,0.15);
+  --bbm-badge-offline-bg:  rgba(255,255,255,0.06);
+  --bbm-fab-shadow:        0 4px 20px rgba(0,0,0,0.5);
+  --bbm-map-bg:            #0d0d14;
+
+  /* ── Avatar borders ──────────────────────────────────────── */
+  --bbm-blue-avatar-border:    rgba(14,184,232,0.3);
+  --bbm-pink-avatar-border:    rgba(232,24,109,0.3);
+  --bbm-blue-avatar-border-lg: rgba(14,184,232,0.4);
+  --bbm-pink-avatar-border-lg: rgba(232,24,109,0.4);
+
+  /* ── Message bubble borders ──────────────────────────────── */
+  --bbm-outgoing-border: rgba(232,24,109,0.25);
+  --bbm-incoming-border: rgba(14,184,232,0.2);
+
+  /* ── Loading spinner ─────────────────────────────────────── */
+  --bbm-pink-spinner-bg: rgba(232,24,109,0.2);
+
+  /* ── Meeting pill ────────────────────────────────────────── */
+  --bbm-meet-pill-border:      rgba(232,24,109,0.45);
+  --bbm-meet-pill-border-male: rgba(14,184,232,0.45);
+  --bbm-meet-pill-shadow:      0 4px 20px rgba(0,0,0,0.55);
+  --bbm-meet-pink-glow:        rgba(232,24,109,0.12);
+  --bbm-meet-blue-glow:        rgba(14,184,232,0.12);
+
+  /* ── Focus ring ──────────────────────────────────────────── */
+  --bbm-focus-ring: rgba(232,24,109,0.15);
+
+  /* ── Status dot ──────────────────────────────────────────── */
+  --bbm-status-live: #27ae60;
+
+  /* ── Misc ────────────────────────────────────────────────── */
+  --bbm-radius: 12px;
+}
