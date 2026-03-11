@@ -879,19 +879,6 @@ html, body {
 @keyframes bbm-fav-flow {
   to { stroke-dashoffset: -16; }
 }
-.bbm-fav-dist {
-  display: block;
-  color: var(--bbm-fav-dist-color);
-  font-size: 0.58rem;
-  font-weight: 700;
-  white-space: nowrap;
-  text-align: center;
-  transform-origin: center;
-  text-shadow: var(--bbm-fav-dist-shadow);
-  pointer-events: none;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
 
 /* ============================================================
    MEETING MODE PILL (Leaflet control, topright)

@@ -103,10 +103,6 @@
   /* ── Focus ring ──────────────────────────────────────────── */
   --bbm-focus-ring: rgba(232,24,109,0.15);
 
-  /* ── Favourites distance label ───────────────────────────── */
-  --bbm-fav-dist-color:  rgba(255,255,255,0.8);
-  --bbm-fav-dist-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.7);
-
   /* ── Status dot ──────────────────────────────────────────── */
   --bbm-status-live: #27ae60;
 
