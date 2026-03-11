@@ -37,24 +37,38 @@ function toggleMeet(uid, nickname, sex) {
 }
 
 // ── Search query parser ───────────────────────────────────────
-// Supported tokens: age:33  age:<30  age:>20  age:18-25
+// Supported tokens: age:33  age:<30  age:<=30  age:>20  age:>=20  age:18-25
 //                   sex:m/f  online:yes/no  (remaining words = nickname text)
+// Spaces around : and operators are allowed: "age: < 49 sex: f"
 
 function parseSearchQuery(raw) {
   const result = { text: '', ageMin: null, ageMax: null, sex: null, online: null };
   const textParts = [];
 
-  for (const part of raw.trim().split(/\s+/).filter(Boolean)) {
+  // Normalise spaces within filter tokens so "age: < 49" → "age:<49"
+  const normalised = raw
+    .replace(/\b(age|sex|online)\s*:\s*/gi, (_, k) => k.toLowerCase() + ':')
+    .replace(/\bage:([<>]=?)\s*(\d)/g, 'age:$1$2');
+
+  for (const part of normalised.trim().split(/\s+/).filter(Boolean)) {
     const lo = part.toLowerCase();
 
     const rangeM = lo.match(/^age:(\d+)-(\d+)$/);
     if (rangeM) { result.ageMin = parseInt(rangeM[1]); result.ageMax = parseInt(rangeM[2]); continue; }
 
+    // <= and >= (inclusive) — check before < and >
+    const lteM = lo.match(/^age:<=(\d+)$/);
+    if (lteM) { result.ageMax = parseInt(lteM[1]); continue; }
+
+    const gteM = lo.match(/^age:>=(\d+)$/);
+    if (gteM) { result.ageMin = parseInt(gteM[1]); continue; }
+
+    // < and > (exclusive) — adjust by ±1 since ages are integers
     const ltM = lo.match(/^age:<(\d+)$/);
-    if (ltM) { result.ageMax = parseInt(ltM[1]); continue; }
+    if (ltM) { result.ageMax = parseInt(ltM[1]) - 1; continue; }
 
     const gtM = lo.match(/^age:>(\d+)$/);
-    if (gtM) { result.ageMin = parseInt(gtM[1]); continue; }
+    if (gtM) { result.ageMin = parseInt(gtM[1]) + 1; continue; }
 
     const exactM = lo.match(/^age:(\d+)$/);
     if (exactM) { result.ageMin = result.ageMax = parseInt(exactM[1]); continue; }
