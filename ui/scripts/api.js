@@ -8,7 +8,7 @@
 // Set to true to log every request, response, key event, and
 // WebSocket message to the browser console.
 // Must be false in production.
-var DEBUG = false;
+var DEBUG = true;
 // ─────────────────────────────────────────────────────────────
 
 const API_BASE = window.BOOMBOOM_API_URL || 'https://bbn-e86d0c.gitlab.io/api';
