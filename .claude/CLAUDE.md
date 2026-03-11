@@ -9,6 +9,7 @@
 - **Do not change the business model.** No changes to account types, tier definitions, or the features available per tier.
 - **Do not make changes that require backend modifications** such as: running multiple instances of the same service, adding geospatial filtering to the database, switching databases, or adding infrastructure (e.g. Redis) to handle higher load.
 - **Do not read README.md or any other linked markdown files.** Do not open them, do not reference them.
+- **Do not change `var DEBUG` in `ui/scripts/api.js`.** Ever. Not the value, not the name, not the structure. Leave it exactly as-is.
 - **Do not tell me what the project is about.** I already know.
 
 ## Things You Must Do
