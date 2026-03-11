@@ -329,7 +329,7 @@ html, body {
 }
 
 .leaflet-container { background: var(--bbm-map-bg) !important; }
-.leaflet-top { top: 4.5rem !important; }
+.leaflet-top { top: calc(var(--bbm-nav-h) + 0.6rem) !important; }
 
 /* Floating action button — centre on me */
 .bbm-fab {
