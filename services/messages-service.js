@@ -256,16 +256,17 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     }
 
     if (radiusM !== -1) {
-      // Finite radius: both users must be online and within the allowed distance.
+      // Finite radius: enforce distance only when both users have a location.
+      // If either is offline (no location record), allow the message.
       const [fromLocRes, toLocRes] = await Promise.all([
         fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(fromId)}`,  { headers: svcAuth }),
         fetch(`${CFG.LOC_SERVICE_URL}/location/user/${encodeURIComponent(toId)}`,    { headers: svcAuth }),
       ]);
-      if (fromLocRes.status !== 200 || toLocRes.status !== 200)
-        return res.status(403).json({ error: 'Both users must be sharing location to message.' });
-      const [fromLoc, toLoc] = await Promise.all([fromLocRes.json(), toLocRes.json()]);
-      if (haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon) > radiusM)
-        return res.status(403).json({ error: 'You are too far away to message this user.' });
+      if (fromLocRes.status === 200 && toLocRes.status === 200) {
+        const [fromLoc, toLoc] = await Promise.all([fromLocRes.json(), toLocRes.json()]);
+        if (haversineDistance(fromLoc.lat, fromLoc.lon, toLoc.lat, toLoc.lon) > radiusM)
+          return res.status(403).json({ error: 'You are too far away to message this user.' });
+      }
     }
 
     const now       = new Date();
