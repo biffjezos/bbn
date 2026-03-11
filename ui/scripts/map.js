@@ -15,7 +15,7 @@
   let selfCircle      = null;
   let markers         = {};
   let favIds          = new Set();
-  let favLines        = {}; // userId → { polyline, labelMarker }
+  let favLines        = {}; // userId → { polyline }
   let lastNearbyUsers = [];
   let meetControl     = null;
   let lastBearing     = null; // cached so bearing survives setIcon() DOM replacement
@@ -203,8 +203,7 @@
     users.forEach(u => {
       if (!favIds.has(u.userId)) return;
       const up    = [u.lat, u.lon ?? u.lng];
-      const distM = haversineM(sp[0], sp[1], up[0], up[1]);
-      const { pts, mid, angle } = bezierCurve(sp, up);
+      const { pts } = bezierCurve(sp, up);
       const favColor = u.sex === 'f'
         ? 'rgba(232,24,109,0.5)'
         : u.sex === 'm'
@@ -214,17 +213,8 @@
       activeIds.add(u.userId);
 
       if (favLines[u.userId]) {
-        // Update existing line + label
+        // Update existing line
         favLines[u.userId].polyline.setLatLngs(pts);
-        favLines[u.userId].labelMarker.setLatLng(mid);
-        const el = favLines[u.userId].labelMarker.getElement();
-        if (el) {
-          const span = el.querySelector('.bbm-fav-dist');
-          if (span) {
-            span.style.transform = `rotate(${angle}deg)`;
-            span.textContent     = fmtDist(distM);
-          }
-        }
       } else {
         // Create new curved polyline
         const polyline = L.polyline(pts, {
@@ -235,14 +225,7 @@
           interactive: false,
         }).addTo(map);
 
-        const labelIcon = L.divIcon({
-          html:      `<span class="bbm-fav-dist" style="transform:rotate(${angle}deg)">${fmtDist(distM)}</span>`,
-          className: '',
-          iconSize:  [90, 18],
-          iconAnchor:[45, 9],
-        });
-        const labelMarker = L.marker(mid, { icon: labelIcon, interactive: false }).addTo(map);
-        favLines[u.userId] = { polyline, labelMarker };
+        favLines[u.userId] = { polyline };
       }
     });
 
@@ -250,7 +233,6 @@
     Object.keys(favLines).forEach(uid => {
       if (!activeIds.has(uid)) {
         map.removeLayer(favLines[uid].polyline);
-        map.removeLayer(favLines[uid].labelMarker);
         delete favLines[uid];
       }
     });
@@ -340,7 +322,6 @@
     markers = {};
     Object.values(favLines).forEach(fl => {
       map?.removeLayer(fl.polyline);
-      map?.removeLayer(fl.labelMarker);
     });
     favLines = {};
     if (selfMarker) { map?.removeLayer(selfMarker); selfMarker = null; }
@@ -353,7 +334,6 @@
     markers = {};
     Object.values(favLines).forEach(fl => {
       map?.removeLayer(fl.polyline);
-      map?.removeLayer(fl.labelMarker);
     });
     favLines = {};
     if (meetControl) { meetControl.remove(); meetControl = null; }
