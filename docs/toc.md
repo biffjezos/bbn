@@ -143,5 +143,3 @@ For questions regarding these Terms, contact:
 
 **{{Your Company / Operator Name}}**  
 **Email:** {{Contact Email}}**
-
----
