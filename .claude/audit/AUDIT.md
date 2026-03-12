@@ -35,7 +35,7 @@ login({ email, password, guestId }) {
   },
 ```
 
-Why is that? Hash the email address and password right in the client. The app doesn't have any purpose for a plain text eMail address. Find the issuea. Show me the concrete code snippet. If `/services` encrypt or hash data a second time, that's ok. I do not want any unencrypted/unhasshed communication between server and clients (later also encrypt location data). Look into SRP to solve this.
+Why is that? Hash the email address and password right in the client. The app doesn't have any purpose for a plain text eMail address. Find the issuea. Show me the concrete code snippet. If `/services` encrypt or hash data a second time, that's ok. I do not want any unencrypted/unhasshed communication between server and clients (later also encrypt location data). Look into SRP or even better OPAQUE / PAKE to solve this. Include items 6.* before contemplating about this ticket. Could we implement OPAQUE if we would port the auth-service to rust as a test run?
 
 On account creation the eMail should be hashed, just like the password, sent and stored in the db.
 
