@@ -1,19 +1,18 @@
 ---
 layout: default
-title: "BBN RESEARCH | OPAQUE Demo"
+title: "BBN RESEARCH | SRP Demo"
 permalink: /research/opaque
 ---
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>OPAQUE Demo (libsodium + Argon2id)</title>
+<title>OPAQUE Demo (libsodium)</title>
 <style>
     body { background:#111; color:#eee; font-family:system-ui; padding:20px; }
     input, button { padding:6px 10px; margin:4px; background:#222; color:#eee; border:1px solid #444; border-radius:4px; }
     textarea { width:100%; height:160px; background:#181818; color:#eee; border:1px solid #444; border-radius:4px; padding:6px; font-family:monospace; }
     .cols { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    h2 { margin-top:20px; }
 </style>
 </head>
 
@@ -41,21 +40,27 @@ permalink: /research/opaque
 
 <div id="status" style="margin-top:20px; font-size:1.1em; color:#9fd29f;"></div>
 
-<!-- IMPORTANT: libsodium MUST load BEFORE your script -->
+<!-- 1) Load libsodium FIRST -->
 <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers/dist/libsodium-wrappers.min.js"></script>
 
+<!-- 2) Your script AFTER libsodium -->
 <script>
-/* 
-   EVERYTHING happens inside this async function.
-   This guarantees libsodium is fully loaded before use.
-*/
 (async () => {
 
-    // Wait for libsodium WASM to load
+    // Check if libsodium loaded at all
+    if (!window.sodium) {
+        document.getElementById("status").textContent =
+            "ERROR: libsodium failed to load. GitHub Pages may be caching an old version.";
+        console.error("libsodium missing");
+        return;
+    }
+
+    // Wait for WASM
     await sodium.ready;
     const s = sodium;
 
-    // In-memory server DB
+    console.log("libsodium loaded:", s);
+
     const serverDb = { user: null };
 
     function log(id, msg) {
@@ -78,7 +83,7 @@ permalink: /research/opaque
         document.getElementById("clientLog").value = "";
         document.getElementById("serverLog").value = "";
 
-        // 1) Argon2id password key
+        // Argon2id
         const salt = s.randombytes_buf(s.crypto_pwhash_SALTBYTES);
         const pwKey = s.crypto_pwhash(
             32,
@@ -89,10 +94,10 @@ permalink: /research/opaque
             s.crypto_pwhash_ALG_ARGON2ID13
         );
 
-        // 2) Client static keypair
+        // Client static keypair
         const clientKp = s.crypto_kx_keypair();
 
-        // 3) Encrypt private key into envelope
+        // Envelope
         const nonce = s.randombytes_buf(s.crypto_secretbox_NONCEBYTES);
         const envelopeCt = s.crypto_secretbox_easy(
             clientKp.privateKey,
@@ -108,8 +113,9 @@ permalink: /research/opaque
             "envelope.ct: " + s.to_hex(envelopeCt) + "\n"
         );
 
-        // 4) Server stores everything
+        // Server static keypair
         const serverStaticKp = s.crypto_kx_keypair();
+
         serverDb.user = {
             username,
             salt,
@@ -124,7 +130,6 @@ permalink: /research/opaque
             "=== REGISTRATION (SERVER) ===\n" +
             "Stored salt: " + s.to_hex(salt) + "\n" +
             "Stored clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
-            "Stored envelope\n" +
             "serverStaticPub: " + s.to_hex(serverStaticKp.publicKey) + "\n"
         );
 
@@ -147,7 +152,6 @@ permalink: /research/opaque
             return;
         }
 
-        // Server sends envelope + salt + server static pub
         log("serverLog",
             "=== LOGIN (SERVER → CLIENT) ===\n" +
             "salt: " + s.to_hex(u.salt) + "\n" +
@@ -156,7 +160,7 @@ permalink: /research/opaque
             "serverStaticPub: " + s.to_hex(u.serverStaticPub) + "\n"
         );
 
-        // Client derives Argon2id key again
+        // Argon2id again
         const pwKey = s.crypto_pwhash(
             32,
             password,
@@ -166,7 +170,7 @@ permalink: /research/opaque
             s.crypto_pwhash_ALG_ARGON2ID13
         );
 
-        // Client decrypts envelope
+        // Decrypt envelope
         let clientPriv;
         try {
             clientPriv = s.crypto_secretbox_open_easy(
@@ -188,14 +192,13 @@ permalink: /research/opaque
             "clientPub: " + s.to_hex(clientPub) + "\n"
         );
 
-        // Client derives session keys
+        // Session keys
         const clientSession = s.crypto_kx_client_session_keys(
             clientPub,
             clientPriv,
             u.serverStaticPub
         );
 
-        // Server derives session keys
         const serverSession = s.crypto_kx_server_session_keys(
             u.serverStaticPub,
             u.serverStaticSec,
