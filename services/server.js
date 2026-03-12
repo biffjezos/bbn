@@ -41,8 +41,7 @@ const app = express();
 app.set('trust proxy', 1);
 
 const ALLOWED_ORIGINS = [
-  'https://bbn-e86d0c.gitlab.io',
-  'https://biffjezos.github.io',
+  'https://biffjezos.github.io'
 ];
 
 app.use(cors({
