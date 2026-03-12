@@ -4,222 +4,227 @@ title: "BBN RESEARCH | OPAQUE Demo"
 permalink: /research/opaque
 ---
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>OPAQUE-style Demo with Argon2 (libsodium)</title>
-  <style>
-    body { font-family: system-ui, sans-serif; background:#111; color:#eee; padding:20px; }
-    h1 { text-align:center; margin-bottom:10px; }
-    .row { display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
-    input { padding:6px 8px; border-radius:4px; border:1px solid #444; background:#222; color:#eee; }
-    button { padding:6px 10px; border-radius:4px; border:1px solid #666; background:#333; color:#eee; cursor:pointer; }
-    button:disabled { opacity:.4; cursor:default; }
-    textarea { width:100%; height:140px; background:#181818; color:#eee; border:1px solid #444; border-radius:4px; padding:4px; font-family:monospace; font-size:0.8em; }
+<meta charset="UTF-8">
+<title>OPAQUE Demo (libsodium + Argon2id)</title>
+<style>
+    body { background:#111; color:#eee; font-family:system-ui; padding:20px; }
+    input, button { padding:6px 10px; margin:4px; background:#222; color:#eee; border:1px solid #444; border-radius:4px; }
+    textarea { width:100%; height:160px; background:#181818; color:#eee; border:1px solid #444; border-radius:4px; padding:6px; font-family:monospace; }
     .cols { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .title { text-align:center; font-weight:bold; margin-bottom:4px; }
-    .status { margin-top:10px; text-align:center; font-size:0.9em; color:#9fd29f; }
-  </style>
+    h2 { margin-top:20px; }
+</style>
 </head>
-<body>
-<h1>OPAQUE-style Demo with Argon2 (libsodium)</h1>
 
-<div class="row">
-  <input id="username" placeholder="Username" value="alice">
-  <input id="password" placeholder="Password" type="password" value="qwerty123">
-  <button id="registerBtn">Register</button>
-  <button id="loginBtn">Login</button>
+<body>
+
+<h1>OPAQUE-style Demo (libsodium + Argon2id)</h1>
+
+<div>
+    <input id="username" value="alice">
+    <input id="password" type="password" value="qwerty123">
+    <button id="registerBtn">Register</button>
+    <button id="loginBtn">Login</button>
 </div>
 
 <div class="cols">
-  <div>
-    <div class="title">Client</div>
-    <textarea id="clientLog" readonly></textarea>
-  </div>
-  <div>
-    <div class="title">Server</div>
-    <textarea id="serverLog" readonly></textarea>
-  </div>
+    <div>
+        <h2>Client</h2>
+        <textarea id="clientLog" readonly></textarea>
+    </div>
+    <div>
+        <h2>Server</h2>
+        <textarea id="serverLog" readonly></textarea>
+    </div>
 </div>
 
-<div id="status" class="status"></div>
+<div id="status" style="margin-top:20px; font-size:1.1em; color:#9fd29f;"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/libsodium-wrappers.min.js"></script>
+<!-- IMPORTANT: libsodium MUST load BEFORE your script -->
+<script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers/dist/libsodium-wrappers.min.js"></script>
 
 <script>
+/* 
+   EVERYTHING happens inside this async function.
+   This guarantees libsodium is fully loaded before use.
+*/
 (async () => {
-  // Wait for libsodium to finish loading
-  await sodium.ready;
-  const s = sodium;
 
-  // In-memory “server database”
-  const serverDb = { user: null };
+    // Wait for libsodium WASM to load
+    await sodium.ready;
+    const s = sodium;
 
-  // Helper for logging
-  function log(id, msg) {
-    const el = document.getElementById(id);
-    el.value += msg + "\n";
-    el.scrollTop = el.scrollHeight;
-  }
+    // In-memory server DB
+    const serverDb = { user: null };
 
-  function setStatus(msg) {
-    document.getElementById("status").textContent = msg;
-  }
+    function log(id, msg) {
+        const el = document.getElementById(id);
+        el.value += msg + "\n";
+        el.scrollTop = el.scrollHeight;
+    }
 
-  // --------------------------
-  // REGISTRATION
-  // --------------------------
-  document.getElementById("registerBtn").onclick = async () => {
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
+    function setStatus(msg) {
+        document.getElementById("status").textContent = msg;
+    }
 
-    document.getElementById("clientLog").value = "";
-    document.getElementById("serverLog").value = "";
+    // -----------------------------
+    // REGISTRATION
+    // -----------------------------
+    document.getElementById("registerBtn").onclick = async () => {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
 
-    // 1) Client derives Argon2id key
-    const salt = s.randombytes_buf(s.crypto_pwhash_SALTBYTES);
-    const pwKey = s.crypto_pwhash(
-      32,
-      password,
-      salt,
-      s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-      s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-      s.crypto_pwhash_ALG_ARGON2ID13
-    );
+        document.getElementById("clientLog").value = "";
+        document.getElementById("serverLog").value = "";
 
-    // 2) Client generates static keypair
-    const clientKp = s.crypto_kx_keypair();
+        // 1) Argon2id password key
+        const salt = s.randombytes_buf(s.crypto_pwhash_SALTBYTES);
+        const pwKey = s.crypto_pwhash(
+            32,
+            password,
+            salt,
+            s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+            s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+            s.crypto_pwhash_ALG_ARGON2ID13
+        );
 
-    // 3) Client encrypts private key into envelope
-    const nonce = s.randombytes_buf(s.crypto_secretbox_NONCEBYTES);
-    const envelopeCt = s.crypto_secretbox_easy(
-      clientKp.privateKey,
-      nonce,
-      pwKey
-    );
+        // 2) Client static keypair
+        const clientKp = s.crypto_kx_keypair();
 
-    log("clientLog",
-      "=== REGISTRATION (CLIENT) ===\n" +
-      "salt: " + s.to_hex(salt) + "\n" +
-      "clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
-      "envelope.nonce: " + s.to_hex(nonce) + "\n" +
-      "envelope.ct: " + s.to_hex(envelopeCt) + "\n"
-    );
+        // 3) Encrypt private key into envelope
+        const nonce = s.randombytes_buf(s.crypto_secretbox_NONCEBYTES);
+        const envelopeCt = s.crypto_secretbox_easy(
+            clientKp.privateKey,
+            nonce,
+            pwKey
+        );
 
-    // 4) Server stores everything
-    const serverStaticKp = s.crypto_kx_keypair();
-    serverDb.user = {
-      username,
-      salt,
-      envelopeNonce: nonce,
-      envelopeCt,
-      clientPub: clientKp.publicKey,
-      serverStaticPub: serverStaticKp.publicKey,
-      serverStaticSec: serverStaticKp.privateKey
+        log("clientLog",
+            "=== REGISTRATION (CLIENT) ===\n" +
+            "salt: " + s.to_hex(salt) + "\n" +
+            "clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
+            "envelope.nonce: " + s.to_hex(nonce) + "\n" +
+            "envelope.ct: " + s.to_hex(envelopeCt) + "\n"
+        );
+
+        // 4) Server stores everything
+        const serverStaticKp = s.crypto_kx_keypair();
+        serverDb.user = {
+            username,
+            salt,
+            envelopeNonce: nonce,
+            envelopeCt,
+            clientPub: clientKp.publicKey,
+            serverStaticPub: serverStaticKp.publicKey,
+            serverStaticSec: serverStaticKp.privateKey
+        };
+
+        log("serverLog",
+            "=== REGISTRATION (SERVER) ===\n" +
+            "Stored salt: " + s.to_hex(salt) + "\n" +
+            "Stored clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
+            "Stored envelope\n" +
+            "serverStaticPub: " + s.to_hex(serverStaticKp.publicKey) + "\n"
+        );
+
+        setStatus("Registration complete. Now click Login.");
     };
 
-    log("serverLog",
-      "=== REGISTRATION (SERVER) ===\n" +
-      "Stored salt: " + s.to_hex(salt) + "\n" +
-      "Stored clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
-      "Stored envelope\n" +
-      "serverStaticPub: " + s.to_hex(serverStaticKp.publicKey) + "\n"
-    );
+    // -----------------------------
+    // LOGIN
+    // -----------------------------
+    document.getElementById("loginBtn").onclick = async () => {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
 
-    setStatus("Registration complete. Now click Login.");
-  };
+        document.getElementById("clientLog").value = "";
+        document.getElementById("serverLog").value = "";
 
-  // --------------------------
-  // LOGIN
-  // --------------------------
-  document.getElementById("loginBtn").onclick = async () => {
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
+        const u = serverDb.user;
+        if (!u || u.username !== username) {
+            setStatus("User not registered.");
+            return;
+        }
 
-    document.getElementById("clientLog").value = "";
-    document.getElementById("serverLog").value = "";
+        // Server sends envelope + salt + server static pub
+        log("serverLog",
+            "=== LOGIN (SERVER → CLIENT) ===\n" +
+            "salt: " + s.to_hex(u.salt) + "\n" +
+            "envelope.nonce: " + s.to_hex(u.envelopeNonce) + "\n" +
+            "envelope.ct: " + s.to_hex(u.envelopeCt) + "\n" +
+            "serverStaticPub: " + s.to_hex(u.serverStaticPub) + "\n"
+        );
 
-    const u = serverDb.user;
-    if (!u || u.username !== username) {
-      setStatus("User not registered.");
-      return;
-    }
+        // Client derives Argon2id key again
+        const pwKey = s.crypto_pwhash(
+            32,
+            password,
+            u.salt,
+            s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+            s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+            s.crypto_pwhash_ALG_ARGON2ID13
+        );
 
-    // Server sends envelope + salt + server static pub
-    log("serverLog",
-      "=== LOGIN (SERVER → CLIENT) ===\n" +
-      "salt: " + s.to_hex(u.salt) + "\n" +
-      "envelope.nonce: " + s.to_hex(u.envelopeNonce) + "\n" +
-      "envelope.ct: " + s.to_hex(u.envelopeCt) + "\n" +
-      "serverStaticPub: " + s.to_hex(u.serverStaticPub) + "\n"
-    );
+        // Client decrypts envelope
+        let clientPriv;
+        try {
+            clientPriv = s.crypto_secretbox_open_easy(
+                u.envelopeCt,
+                u.envelopeNonce,
+                pwKey
+            );
+        } catch {
+            log("clientLog", "Decryption failed — wrong password.");
+            setStatus("Login failed.");
+            return;
+        }
 
-    // Client derives Argon2id key again
-    const pwKey = s.crypto_pwhash(
-      32,
-      password,
-      u.salt,
-      s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-      s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-      s.crypto_pwhash_ALG_ARGON2ID13
-    );
+        const clientPub = u.clientPub;
 
-    // Client decrypts envelope
-    let clientPriv;
-    try {
-      clientPriv = s.crypto_secretbox_open_easy(
-        u.envelopeCt,
-        u.envelopeNonce,
-        pwKey
-      );
-    } catch {
-      log("clientLog", "Decryption failed — wrong password.");
-      setStatus("Login failed.");
-      return;
-    }
+        log("clientLog",
+            "=== LOGIN (CLIENT) ===\n" +
+            "Decrypted clientPriv: " + s.to_hex(clientPriv) + "\n" +
+            "clientPub: " + s.to_hex(clientPub) + "\n"
+        );
 
-    const clientPub = u.clientPub;
-    log("clientLog",
-      "=== LOGIN (CLIENT) ===\n" +
-      "Decrypted clientPriv: " + s.to_hex(clientPriv) + "\n" +
-      "clientPub: " + s.to_hex(clientPub) + "\n"
-    );
+        // Client derives session keys
+        const clientSession = s.crypto_kx_client_session_keys(
+            clientPub,
+            clientPriv,
+            u.serverStaticPub
+        );
 
-    // Client derives session keys
-    const clientSession = s.crypto_kx_client_session_keys(
-      clientPub,
-      clientPriv,
-      u.serverStaticPub
-    );
+        // Server derives session keys
+        const serverSession = s.crypto_kx_server_session_keys(
+            u.serverStaticPub,
+            u.serverStaticSec,
+            clientPub
+        );
 
-    // Server derives session keys
-    const serverSession = s.crypto_kx_server_session_keys(
-      u.serverStaticPub,
-      u.serverStaticSec,
-      clientPub
-    );
+        log("clientLog",
+            "client rx: " + s.to_hex(clientSession.sharedRx) + "\n" +
+            "client tx: " + s.to_hex(clientSession.sharedTx) + "\n"
+        );
 
-    log("clientLog",
-      "client rx: " + s.to_hex(clientSession.sharedRx) + "\n" +
-      "client tx: " + s.to_hex(clientSession.sharedTx) + "\n"
-    );
+        log("serverLog",
+            "=== LOGIN (SERVER) ===\n" +
+            "server rx: " + s.to_hex(serverSession.sharedRx) + "\n" +
+            "server tx: " + s.to_hex(serverSession.sharedTx) + "\n"
+        );
 
-    log("serverLog",
-      "=== LOGIN (SERVER) ===\n" +
-      "server rx: " + s.to_hex(serverSession.sharedRx) + "\n" +
-      "server tx: " + s.to_hex(serverSession.sharedTx) + "\n"
-    );
+        const ok =
+            s.to_hex(clientSession.sharedRx) === s.to_hex(serverSession.sharedTx) &&
+            s.to_hex(clientSession.sharedTx) === s.to_hex(serverSession.sharedRx);
 
-    const ok =
-      s.to_hex(clientSession.sharedRx) === s.to_hex(serverSession.sharedTx) &&
-      s.to_hex(clientSession.sharedTx) === s.to_hex(serverSession.sharedRx);
+        setStatus(ok
+            ? "OPAQUE-style login successful — session keys match."
+            : "Session key mismatch."
+        );
+    };
 
-    setStatus(ok
-      ? "OPAQUE-style login successful — session keys match."
-      : "Session key mismatch."
-    );
-  };
 })();
 </script>
+
 </body>
 </html>
