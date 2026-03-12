@@ -15,7 +15,7 @@
 
 ### 1.1. Plain password in a POST request
 
-***Note: added by project owner***
+***Note:*** added by project owner (12 March 2026)
 
 ```json
 [API] → POST https://boom.up.railway.app/api/auth/login
@@ -32,36 +32,13 @@ On account creation the eMail should be hashed, just like the password, sent and
 
 The eMail address and password should always be hashed right after it was added into the text field (of the account creation, login-modal).
 
-### 1.2. TTL for inactive users
-
-***Note: added by project owner***
-
-Related to 1.1.
-
-I want to follow a (lost password - lost access)-approach. If a user forgets the password, there should be no way to recover the account, set a new password, being able to login, (and) or delete the acount read existing messages.
-
-Therefore, inactive users should be auto-deleted after 90 days. I prefer a TTL initially set on account creation and updated on each login.
-
-### 1.3. Evaluate stricter data protection feasibilty
-
-***Note: added by project owner***
-
-In the best case, all information stored in the database is either hashed or encrypted. No user related data should be transmitted in any direction unencrypted or unhashed. Services should get their own private / public key pairs with which they can encrypt/decrypt data if necessary. 
-
-Evaluate in which way it's feasible to:
-
-- encrypt geo location data on the client side
-- being transmitted from a client (user) in an encrypted fashion
-- stored only encrypted in the backend (mongodb) 
-- geo location sent out encrypted to all other `/location/nearby..`)
-- decrypted by various clients (users) with different private keys.
-
-
 ---
 
 ## 2. Non-Security Bugs
 
 ### 2.1 `haversineDistance` duplicated across three files
+
+**Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
 **Files:** `services/server.js`, `services/messages-service.js`, `services/location-service.js`
 
@@ -74,6 +51,8 @@ Three independent copy-paste implementations of the same function. If a precisio
 ## 3. Performance
 
 ### 3.1 Send-rate bucket is in-process — not safe for multi-instance gateway
+
+**Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
 **File:** `services/server.js` (in-memory `_wsSendCounts`)
 
@@ -96,6 +75,8 @@ If the gateway scales to multiple instances, two connections from the same user 
 ## 5. Maintainability
 
 ### 5.1 Core utilities duplicated across all services
+
+**Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
 **Files:** All services
 
@@ -122,7 +103,49 @@ The file contains the main app shell, `GeoModule`, and `LockModule` — three co
 
 ---
 
-## 6. Summary Table
+## 6 Other Tickets (new features, evaluations, questions)
+
+### 6.1. TTL for inactive users
+
+***Note:*** added by project owner (12 March 2026)
+
+Related to 1.1.
+
+I want to follow a (lost password - lost access)-approach. If a user forgets the password, there should be no way to recover the account, set a new password, being able to login, (and) or delete the acount read existing messages.
+
+Therefore, inactive users should be auto-deleted after 90 days. I prefer a TTL initially set on account creation and updated on each login.
+
+### 6.2. Evaluate stricter data protection feasibilty
+
+***Note:*** added by project owner (12 March 2026)
+
+In the best case, all information stored in the database is either hashed or encrypted. No user related data should be transmitted in any direction unencrypted or unhashed. Services should get their own private / public key pairs with which they can encrypt/decrypt data if necessary. 
+
+Evaluate in which way it's feasible to:
+
+- encrypt geo location data on the client side
+- being transmitted from a client (user) in an encrypted fashion
+- stored only encrypted in the backend (mongodb) 
+- geo location sent out encrypted to all other `/location/nearby..`)
+- decrypted by various clients (users) with different private keys.
+
+### 6.3 Evaluate a port of all `/services` to rust
+
+***Note:*** added by project owner (12 March 2026)
+
+In the medium-term I want to port the node.js `/services` to rust and have railway pull the project without manual work.
+
+Evaluate the prerequisites, milestones to guarantee a uninterrupted service of the app. 
+
+- Is it necessary to create a new project on github / railway?
+- Can node.js and rust.rs services be included in the same repository
+- Which service is the easiest to port, which utility, and models modules should be ported first?
+- What performance improvement can be expected?
+- and all the other things you know better than I
+
+---
+
+## 7. Summary Table
 
 | Status | # | Area | Severity | Finding |
 |---|---|---|---|---|
