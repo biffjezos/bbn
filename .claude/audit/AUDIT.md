@@ -26,7 +26,7 @@
 }
 ```
 
-Why is that? Is it the plain value added into the login form? The app doesn't have any purpose for a plain text eMail address. Find the issue. Show me the concrete code snippet.
+Why is that? Is it the plain value from the login form? The app doesn't have any purpose for a plain text eMail address. Find the issue. Show me the concrete code snippet.
 
 On account creation the eMail should be hashed, just like the password, sent and stored in the db.
 
