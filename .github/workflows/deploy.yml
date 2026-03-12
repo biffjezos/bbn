@@ -3,7 +3,7 @@ name: Deploy Jekyll to GitHub Pages
 on:
   push:
     branches:
-      - main
+      - dev
       - 'claude/**'
 
 permissions:
