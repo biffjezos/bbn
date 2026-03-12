@@ -13,6 +13,23 @@
 
 ## 1. Security Bugs
 
+### 1.1. Plain password in a POST request
+
+***Note: added by project owner***
+
+```json
+[API] → POST https://boom.up.railway.app/api/auth/login
+{
+    email: ' {plain email address}',
+    password: '{plain password}',
+    guestId: '{guest id}'
+}
+```
+
+Why is that? The app doesn't have any purpose for a plain text eMail address. On account creation the eMail should be hashed, just like the password, sent and stored in the db.
+
+The eMail address and password should always be hashed right after it was added into the text field (of the account creation, login-modal).
+
 ---
 
 ## 2. Non-Security Bugs
