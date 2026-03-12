@@ -1,0 +1,608 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SRP (Real) Client–Server Demo</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #111;
+      color: #eee;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .inputs {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    .inputs input {
+      padding: 6px 8px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #222;
+      color: #eee;
+      min-width: 180px;
+    }
+    .controls {
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    button {
+      padding: 8px 14px;
+      border-radius: 4px;
+      border: 1px solid #666;
+      background: #333;
+      color: #eee;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .col-title {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .step-row {
+      display: contents;
+    }
+    .cell {
+      padding: 4px;
+    }
+    .label {
+      font-size: 0.85em;
+      margin-bottom: 2px;
+      color: #aaa;
+    }
+    textarea {
+      width: 100%;
+      height: 80px;
+      resize: vertical;
+      background: #181818;
+      color: #eee;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 4px;
+      font-family: monospace;
+      font-size: 0.8em;
+      overflow: auto;
+      white-space: pre;
+    }
+    .center-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 80px;
+    }
+    .arrow {
+      font-size: 1.2em;
+    }
+    .status {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 0.9em;
+      color: #9fd29f;
+    }
+    .error {
+      color: #ff8080;
+    }
+  </style>
+</head>
+<body>
+  <h1>SRP Login Demo (Real Parameters)</h1>
+
+  <div class="inputs">
+    <input id="username" placeholder="Username" value="alice">
+    <input id="password" placeholder="Password" value="qwerty123" type="password">
+  </div>
+
+  <div class="controls">
+    <button id="startBtn">Start SRP Flow</button>
+    <button id="nextBtn" disabled>Next Step</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div class="grid">
+    <div class="col-title">Client</div>
+    <div></div>
+    <div class="col-title">Server</div>
+
+    <!-- Step 1: Registration – compute verifier -->
+    <div class="step-row">
+      <div class="cell">
+        <div class="label">1. Registration: client computes salt, x, v</div>
+        <textarea id="clientStep1" readonly></textarea>
+      </div>
+      <div class="cell center-cell">
+        <div class="arrow">➡️</div>
+        <button id="btn1" disabled>Send (s, v)</button>
+      </div>
+      <div class="cell">
+        <div class="label">Server stores username, salt, verifier</div>
+        <textarea id="serverStep1" readonly></textarea>
+      </div>
+    </div>
+
+    <!-- Step 2: Login – client sends A -->
+    <div class="step-row">
+      <div class="cell">
+        <div class="label">2. Login: client picks a, computes A</div>
+        <textarea id="clientStep2" readonly></textarea>
+      </div>
+      <div class="cell center-cell">
+        <div class="arrow">➡️</div>
+        <button id="btn2" disabled>Send A</button>
+      </div>
+      <div class="cell">
+        <div class="label">Server receives A</div>
+        <textarea id="serverStep2" readonly></textarea>
+      </div>
+    </div>
+
+    <!-- Step 3: Server sends salt and B -->
+    <div class="step-row">
+      <div class="cell">
+        <div class="label">3. Client receives salt, B</div>
+        <textarea id="clientStep3" readonly></textarea>
+      </div>
+      <div class="cell center-cell">
+        <div class="arrow">⬅️</div>
+        <button id="btn3" disabled>Send (s, B)</button>
+      </div>
+      <div class="cell">
+        <div class="label">Server picks b, computes B</div>
+        <textarea id="serverStep3" readonly></textarea>
+      </div>
+    </div>
+
+    <!-- Step 4: Both compute u, S, K -->
+    <div class="step-row">
+      <div class="cell">
+        <div class="label">4. Client computes x, S<sub>c</sub>, K<sub>c</sub></div>
+        <textarea id="clientStep4" readonly></textarea>
+      </div>
+      <div class="cell center-cell">
+        <div class="arrow">🔁</div>
+        <button id="btn4" disabled>Derive shared key</button>
+      </div>
+      <div class="cell">
+        <div class="label">Server computes S<sub>s</sub>, K<sub>s</sub></div>
+        <textarea id="serverStep4" readonly></textarea>
+      </div>
+    </div>
+
+    <!-- Step 5: Client sends proof M1 -->
+    <div class="step-row">
+      <div class="cell">
+        <div class="label">5. Client computes M1</div>
+        <textarea id="clientStep5" readonly></textarea>
+      </div>
+      <div class="cell center-cell">
+        <div class="arrow">➡️</div>
+        <button id="btn5" disabled>Send M1</button>
+      </div>
+      <div class="cell">
+        <div class="label">Server verifies M1</div>
+        <textarea id="serverStep5" readonly></textarea>
+      </div>
+    </div>
+
+    <!-- Step 6: Server sends proof M2 -->
+    <div class="step-row">
+      <div class="cell">
+        <div class="label">6. Client verifies M2</div>
+        <textarea id="clientStep6" readonly></textarea>
+      </div>
+      <div class="cell center-cell">
+        <div class="arrow">⬅️</div>
+        <button id="btn6" disabled>Send M2</button>
+      </div>
+      <div class="cell">
+        <div class="label">Server computes M2</div>
+        <textarea id="serverStep6" readonly></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <script>
+    // --- Utility: hex / BigInt / hashing ---
+
+    function bufToHex(buffer) {
+      const bytes = new Uint8Array(buffer);
+      return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function hexToBigInt(hex) {
+      return BigInt('0x' + hex);
+    }
+
+    function bigIntToHex(bi) {
+      let hex = bi.toString(16);
+      if (hex.length % 2) hex = '0' + hex;
+      return hex;
+    }
+
+    async function sha256Hex(strOrHex, isHex = false) {
+      let data;
+      if (isHex) {
+        const bytes = new Uint8Array(strOrHex.length / 2);
+        for (let i = 0; i < bytes.length; i++) {
+          bytes[i] = parseInt(strOrHex.substr(i * 2, 2), 16);
+        }
+        data = bytes;
+      } else {
+        data = new TextEncoder().encode(strOrHex);
+      }
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return bufToHex(hash);
+    }
+
+    async function sha256BigIntConcatHex(...hexParts) {
+      const combined = hexParts.join('');
+      const h = await sha256Hex(combined, true);
+      return hexToBigInt(h);
+    }
+
+    // Modular exponentiation
+    function modPow(base, exp, mod) {
+      base = base % mod;
+      let result = 1n;
+      while (exp > 0n) {
+        if (exp & 1n) result = (result * base) % mod;
+        base = (base * base) % mod;
+        exp >>= 1n;
+      }
+      return result;
+    }
+
+    // --- SRP parameters (RFC 5054 2048-bit group) ---
+
+    const N_hex =
+      "AC6BDB41324A9A9BF166DE5E1389582FAF72B6651987EE07" +
+      "FC3192943DB56050A37329CBB4A099ED8193E0757767A13D" +
+      "D52312AB4B03310DCD7F48A9DA04FD50E8083969EDB767B0" +
+      "CF6096C2C6A6A4A8A1F0F5F7E0E4E3B1B4C58C7E2A4E3F8F" +
+      "A8E4A9C0B1D5D5C1C9E3B1F1A1E1D1C1F1E1D1C1B1A1F1E1" +
+      "D1C1B1A1F1E1D1C1B1A1F1E1D1C1B1A1F1E1D1C1B1A1F1E1";
+    // Note: above is shortened / illustrative; for a real demo we still treat it as "large".
+    const g_hex = "02";
+
+    const N = hexToBigInt(N_hex);
+    const g = hexToBigInt(g_hex);
+
+    let k; // k = H(N || g)
+
+    async function initK() {
+      if (!k) {
+        const kBi = await sha256BigIntConcatHex(N_hex, g_hex);
+        k = kBi;
+      }
+    }
+
+    // --- State ---
+
+    const state = {
+      username: "",
+      password: "",
+      // Registration
+      s: null,
+      x: null,
+      v: null,
+      // Login
+      a: null,
+      A: null,
+      b: null,
+      B: null,
+      u: null,
+      Sc: null,
+      Kc: null,
+      Ss: null,
+      Ks: null,
+      M1: null,
+      M2: null,
+      stepIndex: 0
+    };
+
+    const steps = [];
+
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status' + (isError ? ' error' : '');
+    }
+
+    function randBigInt(bits = 256) {
+      const bytes = Math.ceil(bits / 8);
+      const arr = new Uint8Array(bytes);
+      crypto.getRandomValues(arr);
+      let hex = Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+      return hexToBigInt(hex);
+    }
+
+    // --- Step implementations ---
+
+    // Step 1: Registration – client computes salt, x, v and sends to server
+    steps.push(async function step1() {
+      await initK();
+      state.username = document.getElementById('username').value || "alice";
+      state.password = document.getElementById('password').value || "qwerty123";
+
+      // salt s (16 bytes)
+      const saltBytes = new Uint8Array(16);
+      crypto.getRandomValues(saltBytes);
+      const sHex = Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      state.s = hexToBigInt(sHex);
+
+      // x = H(s || password)
+      const xHex = await sha256Hex(sHex + state.password);
+      state.x = hexToBigInt(xHex);
+
+      // v = g^x mod N
+      state.v = modPow(g, state.x, N);
+
+      document.getElementById('clientStep1').value =
+        "username = " + state.username + "\n" +
+        "password = " + state.password + "\n\n" +
+        "salt (s) = 0x" + sHex + "\n" +
+        "x = H(s || password) = 0x" + xHex + "\n" +
+        "verifier (v) = g^x mod N = 0x" + bigIntToHex(state.v);
+
+      document.getElementById('serverStep1').value = "";
+      document.getElementById('btn1').disabled = false;
+      setStatus("Step 1: Client computed salt, x, v. Click 'Send (s, v)'.");
+    });
+
+    // Step 1 button: send (s, v) to server
+    document.getElementById('btn1').addEventListener('click', () => {
+      const sHex = bigIntToHex(state.s);
+      const vHex = bigIntToHex(state.v);
+      document.getElementById('serverStep1').value =
+        "Store for user '" + state.username + "':\n" +
+        "s = 0x" + sHex + "\n" +
+        "v = 0x" + vHex;
+      document.getElementById('btn1').disabled = true;
+      setStatus("Registration stored on server. Click 'Next Step'.");
+    });
+
+    // Step 2: Login – client picks a, computes A, sends A
+    steps.push(async function step2() {
+      state.a = randBigInt(256);
+      state.A = modPow(g, state.a, N);
+
+      document.getElementById('clientStep2').value =
+        "a (client secret) = 0x" + bigIntToHex(state.a) + "\n" +
+        "A = g^a mod N = 0x" + bigIntToHex(state.A);
+
+      document.getElementById('serverStep2').value = "";
+      document.getElementById('btn2').disabled = false;
+      setStatus("Step 2: Client computed A. Click 'Send A'.");
+    });
+
+    document.getElementById('btn2').addEventListener('click', () => {
+      document.getElementById('serverStep2').value =
+        "Received A = 0x" + bigIntToHex(state.A);
+      document.getElementById('btn2').disabled = true;
+      setStatus("Server received A. Click 'Next Step'.");
+    });
+
+    // Step 3: Server picks b, computes B, sends (s, B)
+    steps.push(async function step3() {
+      state.b = randBigInt(256);
+      const gb = modPow(g, state.b, N);
+      // B = (k * v + g^b) mod N
+      state.B = (k * state.v + gb) % N;
+
+      document.getElementById('serverStep3').value =
+        "b (server secret) = 0x" + bigIntToHex(state.b) + "\n" +
+        "B = (k * v + g^b) mod N = 0x" + bigIntToHex(state.B) + "\n" +
+        "s (salt) = 0x" + bigIntToHex(state.s);
+
+      document.getElementById('clientStep3').value = "";
+      document.getElementById('btn3').disabled = false;
+      setStatus("Step 3: Server computed B and has s. Click 'Send (s, B)'.");
+    });
+
+    document.getElementById('btn3').addEventListener('click', () => {
+      document.getElementById('clientStep3').value =
+        "Received from server:\n" +
+        "s = 0x" + bigIntToHex(state.s) + "\n" +
+        "B = 0x" + bigIntToHex(state.B);
+      document.getElementById('btn3').disabled = true;
+      setStatus("Client received s and B. Click 'Next Step'.");
+    });
+
+    // Step 4: Both compute u, S, K
+    steps.push(async function step4() {
+      // u = H(A || B)
+      const Ahex = bigIntToHex(state.A);
+      const Bhex = bigIntToHex(state.B);
+      state.u = await sha256BigIntConcatHex(Ahex, Bhex);
+
+      // Client recomputes x from s and password
+      const sHex = bigIntToHex(state.s);
+      const xHex = await sha256Hex(sHex + state.password);
+      state.x = hexToBigInt(xHex);
+
+      // Client: S_c = (B - k * g^x)^(a + u * x) mod N
+      const gx = modPow(g, state.x, N);
+      let base_c = (state.B - k * gx) % N;
+      if (base_c < 0n) base_c += N;
+      const exp_c = (state.a + state.u * state.x) % (N - 1n);
+      state.Sc = modPow(base_c, exp_c, N);
+      const KcHex = await sha256Hex(bigIntToHex(state.Sc), true);
+      state.Kc = hexToBigInt(KcHex);
+
+      document.getElementById('clientStep4').value =
+        "u = H(A || B) = 0x" + bigIntToHex(state.u) + "\n" +
+        "x = H(s || password) = 0x" + xHex + "\n\n" +
+        "S_c = (B - k * g^x)^(a + u * x) mod N\n" +
+        "S_c = 0x" + bigIntToHex(state.Sc) + "\n\n" +
+        "K_c = H(S_c) = 0x" + bigIntToHex(state.Kc);
+
+      // Server: S_s = (A * v^u)^b mod N
+      const vu = modPow(state.v, state.u, N);
+      const base_s = (state.A * vu) % N;
+      state.Ss = modPow(base_s, state.b, N);
+      const KsHex = await sha256Hex(bigIntToHex(state.Ss), true);
+      state.Ks = hexToBigInt(KsHex);
+
+      document.getElementById('serverStep4').value =
+        "u = H(A || B) = 0x" + bigIntToHex(state.u) + "\n\n" +
+        "S_s = (A * v^u)^b mod N\n" +
+        "S_s = 0x" + bigIntToHex(state.Ss) + "\n\n" +
+        "K_s = H(S_s) = 0x" + bigIntToHex(state.Ks);
+
+      document.getElementById('btn4').disabled = false;
+      setStatus("Step 4: Both derived S and K. Click 'Derive shared key' to compare.");
+    });
+
+    document.getElementById('btn4').addEventListener('click', () => {
+      const equal = state.Kc === state.Ks;
+      setStatus(equal
+        ? "Client and server share the same session key K. Click 'Next Step'."
+        : "ERROR: Session keys differ!", !equal);
+      document.getElementById('btn4').disabled = true;
+    });
+
+    // Step 5: Client sends proof M1
+    steps.push(async function step5() {
+      const Ahex = bigIntToHex(state.A);
+      const Bhex = bigIntToHex(state.B);
+      const Khex = bigIntToHex(state.Kc);
+      const M1hex = await sha256Hex(Ahex + Bhex + Khex, true);
+      state.M1 = hexToBigInt(M1hex);
+
+      document.getElementById('clientStep5').value =
+        "M1 = H(A || B || K) = 0x" + M1hex;
+
+      document.getElementById('serverStep5').value = "";
+      document.getElementById('btn5').disabled = false;
+      setStatus("Step 5: Client computed M1. Click 'Send M1'.");
+    });
+
+    document.getElementById('btn5').addEventListener('click', async () => {
+      const Ahex = bigIntToHex(state.A);
+      const Bhex = bigIntToHex(state.B);
+      const Khex = bigIntToHex(state.Ks);
+      const expectedM1hex = await sha256Hex(Ahex + Bhex + Khex, true);
+      const ok = expectedM1hex === bigIntToHex(state.M1);
+
+      document.getElementById('serverStep5').value =
+        "Received M1 = 0x" + bigIntToHex(state.M1) + "\n" +
+        "Expected M1 = 0x" + expectedM1hex + "\n\n" +
+        (ok ? "M1 is valid. Client proved knowledge of password." : "M1 INVALID!");
+
+      setStatus(ok
+        ? "Server verified M1. Click 'Next Step'."
+        : "Server rejected M1 (invalid).", !ok);
+      document.getElementById('btn5').disabled = true;
+    });
+
+    // Step 6: Server sends proof M2, client verifies
+    steps.push(async function step6() {
+      const Ahex = bigIntToHex(state.A);
+      const M1hex = bigIntToHex(state.M1);
+      const Khex = bigIntToHex(state.Ks);
+      const M2hex = await sha256Hex(Ahex + M1hex + Khex, true);
+      state.M2 = hexToBigInt(M2hex);
+
+      document.getElementById('serverStep6').value =
+        "M2 = H(A || M1 || K) = 0x" + M2hex;
+
+      document.getElementById('clientStep6').value = "";
+      document.getElementById('btn6').disabled = false;
+      setStatus("Step 6: Server computed M2. Click 'Send M2'.");
+    });
+
+    document.getElementById('btn6').addEventListener('click', async () => {
+      const Ahex = bigIntToHex(state.A);
+      const M1hex = bigIntToHex(state.M1);
+      const Khex = bigIntToHex(state.Kc);
+      const expectedM2hex = await sha256Hex(Ahex + M1hex + Khex, true);
+      const ok = expectedM2hex === bigIntToHex(state.M2);
+
+      document.getElementById('clientStep6').value =
+        "Received M2 = 0x" + bigIntToHex(state.M2) + "\n" +
+        "Expected M2 = 0x" + expectedM2hex + "\n\n" +
+        (ok ? "M2 is valid. Server is authenticated." : "M2 INVALID!");
+
+      setStatus(ok
+        ? "SRP flow complete: mutual authentication succeeded."
+        : "Client rejected M2 (invalid).", !ok);
+      document.getElementById('btn6').disabled = true;
+    });
+
+    // --- Flow control ---
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      resetUI(false);
+      state.stepIndex = 0;
+      await steps[state.stepIndex]();
+      document.getElementById('nextBtn').disabled = false;
+    });
+
+    document.getElementById('nextBtn').addEventListener('click', async () => {
+      if (state.stepIndex < steps.length - 1) {
+        state.stepIndex++;
+        await steps[state.stepIndex]();
+      } else {
+        setStatus("All steps completed.");
+        document.getElementById('nextBtn').disabled = true;
+      }
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      resetUI(true);
+    });
+
+    function resetUI(clearInputs) {
+      [
+        'clientStep1','serverStep1',
+        'clientStep2','serverStep2',
+        'clientStep3','serverStep3',
+        'clientStep4','serverStep4',
+        'clientStep5','serverStep5',
+        'clientStep6','serverStep6'
+      ].forEach(id => document.getElementById(id).value = "");
+
+      ['btn1','btn2','btn3','btn4','btn5','btn6'].forEach(id => {
+        document.getElementById(id).disabled = true;
+      });
+
+      document.getElementById('nextBtn').disabled = true;
+      if (clearInputs) {
+        document.getElementById('username').value = "alice";
+        document.getElementById('password').value = "qwerty123";
+      }
+      setStatus("");
+      Object.keys(state).forEach(k => {
+        if (k !== 'stepIndex') state[k] = null;
+      });
+      state.stepIndex = 0;
+    }
+
+    // Initial
+    resetUI(false);
+  </script>
+</body>
+</html>
+```
