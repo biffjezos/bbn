@@ -38,7 +38,7 @@ The eMail address and password should always be hashed right after it was added 
 
 ### 2.1 `haversineDistance` duplicated across three files
 
-**Postponed by project owner (12 March 2026):*** Postponed until further notice.
+***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
 **Files:** `services/server.js`, `services/messages-service.js`, `services/location-service.js`
 
