@@ -52,7 +52,7 @@ Three independent copy-paste implementations of the same function. If a precisio
 
 ### 3.1 Send-rate bucket is in-process — not safe for multi-instance gateway
 
-**Postponed by project owner (12 March 2026):*** Postponed until further notice.
+***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
 **File:** `services/server.js` (in-memory `_wsSendCounts`)
 
@@ -76,7 +76,7 @@ If the gateway scales to multiple instances, two connections from the same user 
 
 ### 5.1 Core utilities duplicated across all services
 
-**Postponed by project owner (12 March 2026):*** Postponed until further notice.
+***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
 **Files:** All services
 
