@@ -45,52 +45,54 @@ permalink: /research/opaque
 <div id="status" class="status"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/libsodium-wrappers.min.js"></script>
+
 <script>
-  let sodiumReady = (async () => {
-    await sodium.ready;
-    return sodium;
-  })();
+(async () => {
+  // Wait for libsodium to finish loading
+  await sodium.ready;
+  const s = sodium;
 
-  // “Server-side” in-memory storage
-  const serverDb = {
-    user: null // { username, salt, envelopeNonce, envelopeCt, clientPub, serverStaticPub, serverStaticSec }
-  };
+  // In-memory “server database”
+  const serverDb = { user: null };
 
-  function log(elId, msg) {
-    const el = document.getElementById(elId);
+  // Helper for logging
+  function log(id, msg) {
+    const el = document.getElementById(id);
     el.value += msg + "\n";
     el.scrollTop = el.scrollHeight;
   }
 
   function setStatus(msg) {
-    document.getElementById('status').textContent = msg;
+    document.getElementById("status").textContent = msg;
   }
 
-  document.getElementById('registerBtn').addEventListener('click', async () => {
-    const sodium = await sodiumReady;
-    const username = document.getElementById('username').value || "alice";
-    const password = document.getElementById('password').value || "qwerty123";
+  // --------------------------
+  // REGISTRATION
+  // --------------------------
+  document.getElementById("registerBtn").onclick = async () => {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
 
-    document.getElementById('clientLog').value = "";
-    document.getElementById('serverLog').value = "";
+    document.getElementById("clientLog").value = "";
+    document.getElementById("serverLog").value = "";
 
-    // 1) Client: derive password key using Argon2id (crypto_pwhash)
-    const salt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
-    const pwKey = sodium.crypto_pwhash(
+    // 1) Client derives Argon2id key
+    const salt = s.randombytes_buf(s.crypto_pwhash_SALTBYTES);
+    const pwKey = s.crypto_pwhash(
       32,
       password,
       salt,
-      sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_ALG_ARGON2ID13
+      s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+      s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+      s.crypto_pwhash_ALG_ARGON2ID13
     );
 
-    // 2) Client: generate static keypair for AKE
-    const clientKp = sodium.crypto_kx_keypair();
+    // 2) Client generates static keypair
+    const clientKp = s.crypto_kx_keypair();
 
-    // 3) Client: encrypt private key into envelope using secretbox
-    const nonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES);
-    const envelopeCt = sodium.crypto_secretbox_easy(
+    // 3) Client encrypts private key into envelope
+    const nonce = s.randombytes_buf(s.crypto_secretbox_NONCEBYTES);
+    const envelopeCt = s.crypto_secretbox_easy(
       clientKp.privateKey,
       nonce,
       pwKey
@@ -98,15 +100,14 @@ permalink: /research/opaque
 
     log("clientLog",
       "=== REGISTRATION (CLIENT) ===\n" +
-      "username: " + username + "\n" +
-      "salt: " + sodium.to_hex(salt) + "\n" +
-      "clientPub: " + sodium.to_hex(clientKp.publicKey) + "\n" +
-      "envelope.nonce: " + sodium.to_hex(nonce) + "\n" +
-      "envelope.ct: " + sodium.to_hex(envelopeCt) + "\n"
+      "salt: " + s.to_hex(salt) + "\n" +
+      "clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
+      "envelope.nonce: " + s.to_hex(nonce) + "\n" +
+      "envelope.ct: " + s.to_hex(envelopeCt) + "\n"
     );
 
-    // 4) Server: store salt, envelope, client public key, and a static server keypair
-    const serverStaticKp = sodium.crypto_kx_keypair();
+    // 4) Server stores everything
+    const serverStaticKp = s.crypto_kx_keypair();
     serverDb.user = {
       username,
       salt,
@@ -119,110 +120,106 @@ permalink: /research/opaque
 
     log("serverLog",
       "=== REGISTRATION (SERVER) ===\n" +
-      "Stored for user '" + username + "':\n" +
-      "salt: " + sodium.to_hex(salt) + "\n" +
-      "clientPub: " + sodium.to_hex(clientKp.publicKey) + "\n" +
-      "envelope.nonce: " + sodium.to_hex(nonce) + "\n" +
-      "envelope.ct: " + sodium.to_hex(envelopeCt) + "\n" +
-      "serverStaticPub: " + sodium.to_hex(serverStaticKp.publicKey) + "\n"
+      "Stored salt: " + s.to_hex(salt) + "\n" +
+      "Stored clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
+      "Stored envelope\n" +
+      "serverStaticPub: " + s.to_hex(serverStaticKp.publicKey) + "\n"
     );
 
-    setStatus("Registration complete. Now click 'Login'.");
-  });
+    setStatus("Registration complete. Now click Login.");
+  };
 
-  document.getElementById('loginBtn').addEventListener('click', async () => {
-    const sodium = await sodiumReady;
-    const username = document.getElementById('username').value || "alice";
-    const password = document.getElementById('password').value || "qwerty123";
+  // --------------------------
+  // LOGIN
+  // --------------------------
+  document.getElementById("loginBtn").onclick = async () => {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
 
-    document.getElementById('clientLog').value = "";
-    document.getElementById('serverLog').value = "";
+    document.getElementById("clientLog").value = "";
+    document.getElementById("serverLog").value = "";
 
-    if (!serverDb.user || serverDb.user.username !== username) {
-      setStatus("No registered user '" + username + "' on server.");
+    const u = serverDb.user;
+    if (!u || u.username !== username) {
+      setStatus("User not registered.");
       return;
     }
 
-    const u = serverDb.user;
-
-    // === LOGIN PHASE ===
-
-    // 1) Client “requests login”; server responds with salt, envelope, server static pub
+    // Server sends envelope + salt + server static pub
     log("serverLog",
       "=== LOGIN (SERVER → CLIENT) ===\n" +
-      "Sending to client:\n" +
-      "salt: " + sodium.to_hex(u.salt) + "\n" +
-      "envelope.nonce: " + sodium.to_hex(u.envelopeNonce) + "\n" +
-      "envelope.ct: " + sodium.to_hex(u.envelopeCt) + "\n" +
-      "serverStaticPub: " + sodium.to_hex(u.serverStaticPub) + "\n"
+      "salt: " + s.to_hex(u.salt) + "\n" +
+      "envelope.nonce: " + s.to_hex(u.envelopeNonce) + "\n" +
+      "envelope.ct: " + s.to_hex(u.envelopeCt) + "\n" +
+      "serverStaticPub: " + s.to_hex(u.serverStaticPub) + "\n"
     );
 
-    // 2) Client: derive pwKey again with Argon2id and decrypt envelope
-    const pwKey = sodium.crypto_pwhash(
+    // Client derives Argon2id key again
+    const pwKey = s.crypto_pwhash(
       32,
       password,
       u.salt,
-      sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_ALG_ARGON2ID13
+      s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+      s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+      s.crypto_pwhash_ALG_ARGON2ID13
     );
 
+    // Client decrypts envelope
     let clientPriv;
     try {
-      clientPriv = sodium.crypto_secretbox_open_easy(
+      clientPriv = s.crypto_secretbox_open_easy(
         u.envelopeCt,
         u.envelopeNonce,
         pwKey
       );
-    } catch (e) {
-      log("clientLog", "=== LOGIN (CLIENT) ===\nDecryption failed. Wrong password?");
-      setStatus("Login failed: wrong password.");
+    } catch {
+      log("clientLog", "Decryption failed — wrong password.");
+      setStatus("Login failed.");
       return;
     }
 
-    // Reconstruct client keypair
     const clientPub = u.clientPub;
-    const clientKp = { publicKey: clientPub, privateKey: clientPriv };
-
     log("clientLog",
       "=== LOGIN (CLIENT) ===\n" +
-      "Derived pwKey with Argon2id.\n" +
-      "Decrypted clientPriv: " + sodium.to_hex(clientPriv) + "\n" +
-      "clientPub: " + sodium.to_hex(clientPub) + "\n"
+      "Decrypted clientPriv: " + s.to_hex(clientPriv) + "\n" +
+      "clientPub: " + s.to_hex(clientPub) + "\n"
     );
 
-    // 3) Both sides derive shared session keys using crypto_kx
-    const clientSession = sodium.crypto_kx_client_session_keys(
-      clientKp.publicKey,
-      clientKp.privateKey,
+    // Client derives session keys
+    const clientSession = s.crypto_kx_client_session_keys(
+      clientPub,
+      clientPriv,
       u.serverStaticPub
     );
-    const serverSession = sodium.crypto_kx_server_session_keys(
+
+    // Server derives session keys
+    const serverSession = s.crypto_kx_server_session_keys(
       u.serverStaticPub,
       u.serverStaticSec,
-      u.clientPub
+      clientPub
     );
 
     log("clientLog",
-      "client rx: " + sodium.to_hex(clientSession.sharedRx) + "\n" +
-      "client tx: " + sodium.to_hex(clientSession.sharedTx) + "\n"
+      "client rx: " + s.to_hex(clientSession.sharedRx) + "\n" +
+      "client tx: " + s.to_hex(clientSession.sharedTx) + "\n"
     );
+
     log("serverLog",
       "=== LOGIN (SERVER) ===\n" +
-      "server rx: " + sodium.to_hex(serverSession.sharedRx) + "\n" +
-      "server tx: " + sodium.to_hex(serverSession.sharedTx) + "\n"
+      "server rx: " + s.to_hex(serverSession.sharedRx) + "\n" +
+      "server tx: " + s.to_hex(serverSession.sharedTx) + "\n"
     );
 
     const ok =
-      sodium.to_hex(clientSession.sharedRx) === sodium.to_hex(serverSession.sharedTx) &&
-      sodium.to_hex(clientSession.sharedTx) === sodium.to_hex(serverSession.sharedRx);
+      s.to_hex(clientSession.sharedRx) === s.to_hex(serverSession.sharedTx) &&
+      s.to_hex(clientSession.sharedTx) === s.to_hex(serverSession.sharedRx);
 
-    setStatus(
-      ok
-        ? "OPAQUE-style flow complete: client and server share matching session keys."
-        : "Session keys mismatch (something went wrong)."
+    setStatus(ok
+      ? "OPAQUE-style login successful — session keys match."
+      : "Session key mismatch."
     );
-  });
+  };
+})();
 </script>
 </body>
 </html>
