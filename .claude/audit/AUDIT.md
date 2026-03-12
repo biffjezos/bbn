@@ -26,9 +26,36 @@
 }
 ```
 
-Why is that? The app doesn't have any purpose for a plain text eMail address. On account creation the eMail should be hashed, just like the password, sent and stored in the db.
+Why is that? Is it the plain value added into the login form? The app doesn't have any purpose for a plain text eMail address. Find the issue. Show me the concrete code snippet.
+
+On account creation the eMail should be hashed, just like the password, sent and stored in the db.
 
 The eMail address and password should always be hashed right after it was added into the text field (of the account creation, login-modal).
+
+### 1.2. TTL for inactive users
+
+***Note: added by project owner***
+
+Related to 1.1.
+
+I want to follow a (lost password - lost access)-approach. If a user forgets the password, there should be no way to recover the account, set a new password, being able to login, (and) or delete the acount read existing messages.
+
+Therefore, inactive users should be auto-deleted after 90 days. I prefer a TTL initially set on account creation and updated on each login.
+
+### 1.3. Evaluate stricter data protection feasibilty
+
+***Note: added by project owner***
+
+In the best case, all information stored in the database is either hashed or encrypted. No user related data should be transmitted in any direction unencrypted or unhashed. Services should get their own private / public key pairs with which they can encrypt/decrypt data if necessary. 
+
+Evaluate in which way it's feasible to:
+
+- encrypt geo location data on the client side
+- being transmitted from a client (user) in an encrypted fashion
+- stored only encrypted in the backend (mongodb) 
+- geo location sent out encrypted to all other `/location/nearby..`)
+- decrypted by various clients (users) with different private keys.
+
 
 ---
 
