@@ -18,6 +18,7 @@ The current financial expenditure amounts to 26,42€ per month.
 
 - 21,42€ Claude Code as Developer
 -  5,00€ railway.com to run the micro-services and the persistence layer (current: mongodb -> redis + mongodb)
+- ??.??€ Building efforts by a real human
 
 You can donate by:
 
@@ -26,3 +27,9 @@ You can donate by:
 - revolut 
 
 Visit [https://biffjezos.github.io/bbn/donate/](https://biffjezos.github.io/bbn/donate/), add the amount you wish to donate enter a note if you want to be named as donor.
+
+### Future Plans
+
+- Port from node.js to rust
+- Adding a redis db for the location- and the instant messaging service.
+- Improving user expiernce by developing a more robust, privacy-by-design architecture and more fun features.
