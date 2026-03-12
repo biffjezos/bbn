@@ -35,7 +35,7 @@ login({ email, password, guestId }) {
   },
 ```
 
-Why is that? Hash the email address and password right in the client. The app doesn't have any purpose for a plain text eMail address. Find the issuea. Show me the concrete code snippet. If `/services` encrypt or hash data a second time, that's ok. I do not want any unencrypted/unhasshed communication between server and clients (later also encrypt location data).
+Why is that? Hash the email address and password right in the client. The app doesn't have any purpose for a plain text eMail address. Find the issuea. Show me the concrete code snippet. If `/services` encrypt or hash data a second time, that's ok. I do not want any unencrypted/unhasshed communication between server and clients (later also encrypt location data). Look into SRP to solve this.
 
 On account creation the eMail should be hashed, just like the password, sent and stored in the db.
 
