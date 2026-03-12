@@ -24,6 +24,8 @@ collections:
 
 # Exclude from build
 exclude:
+  - docs
+  - .claude
   - README.md
   - "*.sh"
   - node_modules/
