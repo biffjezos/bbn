@@ -1,7 +1,7 @@
 title:       "bOOmbOOm.NOW!"
 description: "Find who's nearby. Message in the moment."
-baseurl:     ""
-url:         "https://boom.up.railway.app"
+baseurl:     "https://biffjezos.github.io/bbn"
+url:         "https://biffjezos.github.io/bbn"
 
 # Backend API base URL (used in default.html layout)
 api_url: "https://boom.up.railway.app/api"
