@@ -2,7 +2,7 @@
 
 ## On Session Start
 
-- Create a new branch and pull from the main branch. Do not read the codebase on session start.
+- Create a new branch and pull from the default `dev`-branch. Do not read the codebase on session start.
 - Read `.claude/audit/AUDIT.md` first. Do not start reading the entire codebase. Greet me, present the last audit, and ask me what to do.
 
 ## Things You Must Never Do
