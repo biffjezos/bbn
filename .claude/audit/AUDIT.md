@@ -143,6 +143,12 @@ Evaluate the prerequisites, milestones to guarantee a uninterrupted service of t
 - What performance improvement can be expected?
 - and all the other things you know better than I
 
+### 6.4 Question: Is there a secure way to proof that the service running is running the code in the public repo
+
+***Note:*** added by project onwer (12 March 2026)
+
+I want to give users a way to validate the code that runs the services, by matching a signature of the binary or in another way. Please elaborate on the feasible options.
+
 ---
 
 ## 7. Summary Table
