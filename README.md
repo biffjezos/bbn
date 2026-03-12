@@ -4,7 +4,7 @@ The greatest privacy-by-design location-based instant messaging and dating app i
 
 ## The Project
 
-The project was hosted on [gitlab.com](https://gitlab.com/aspera-non-spernit/bbn) and moved to github due to better intergration with Claude Code.
+The project was hosted and developed on [gitlab.com](https://gitlab.com/aspera-non-spernit/bbn) from 27 February 2026 to 8 March 2026, but moved to github due to better intergration with Claude Code.
 
 ## Live Demo
 
