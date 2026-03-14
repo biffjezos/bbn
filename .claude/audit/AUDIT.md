@@ -162,6 +162,18 @@ Evaluate the prerequisites, milestones to guarantee a uninterrupted service of t
 
 I want to give users a way to validate the code that runs the services, by matching a signature of the binary or in another way. Please elaborate on the feasible options.
 
+### 6.5 Simple admin ui
+
+***Note:*** added by project onwer (14 March 2026)
+
+I need a admin ui, in which i can as a developer change the current profile information (including current tier) of a specific user. It should look similar to the /profile page with the search bar. I would be able to search for a user using the same filters, then a click on a user entry expands the profile information. If I change the tier make sure that this change is effectively working (token generation etc) and not just changing the tier string in the db of the user.
+
+### 6.6 Admin UI > Adding, changing, removing tiers
+
+***Note:*** added by project onwer (14 March 2026)
+
+The admin ui should be able to add, edit, change, remove tiers. Therefore, I think it's also necessary to store the tier information in the db, rather than in a js. Please prepare a concrete plan for the implementation, estimate how difficult the implementation is.
+
 ---
 
 ## 7. Summary Table
