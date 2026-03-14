@@ -55,6 +55,10 @@ Three independent copy-paste implementations of the same function. If a precisio
 
 **Context:** A shared internal library is not currently possible (no private package registry, no monorepo tooling). Each service is intentionally self-contained. Consolidation is deferred until the infrastructure to support a shared lib is in place. MongoDB geospatial indexes are also unavailable (free tier RAM limits + migration 002 failure), so haversine-in-JS is the correct approach for distance filtering regardless.
 
+### 2.2 tier badge in /profile with hard coded values
+
+I changed the see_nearby values and added a fourth tier `developer` but the information of the tier-badge seems to be hard coded. We have to improve the tier system, so it also stores standard information per tier. Maybe adding a GET /tier/{regular}/info which would return standard phrases or values, which the ui could render as:
+See radius: x meters
 ---
 
 ## 3. Performance
