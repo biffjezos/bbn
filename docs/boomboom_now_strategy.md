@@ -1,210 +1,286 @@
-# bOOmbOOm.NOW! – Strategy & Development Document
 
-**Document owner:** AI co‑founder  
-**Founder:** User  
+# bOOmbOOm.NOW! – Living Strategy & Development Document
+
+**Document owner:** AI co‑founder / strategy agent  
+**Founder:** Dan  
 **Created:** 2026-03-14  
+**Document type:** Living document (strategy + task system + discussion log)
 
 ---
 
-## 0. Origin of This Document
+# 0. Origin of This Document
 
-User request:
+This document was created based on the founder request:
 
-> “Create a single document I can download (preferably Markdown). Include everything we discussed so far. Make sections where I can add notes or provide information. Include checklists and items I can mark as done, similar to a ticket system. You manage the document, request information from me, and tell me what to do next.”
+> Create a single downloadable document (Markdown) that contains the strategy, decisions, tasks, and open questions for the project. The document should allow the founder and AI agents to collaborate, add notes, check off tasks, and understand the reasoning behind every decision.
 
-This document is designed to evolve continuously.
+This document therefore serves several purposes simultaneously:
+
+1. Project strategy
+2. Technical planning
+3. Decision log
+4. Task / ticket system
+5. Discussion area for alternative approaches
+
+Every strategic recommendation includes a **rationale** explaining *why the suggestion exists* so future contributors can challenge or improve decisions.
 
 ---
 
 # 1. Project Overview
 
-**Product name:** bOOmbOOm.NOW!
+## Product name
 
-**Concept:**  
-Privacy‑first, proximity‑based instant messaging and meeting app.  
-Users can see and interact with people **physically nearby in real time**.
+**bOOmbOOm.NOW!**
 
-**Key characteristics**
+## Concept
 
-- Hyper‑local discovery (hundreds of meters to a few km)
-- Ephemeral communication
-- Strong privacy defaults
-- Real‑time interaction
-- Web application (currently)
+A **privacy‑first, proximity‑based instant messaging and meeting platform**.
 
----
+Users can see and communicate with **other users who are physically nearby in real time**.
 
-# 2. Core Product Principles
+Typical discovery radius:
 
-### Privacy by design
+- a few hundred meters
+- up to several kilometers depending on tier
 
-Implemented:
+Example use cases:
 
-- End‑to‑end encrypted messages
-- Messages auto delete after 4 hours
-- No phone verification required
-- No email verification required
-- Location history limited to last/current location
-- Location deleted after 15 minutes inactivity
-
-### Identity
-
-- Non‑verified email identifier
-- Optional profile creation
+- meeting people in nightlife districts
+- meeting travelers
+- spontaneous dates
+- meeting people at festivals
+- meeting people at conferences
+- social interaction in dense urban areas
 
 ---
 
-# 3. Current Feature Set
+# 2. Core Product Philosophy
 
-## User Discovery
+## Real‑time proximity
 
-- Nearby users visible
-- Radius configurable by tier
+Users interact with **people who are physically nearby right now**.
+
+### Rationale
+
+Most social platforms connect people across distance and time.  
+This app instead answers the question:
+
+> “Who near me right now wants to interact?”
+
+The product only becomes valuable when **multiple users exist within the same physical area simultaneously**.
+
+Therefore density is the central design constraint.
+
+---
+
+## Ephemeral interaction
+
+Messages disappear after **4 hours**.
+
+Location history is not stored long‑term.
+
+### Rationale
+
+Ephemeral systems reduce:
+
+- privacy risk
+- legal liability
+- long‑term database storage
+
+They also encourage spontaneous behavior because users know interactions are temporary.
+
+---
+
+## Minimal identity
+
+Users are mostly anonymous.
+
+Current identity system:
+
+- non‑verified email identifier
+- optional profile
+
+### Rationale
+
+Low friction onboarding is critical for spontaneous environments such as nightlife or events.
+
+However anonymity increases abuse risk, so moderation tools must exist.
+
+---
+
+# 3. Current Technical Architecture
+
+## Application type
+
+Web application accessible via browsers.
+
+Potential issues:
+
+- Safari compatibility due to shared worker thread support.
+
+---
+
+## Backend
+
+Architecture:
+
+- HTTP gateway server
+- internal microservices
+- WebSocket communication
+- MongoDB database
+
+---
+
+## Hosting
+
+Current infrastructure:
+
+- 1 GB RAM VPS
+- several internal microservices
+- MongoDB
+
+Cost:
+
+~$5 per month.
+
+Estimated capacity:
+
+~50 concurrent users.
+
+### Rationale
+
+Infrastructure should remain extremely cheap during early development.
+
+Scaling before real users exist would waste resources.
+
+---
+
+# 4. Current Feature Set
+
+## Discovery
+
+Users can see nearby users.
+
+Discovery radius configurable via tier system.
+
+---
 
 ## Messaging
 
-- Real‑time messaging
-- Mutual “like” required
-- Unliking stops messaging
-- Messages auto delete after 4 hours
+Messaging requires **mutual likes**.
 
-## Location
+If either user unlikes, messaging stops.
 
-- Real‑time location updates
-- No long‑term storage
+### Rationale
 
-## Infrastructure
-
-- Microservice architecture
-- Web application
-- HTTPS + WebSocket communication
-- MongoDB
-
-### Hosting
-
-- 1 GB RAM server
-- Approx cost: $5/month
-- Estimated capacity: ~50 concurrent users
+Mutual likes act as a built‑in spam filter and prevent unsolicited messages.
 
 ---
 
-# 4. Missing Critical Features
+## Message lifecycle
 
-These should be implemented before public launch.
+Messages auto‑delete after **4 hours**.
 
-## Safety
+### Rationale
 
-- [ ] Block user
-Notes:
-
--
+Supports privacy positioning and keeps infrastructure lightweight.
 
 ---
 
-- [ ] Report user
-Notes:
+## Location storage
 
--
+Only most recent location stored.
 
----
+Deleted after **15 minutes of inactivity**.
 
-## Anti‑abuse
+### Rationale
 
-- [ ] Message rate limiting
-Notes:
-
--
+Minimizes risk of location tracking abuse.
 
 ---
 
-- [ ] Spam detection basic rules
-Notes:
+# 5. Safety Features Required
 
--
+## Block feature
 
----
+Task
 
-## UX improvements
+- [ ] Implement block system
 
-- [ ] Push notifications
-Notes:
+### Rationale
 
--
+Even though messaging requires mutual likes, blocking is still required.
 
----
+Reasons:
 
-- [ ] Online indicator
-Notes:
-
--
+1. Users may not want specific people to see their location on the map.
+2. Prevent repeated re‑matching attempts.
+3. Prepare for future features like group chats.
 
 ---
 
-- [ ] Temporary group chats
-Notes:
+## Report feature
 
--
+Task
 
----
+- [ ] Implement report system
 
-# 5. Market Positioning
+### Rationale
 
-Positioning recommendation:
+Allows the system to detect harassment, spam bots, or abusive behavior.
 
-**“Meet people right now within 500 meters.”**
-
-Not primarily a dating app.  
-Instead:
-
-**Real‑time proximity social radar.**
-
-Use cases:
-
-- nightlife
-- bars
-- festivals
-- campuses
-- conferences
-- travelers
+Even without moderators, reports can inform automated responses.
 
 ---
 
-# 6. Cold‑Start Strategy
+## Rate limiting
 
-Biggest risk: **empty map problem**.
+Task
 
-Users opening the app and seeing nobody nearby will not return.
+- [ ] Implement message rate limiting
 
-Strategy:
+### Rationale
 
-Launch **very small geographic zones** first.
+Protects system from spam attacks and server overload.
+
+---
+
+# 6. Cold‑Start Problem
+
+Proximity apps suffer from **empty network syndrome**.
+
+If users open the app and see nobody nearby, they leave permanently.
+
+### Strategy
+
+Launch in **small dense locations first**.
 
 Examples:
 
-- single nightlife street
-- university campus
-- conference venue
-- festival
+- nightlife streets
+- university campuses
+- conferences
+- festivals
 
 Goal:
 
-20–50 concurrent users within ~500m.
+20–50 concurrent users within a few hundred meters.
 
 ---
 
-# 7. Launch Geography
+# 7. Early Market Selection
 
-Because the app is English only, prioritize English‑friendly environments.
+Because the interface is English only, choose English‑friendly environments.
 
-Good early markets:
+Suggested markets:
 
-- UK
+- United Kingdom
 - Ireland
 - Netherlands
 - Sweden
 - Norway
 - Denmark
-- Berlin startup areas
+- Berlin tech community
 
 Avoid initially:
 
@@ -214,241 +290,169 @@ Avoid initially:
 - Japan
 - South Korea
 
+### Rationale
+
+Language friction kills early adoption.
+
 ---
 
-# 8. Growth Strategy (No Budget)
+# 8. Growth Without Budget
 
-## Venue Activation
+## Venue activation
 
-Bars and cafés promote the app.
+Bars or cafés promote the app.
 
 Example:
 
-“Meet someone from the app here and get 10% off drinks.”
+“Meet someone from the app here and get a drink discount.”
 
-Checklist
+Tasks
 
-- [ ] Define venue account type
-- [ ] Create venue badge on map
-- [ ] Create venue promotion UI
+- [ ] venue account system
+- [ ] venue map markers
 
-Notes:
+### Rationale
 
--
+Venues gain customers and users gain safe meeting places.
 
 ---
 
-## Event Launches
+## Event launches
 
-Ideal environments:
+Events concentrate strangers already open to interaction.
+
+Examples:
 
 - tech meetups
 - festivals
-- student orientation events
 - conferences
 
-Checklist
+Tasks
 
-- [ ] Identify first event location
-- [ ] Prepare QR poster
-
-Notes:
-
--
+- [ ] identify first test event
 
 ---
 
-## QR‑Code Onboarding
+## QR onboarding
 
-Simple posters.
+Posters linking to the web app.
 
-Example text:
+Tasks
 
-SEE WHO IS NEAR YOU RIGHT NOW  
-boomboom.now
+- [ ] generate QR codes
+- [ ] design poster
 
-Checklist
+### Rationale
 
-- [ ] Design poster
-- [ ] Generate QR code
-- [ ] Print copies
-
-Notes:
-
--
+Physical discovery is ideal for proximity apps.
 
 ---
 
-# 9. Monetization Strategy
+# 9. Monetization
 
-Initial revenue options:
-
-### Premium users
-
-Example tiers
+## Premium tiers
 
 Free:
-- basic nearby discovery
+
+basic discovery
 
 Plus (~$2/month):
-- larger discovery radius
+
+extended radius
 
 Pro (~$5/month):
-- unlimited discovery range
 
-Checklist
+unlimited radius
 
-- [ ] Define tiers
-- [ ] Implement payment gateway
+### Rationale
 
-Notes:
-
--
+Low infrastructure costs mean even small revenue covers expenses.
 
 ---
 
-### Venue Accounts
+## Venue accounts
 
-Bars pay monthly for visibility.
+Venues pay monthly for map visibility.
 
-Example price:
+Example:
 
-$10–20/month
+$10–20/month.
 
-Benefits:
+### Rationale
 
-- venue marker on map
-- promotion message
-- event announcements
-
-Checklist
-
-- [ ] Venue dashboard
-- [ ] Venue listing on map
-
-Notes:
-
--
+Businesses benefit from attracting customers.
 
 ---
 
 # 10. Infrastructure Scaling
 
-### Phase 1
+Phase 1:
 
-Users: ~50 concurrent
+50 users — current VPS
 
-Current infrastructure sufficient.
+Phase 2:
 
-Cost:
+500 users — 2GB server + Redis
 
-~$5/month
+Phase 3:
 
----
+2000+ users — clustered services
 
-### Phase 2
+### Rationale
 
-Users: ~500 concurrent
-
-Upgrade:
-
-- 2 GB RAM VPS
-- Redis caching
-
-Estimated cost:
-
-~$15/month
+Scale gradually with real demand.
 
 ---
 
-### Phase 3
+# 11. Legal Requirements
 
-Users: ~2000+ concurrent
-
-Changes:
-
-- WebSocket gateway cluster
-- Horizontal microservices
-- CDN
-
-Estimated cost:
-
-$60–100/month
-
----
-
-# 11. Legal Considerations
-
-Operating in the EU requires:
+EU operation requires:
 
 - privacy policy
 - terms of service
-- data deletion process
+- data deletion mechanism
 
-Advantages of current design:
+### Rationale
 
-- minimal personal data
-- ephemeral messages
-- no location history
-
-Checklist
-
-- [ ] Privacy policy draft
-- [ ] Terms of service
-- [ ] GDPR data request endpoint
-
-Notes:
-
--
+Even minimal data systems must comply with EU privacy regulation.
 
 ---
 
 # 12. Milestones
 
-## Milestone 1 — Launchable product
+Milestone 1:
 
-Goal:
+Launchable prototype (20 concurrent users)
 
-20 simultaneous users
+Tasks
 
-Checklist
-
-- [ ] block/report implemented
+- [ ] block system
+- [ ] report system
 - [ ] rate limiting
 - [ ] push notifications
 
-Notes:
+Milestone 2:
 
--
+$10 revenue/month
 
----
+Milestone 3:
 
-## Milestone 2 — Cover infrastructure
+100 active users
 
-Target revenue:
+Milestone 4:
 
-$10/month
-
-Possible sources:
-
-- 10 premium users
-- 1 venue partner
-
-Notes:
-
--
+$2000 monthly founder income
 
 ---
 
-## Milestone 3 — First traction
+# 13. Open Questions
 
-Target:
+## Map visibility model
 
-100 active users in one city
+Questions
 
-Revenue goal:
-
-$100/month
+- Are users always visible on the map?
+- Should visibility depend on likes?
 
 Notes:
 
@@ -456,15 +460,11 @@ Notes:
 
 ---
 
-## Milestone 4 — Founder income
+## Moderation data retention
 
-Target:
+When reports occur:
 
-2000–3000 active users
-
-Revenue:
-
-$2000/month
+Should messages be stored temporarily or deleted immediately?
 
 Notes:
 
@@ -472,64 +472,15 @@ Notes:
 
 ---
 
-# 13. Open Questions (Founder Input Needed)
+# 14. Founder Task List
 
-Answer these to guide next decisions.
+Immediate priorities
 
-## Product Design
-
-- Is the app **map based** or **list based**?
-- Should users always be visible on the map?
-- Should visibility require mutual likes?
-
-Notes:
-
--
-
----
-
-## Moderation
-
-If a user reports another user:
-
-What should happen to the messages?
-
-Options:
-
-- store temporarily (7 days)
-- store permanently
-- delete immediately
-
-Notes:
-
--
-
----
-
-## Expansion
-
-Future platforms:
-
-- Native Android app?
-- Native iOS app?
-- Continue web‑only?
-
-Notes:
-
--
-
----
-
-# 14. Next Tasks for Founder
-
-Immediate priorities.
-
-- [ ] implement block system
-- [ ] implement report system
+- [ ] implement block feature
+- [ ] implement report feature
 - [ ] implement rate limiting
 - [ ] add push notifications
-- [ ] identify first launch hotspot
-- [ ] design first QR poster
+- [ ] select first launch location
 
 Notes:
 
@@ -539,9 +490,4 @@ Notes:
 
 # 15. Change Log
 
-Use this section to track updates.
-
-### v0.1
-
-Initial strategy document created.
-
+v0.2 – expanded document with rationales and collaborative design.
