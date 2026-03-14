@@ -25,6 +25,7 @@ const TIERS = {
   guest:   0,
   regular: 1,
   premium: 2,
+  developer: 3
 };
 
 // ============================================================
@@ -40,8 +41,9 @@ const FEATURES = {
     minTier: 'guest',
     radius: {
       guest:   23_000,
-      regular: 9_700_000,
-      premium: 9_700_000,
+      regular: 500,
+      premium: 23_000,
+      developer: 9_700_000
     },
   },
 
@@ -61,8 +63,9 @@ const FEATURES = {
   message_radius: {
     minTier: 'regular',
     radius: {
-      regular: 9_700_000,
-      premium: 9_700_000,
+      regular: 500,
+      premium: 23_000,
+      developer: 9_700_000
     },
   },
 
