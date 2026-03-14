@@ -99,6 +99,17 @@ function matchesFav(f, q) {
 
 // ── Render helpers ────────────────────────────────────────────
 
+function fmtRangeDate(iso) {
+  const d   = new Date(iso);
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (d.toDateString() === now.toDateString()) return `Today ${time}`;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const day = `${d.getDate()} ${months[d.getMonth()]}`;
+  return d.getFullYear() === now.getFullYear() ? `${day} ${time}` : `${day} ${d.getFullYear()}`;
+}
+
 function favItemHtml(f, isFav, unreadIds = new Set()) {
   const _base       = window.BOOMBOOM_BASE || '';
   const profileHref = `${_base}/profile/view/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
@@ -114,17 +125,28 @@ function favItemHtml(f, isFav, unreadIds = new Set()) {
   const meetIcon    = isMeet ? 'bi-compass-fill' : 'bi-compass';
   const hasUnread   = unreadIds.has(f.userId);
   const msgCls      = `fav-msg-btn${hasUnread ? ' fav-msg--unread' : ''}`;
+  const canMsg      = f.withinRange === true;
+  const msgBtnHtml  = canMsg
+    ? `<a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="Message"><i class="bi bi-chat-dots"></i></a>`
+    : `<span class="btn fav-action-btn fav-msg--disabled" title="Not in range"><i class="bi bi-chat-dots"></i></span>`;
+
+  let rangeLine = '';
+  if (f.withinRange === true) {
+    rangeLine = ' <span class="badge badge-in-range">in range</span>';
+  } else if (f.withinRangeAt) {
+    rangeLine = ` <span class="fav-range-hint">Last in range: ${fmtRangeDate(f.withinRangeAt)}</span>`;
+  }
 
   const rightBtns = isFav
     ? `<button class="btn fav-action-btn ${meetCls}"
          data-userid="${escHtml(f.userId)}" data-nickname="${escHtml(f.nickname)}" data-sex="${escHtml(f.sex || '')}"
          title="${meetTitle}"><i class="bi ${meetIcon}"></i></button>
-       <a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="Message"><i class="bi bi-chat-dots"></i></a>
+       ${msgBtnHtml}
        <button class="btn fav-action-btn fav-remove-btn" data-userid="${escHtml(f.userId)}" title="Remove">
          <i class="bi bi-star-fill"></i></button>`
     : `<button class="btn fav-action-btn fav-add-btn" data-userid="${escHtml(f.userId)}" data-nickname="${escHtml(f.nickname)}" title="Add to favourites">
          <i class="bi bi-star"></i></button>
-       <a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="Message"><i class="bi bi-chat-dots"></i></a>`;
+       ${msgBtnHtml}`;
 
   return `<div class="fav-item ${sexClass(f.sex)}" data-userid="${escHtml(f.userId)}">
     <a href="${profileHref}" class="fav-avatar ${sexClass(f.sex)}" style="text-decoration:none">${sexEmoji(f.sex)}</a>
@@ -132,7 +154,7 @@ function favItemHtml(f, isFav, unreadIds = new Set()) {
       <div class="d-flex align-items-baseline gap-1 flex-wrap">
         <a href="${profileHref}" class="fav-name text-decoration-none text-white">${escHtml(f.nickname)}</a>${ageBadge}
       </div>
-      <div class="mt-1">${badge}</div>
+      <div class="mt-1">${badge}${rangeLine}</div>
     </div>
     <div class="fav-actions">${rightBtns}</div>
   </div>`;

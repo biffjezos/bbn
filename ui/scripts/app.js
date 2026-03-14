@@ -279,7 +279,13 @@
         if (profileLink) profileLink.href = BASE + '/profile/view/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
 
         var msgLink = $('pinMessageLink');
-        if (msgLink) msgLink.href = BASE + '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+        if (msgLink) {
+          msgLink.href = BASE + '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+          msgLink.classList.add('d-none');
+          window.Api.isMutualFavourite(userId).then(function(data) {
+            if (data.mutual) msgLink.classList.remove('d-none');
+          }).catch(function() { /* leave hidden on error */ });
+        }
 
         var favBtn   = $('pinFavBtn');
         var favIcon  = $('pinFavIcon');

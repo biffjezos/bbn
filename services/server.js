@@ -207,9 +207,10 @@ app.get('/api/tiers/radius/nearby/:tier',  (req, res) => proxy(req, res, `${CFG.
 app.get('/api/tiers/radius/message/:tier', (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${req.params.tier}`));
 
 // --- Favourites ---------------------------------------------
-app.get   ('/api/favourites',         checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));
-app.post  ('/api/favourites/:userId', checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
-app.delete('/api/favourites/:userId', checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
+app.get   ('/api/favourites',                  checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));
+app.get   ('/api/favourites/is-mutual/:userId', checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/is-mutual/${req.params.userId}`));
+app.post  ('/api/favourites/:userId',           checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
+app.delete('/api/favourites/:userId',           checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
 
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));

@@ -190,6 +190,10 @@ const Api = {
     return apiFetch(`/favourites/${encodeURIComponent(userId)}`, { method: 'DELETE' });
   },
 
+  isMutualFavourite(userId) {
+    return apiFetch(`/favourites/is-mutual/${encodeURIComponent(userId)}`);
+  },
+
 };
 
 // Expose globally (no bundler)
