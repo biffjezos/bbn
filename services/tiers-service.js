@@ -40,8 +40,8 @@ const FEATURES = {
   see_nearby: {
     minTier: 'guest',
     radius: {
-      guest:   23_000,
-      regular: 500,
+      guest:   500,
+      regular: 1_000,
       premium: 23_000,
       developer: 9_700_000
     },
