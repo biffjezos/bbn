@@ -14,8 +14,8 @@ Before any marketing or scaling push, the order of priority is:
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
 3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
 4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
-5. **T-05b** — Add encrypted note field to blocks (now has correct key derivation foundation)
-6. **T-01** — Admin UI (needs T-03; benefits from auth being stable)
+5. **T-01** — Admin UI (T-03 ✓, T-04b ✓ — fully unblocked; unlocks T-06)
+6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
 7. **T-02** — Analytics (low-risk, can slot in any time)
 8. **T-06** — Venue accounts (needs T-01 and T-03)
 9. **T-07** — Settings page + device notifications (UX polish)
