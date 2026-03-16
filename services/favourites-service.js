@@ -26,6 +26,13 @@ import jwt                       from 'jsonwebtoken';
 const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
 console.log('[favourites] DB connected.');
 
+// TTL index — auto-expire notifications after 30 days
+await db.collection('notifications').createIndex(
+  { createdAt: 1 },
+  { expireAfterSeconds: 30 * 24 * 3600 }
+);
+console.log('[favourites] Notifications TTL index ensured.');
+
 // --- Service token ------------------------------------------
 let _svcToken = null;
 let _svcTokenExpiry = 0;
@@ -211,6 +218,30 @@ app.post('/favourites/:userId', verifyToken, async (req, res) => {
       addedAt: new Date(),
     });
 
+    // Notify the favourited user (non-fatal — upsert so remove+re-add doesn't stack)
+    try {
+      const ownerDoc = await db.collection('users').findOne(
+        { _id: safeObjectId(ownerUserId) },
+        { projection: { nickname: 1, sex: 1 } }
+      );
+      if (ownerDoc) {
+        await db.collection('notifications').replaceOne(
+          { recipientUserId: favouriteUserId, fromUserId: ownerUserId, type: 'new_favourite' },
+          {
+            recipientUserId: favouriteUserId,
+            fromUserId:      ownerUserId,
+            fromNickname:    ownerDoc.nickname,
+            fromSex:         ownerDoc.sex,
+            type:            'new_favourite',
+            createdAt:       new Date(),
+          },
+          { upsert: true }
+        );
+      }
+    } catch (notifErr) {
+      console.error('[notifications] insert failed:', notifErr.message);
+    }
+
     res.status(201).json({ ok: true });
   } catch (e) {
     if (e.code === 11000)
@@ -367,6 +398,47 @@ app.delete('/favourites/:userId', verifyToken, async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('[favourites DELETE]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+// GET /notifications — unseen notifications for the authenticated user
+app.get('/notifications', verifyToken, async (req, res) => {
+  try {
+    const items = await db.collection('notifications')
+      .find({ recipientUserId: req.auth.sub })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .toArray();
+    res.json({
+      notifications: items.map(n => ({
+        id:           n._id.toString(),
+        fromUserId:   n.fromUserId,
+        fromNickname: n.fromNickname,
+        fromSex:      n.fromSex,
+        type:         n.type,
+        createdAt:    n.createdAt,
+      })),
+    });
+  } catch (e) {
+    console.error('[notifications GET]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+// DELETE /notifications/:id — dismiss a notification
+app.delete('/notifications/:id', verifyToken, async (req, res) => {
+  try {
+    const oid = safeObjectId(req.params.id);
+    if (!oid) return res.status(400).json({ error: 'Invalid notification id.' });
+    const result = await db.collection('notifications').deleteOne({
+      _id:             oid,
+      recipientUserId: req.auth.sub,
+    });
+    if (!result.deletedCount) return res.status(404).json({ error: 'Notification not found.' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[notifications DELETE]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
 });

@@ -194,6 +194,16 @@ const Api = {
     return apiFetch(`/favourites/is-mutual/${encodeURIComponent(userId)}`);
   },
 
+  // ---- Notifications ------------------------------------------
+
+  getNotifications() {
+    return apiFetch('/notifications');
+  },
+
+  dismissNotification(id) {
+    return apiFetch(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
 };
 
 // Expose globally (no bundler)

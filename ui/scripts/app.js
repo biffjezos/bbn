@@ -774,3 +774,97 @@
   };
 
 })();
+
+// ============================================================
+// NotifModule — favourite notifications
+// Polls GET /api/notifications on login and every 30 s.
+// Shows dismissable banners below the navbar and a dot badge
+// on the hamburger menu icon.
+// ============================================================
+(function () {
+
+  var POLL_INTERVAL_MS = 30 * 1000;
+  var _pollTimer = null;
+
+  function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function sexPronoun(sex) {
+    return sex === 'f' ? 'her' : sex === 'm' ? 'his' : 'their';
+  }
+
+  function showBanners(notifications) {
+    var container = document.getElementById('notifBanner');
+    var dot        = document.getElementById('notifDot');
+    if (!container) return;
+
+    if (!notifications || notifications.length === 0) {
+      container.innerHTML = '';
+      if (dot) dot.classList.add('d-none');
+      return;
+    }
+
+    if (dot) dot.classList.remove('d-none');
+
+    container.innerHTML = notifications.map(function (n) {
+      return '<div class="alert alert-info alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0" role="alert" data-notif-id="' + esc(n.id) + '" style="border-left:none;border-right:none;border-top:none">' +
+        '<i class="bi bi-star-fill flex-shrink-0"></i>' +
+        '<span><strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites. ' +
+        '<a href="' + esc((window.BOOMBOOM_BASE || '') + '/favourites/') + '" class="alert-link">Add them back</a> to start chatting!</span>' +
+        '<button type="button" class="btn-close ms-auto flex-shrink-0" aria-label="Dismiss"></button>' +
+        '</div>';
+    }).join('');
+
+    container.querySelectorAll('.btn-close').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var alertEl = btn.closest('[data-notif-id]');
+        if (!alertEl) return;
+        var id = alertEl.dataset.notifId;
+        alertEl.remove();
+        if (window.Api) window.Api.dismissNotification(id).catch(function () {});
+        if (container.querySelectorAll('[data-notif-id]').length === 0) {
+          if (dot) dot.classList.add('d-none');
+        }
+      });
+    });
+  }
+
+  function pollNotifications() {
+    if (!window.Auth || !window.Auth.isRegistered()) return;
+    window.Api && window.Api.getNotifications().then(function (data) {
+      showBanners(data.notifications || []);
+    }).catch(function (e) {
+      if (DEBUG) console.warn('[Notif] poll failed:', e.message);
+    });
+  }
+
+  function startNotifPoll() {
+    stopNotifPoll();
+    pollNotifications();
+    _pollTimer = setInterval(pollNotifications, POLL_INTERVAL_MS);
+  }
+
+  function stopNotifPoll() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    showBanners([]);
+  }
+
+  var _origOnLogin = Auth.onLogin;
+  Auth.onLogin = function (data) {
+    if (_origOnLogin) _origOnLogin(data);
+    startNotifPoll();
+  };
+
+  var _origOnLogout = Auth.onLogout;
+  Auth.onLogout = function () {
+    if (_origOnLogout) _origOnLogout();
+    stopNotifPoll();
+  };
+
+  // On page load with an already-valid token
+  window.__authReady && window.__authReady.then(function () {
+    if (window.Auth && window.Auth.isRegistered()) startNotifPoll();
+  });
+
+})();
