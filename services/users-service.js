@@ -61,7 +61,7 @@ function issueUserToken(user) {
       nickname: user.nickname,
       sex:      user.sex,
       age:      user.age      ?? null,
-      role:     'user',
+      role:     ['user','admin'].includes(user.role) ? user.role : 'user',
       tier:     user.tier || 'regular',
       tv:       user.tokenVersion ?? 0,
     },

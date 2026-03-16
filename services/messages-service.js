@@ -81,7 +81,8 @@ async function verifyToken(req, res, next) {
   // Verify tokenVersion so password changes invalidate old JWTs.
   // Compare in JS (not as a Mongo filter) so legacy docs without the field
   // (which default to 0) are not incorrectly treated as revoked.
-  try {
+  // Admin tokens skip this check — consistent with users-service and location-service.
+  if (payload.role === 'user') try {
     const cached = _tvCache.get(payload.sub);
     let dbTv;
     if (cached && cached.exp > Date.now()) {
