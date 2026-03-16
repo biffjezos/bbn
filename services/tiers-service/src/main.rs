@@ -117,7 +117,7 @@ fn static_tiers() -> HashMap<String, Tier> {
     HashMap::from([
         ("guest".into(),   Tier { name: "guest".into(),   label: "Guest".into(),   cls: "secondary".into(), rank: 0, nearby_radius_m: 500,    message_radius_m: None }),
         ("regular".into(), Tier { name: "regular".into(), label: "Regular".into(), cls: "primary".into(),   rank: 1, nearby_radius_m: 1_000,  message_radius_m: Some(100) }),
-        ("premium".into(), Tier { name: "premium".into(), label: "Premium".into(), cls: "warning".into(),   rank: 2, nearby_radius_m: 23_000, message_radius_m: Some(23_000) }),
+        ("premium".into(), Tier { name: "premium".into(), label: "Premium".into(), cls: "warning".into(),   rank: 2, nearby_radius_m: 1_000,  message_radius_m: Some(1_000) }),
     ])
 }
 
@@ -302,31 +302,42 @@ async fn not_found() -> impl IntoResponse {
 // ── Startup seeder ────────────────────────────────────────────────────────────
 
 /// Upserts the three base tiers into MongoDB on startup.
-/// Uses $setOnInsert — safe to re-run: existing documents are never overwritten,
-/// so any changes made via the future admin UI are preserved.
+/// Uses $set for radius fields so corrections propagate to existing records,
+/// and $setOnInsert for immutable fields (name, label, cls, rank, createdAt).
 /// Does NOT create indexes (that remains migration 004's responsibility).
 async fn seed_tiers(db: &Database) {
     let col = db.collection::<mongodb::bson::Document>("tiers");
     let now = DateTime::now();
-    let seeds = [
-        doc! { "name": "guest",   "label": "Guest",   "cls": "secondary", "rank": 0_i32, "nearbyRadiusM": 500_i32,   "messageRadiusM": mongodb::bson::Bson::Null, "createdAt": now },
-        doc! { "name": "regular", "label": "Regular", "cls": "primary",   "rank": 1_i32, "nearbyRadiusM": 1000_i32,  "messageRadiusM": 100_i32,   "createdAt": now },
-        doc! { "name": "premium", "label": "Premium", "cls": "warning",   "rank": 2_i32, "nearbyRadiusM": 23000_i32, "messageRadiusM": 23000_i32, "createdAt": now },
+    // (name, label, cls, rank, nearbyRadiusM, messageRadiusM)
+    let seeds: &[(&str, &str, &str, i32, i32, Option<i32>)] = &[
+        ("guest",   "Guest",   "secondary", 0, 500,   None),
+        ("regular", "Regular", "primary",   1, 1_000, Some(100)),
+        ("premium", "Premium", "warning",   2, 1_000, Some(1_000)),
     ];
     let mut seeded = 0u32;
-    for seed in &seeds {
-        let filter = doc! { "name": seed.get_str("name").unwrap() };
-        let update = doc! { "$setOnInsert": seed };
+    for &(name, label, cls, rank, nearby, msg) in seeds {
+        let filter = doc! { "name": name };
+        let msg_bson = msg.map_or(mongodb::bson::Bson::Null, |v| v.into());
+        let update = doc! {
+            "$set": {
+                "nearbyRadiusM":  nearby,
+                "messageRadiusM": msg_bson,
+            },
+            "$setOnInsert": {
+                "name": name, "label": label, "cls": cls,
+                "rank": rank, "createdAt": now,
+            },
+        };
         match col.update_one(filter, update).upsert(true).await {
             Ok(r) if r.upserted_id.is_some() => seeded += 1,
             Ok(_)  => {}
-            Err(e) => eprintln!("[tiers] seed warning ({}): {e}", seed.get_str("name").unwrap()),
+            Err(e) => eprintln!("[tiers] seed warning ({name}): {e}"),
         }
     }
     if seeded > 0 {
         println!("[tiers] Seeded {seeded} tier(s) into DB.");
     } else {
-        println!("[tiers] Tiers already present — no seed needed.");
+        println!("[tiers] Tier radii synced.");
     }
 }
 

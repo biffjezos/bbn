@@ -297,7 +297,7 @@ app.get('/location/nearby', requireAny, async (req, res) => {
     // Avoids a cross-service call on every nearby query.
     // Update here when tier radii change via the admin UI (T-01).
     const tier = req.auth.tier || 'guest';
-    const _nearbyRadii = { guest: 500, regular: 1_000, premium: 23_000 };
+    const _nearbyRadii = { guest: 500, regular: 1_000, premium: 1_000 };
     const radiusM = _nearbyRadii[tier] ?? null; // null = no cap (e.g. developer)
 
     const withDist = nearby
