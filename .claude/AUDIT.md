@@ -41,6 +41,14 @@ On account creation the eMail should be hashed, just like the password, sent and
 
 The eMail address and password should always be hashed right after it was added into the text field (of the account creation, login-modal).
 
+**Sequencing decision (2026-03-16):** OPAQUE is deferred until `auth-service` is
+ported to Rust (T-04b). `opaque-ke` (Rust) is production-ready; no equivalent
+exists for JS. Implementing OPAQUE in JS now would require a full re-implementation
+once the Rust port lands. T-04a (tiers-service) establishes the Rust infra first;
+T-04b (auth-service + OPAQUE) follows and unblocks this ticket and T-05b (block
+note encryption). This ticket remains HIGH priority but is intentionally blocked
+on T-04b.
+
 ---
 
 ### 1.2 Gateway send-rate limit bypassable at messages-service level
