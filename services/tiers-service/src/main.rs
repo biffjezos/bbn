@@ -422,6 +422,15 @@ async fn admin_create_tier(
             "error": "name must start with a lowercase letter and contain only [a-z0-9_], max 64 chars."
         }))).into_response();
     }
+    // Shift any existing tiers at or above the chosen rank to make room.
+    let _ = state.db
+        .collection::<mongodb::bson::Document>("tiers")
+        .update_many(
+            doc! { "rank": { "$gte": body.rank as i32 } },
+            doc! { "$inc": { "rank": 1 } },
+        )
+        .await;
+
     let now = DateTime::now();
     let doc = doc! {
         "name":            &name,

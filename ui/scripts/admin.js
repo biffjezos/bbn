@@ -338,6 +338,19 @@ function showTierForm(existing, allTiers) {
   var nearby  = existing ? (existing.nearbyRadiusM  != null ? existing.nearbyRadiusM  : (existing.nearby_radius_m  || 1000)) : 1000;
   var message = existing ? (existing.messageRadiusM != null ? existing.messageRadiusM : (existing.message_radius_m || '')) : '';
 
+  // Build rank select for new tiers (0 … maxRank+1).
+  var sortedForRank = (allTiers || []).slice().sort(function (a, b) { return (a.rank || 0) - (b.rank || 0); });
+  var maxRank = sortedForRank.length > 0 ? (sortedForRank[sortedForRank.length - 1].rank || 0) : -1;
+  var rankOpts = [];
+  for (var r = 0; r <= maxRank + 1; r++) {
+    var occupant = sortedForRank.find(function (t) { return (t.rank || 0) === r; });
+    var rlbl = occupant ? (r + ' — before ' + occupant.label) : (r + ' — append');
+    rankOpts.push('<option value="' + r + '"' + (r === maxRank + 1 ? ' selected' : '') + '>' + escHtml(rlbl) + '</option>');
+  }
+  var rankField = isEdit
+    ? '<input type="number" class="form-control" id="tf-rank" value="' + escHtml(String(existing ? existing.rank : 1)) + '" min="0" />'
+    : '<select class="form-select" id="tf-rank">' + rankOpts.join('') + '</select>';
+
   var nameRow = isEdit ? '' : [
     '<div class="col-12 col-sm-6 col-md-3">',
     '  <label class="form-label">Name <span class="text-muted-bb" style="font-size:0.75rem">(slug, e.g. "vip")</span></label>',
@@ -368,7 +381,7 @@ function showTierForm(existing, allTiers) {
     '    </div>',
     '    <div class="col-6 col-md-2">',
     '      <label class="form-label">Rank</label>',
-    '      <input type="number" class="form-control" id="tf-rank" value="' + escHtml(String(existing ? existing.rank : 1)) + '" min="0" />',
+    rankField,
     '    </div>',
     '  </div>',
     '  <div class="row g-3 mt-0">',
