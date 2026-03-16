@@ -86,9 +86,9 @@ async function verifyToken(req, res, next, requireRegistered = false) {
   if (requireRegistered && !['user','admin'].includes(payload.role))
     return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
 
-  // Verify tokenVersion so password changes invalidate old JWTs.
-  // Tokens issued before this field existed have tv=undefined; treat as 0.
-  if (payload.role === 'user') {
+  // Verify tokenVersion so password/tier/role changes invalidate old JWTs.
+  // Applies to both 'user' and 'admin' roles — admin tokens must also be revocable.
+  if (['user', 'admin'].includes(payload.role)) {
     try {
       const cached = _tvCache.get(payload.sub);
       let dbTv;
@@ -368,6 +368,116 @@ app.get('/users/me/keys', requireUser, async (req, res) => {
     res.json(user);
   } catch (e) {
     console.error('[users/me/keys GET]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+// ─── Admin middleware ────────────────────────────────────────
+// Two-step: (1) verifyToken enforces signature + TV, (2) role guard enforces admin.
+const requireAdmin = [
+  (req, res, next) => verifyToken(req, res, next, true),
+  (req, res, next) => {
+    if (req.auth?.role !== 'admin')
+      return res.status(403).json({ error: 'Admin access required.', code: 'ADMIN_REQUIRED' });
+    next();
+  },
+];
+
+// GET /admin/users?q=&by=nickname|email|id
+// Returns full fields (incl. email, tier, role) — admin only.
+app.get('/admin/users', ...requireAdmin, async (req, res) => {
+  const { q, by } = req.query;
+  const filter = {};
+  if (q && q.trim()) {
+    const trimmed = q.trim();
+    if (by === 'email') {
+      filter.email = trimmed.toLowerCase();
+    } else if (by === 'id') {
+      const oid = safeObjectId(trimmed);
+      if (!oid) return res.json({ users: [] });
+      filter._id = oid;
+    } else {
+      const esc = trimmed.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+      filter.nickname = { $regex: esc, $options: 'i' };
+    }
+  }
+  try {
+    const users = await db.collection('users').find(filter, {
+      projection: { passwordHash: 0, publicKey: 0, encryptedPrivateKey: 0 },
+      limit: 50,
+    }).toArray();
+    if (!users.length) return res.json({ users: [] });
+
+    const userIds = users.map(u => u._id.toString());
+    const cutoff  = new Date(Date.now() - 10 * 60_000);
+    const onlineDocs = await db.collection('locations').find(
+      { userId: { $in: userIds }, updatedAt: { $gt: cutoff } },
+      { projection: { userId: 1 } }
+    ).toArray();
+    const onlineSet = new Set(onlineDocs.map(l => l.userId));
+
+    res.json({
+      users: users.map(u => ({
+        userId:       u._id.toString(),
+        nickname:     u.nickname,
+        email:        u.email,
+        age:          u.age          ?? null,
+        sex:          u.sex          ?? null,
+        tier:         u.tier         || 'regular',
+        role:         u.role         || 'user',
+        tokenVersion: u.tokenVersion ?? 0,
+        online:       onlineSet.has(u._id.toString()),
+        createdAt:    u.createdAt    ?? null,
+      })),
+    });
+  } catch (e) {
+    console.error('[admin/users GET]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+// PATCH /admin/users/:id/tier — change user's tier, bump tokenVersion
+app.patch('/admin/users/:id/tier', ...requireAdmin, async (req, res) => {
+  const oid = safeObjectId(req.params.id);
+  if (!oid) return res.status(400).json({ error: 'Invalid userId.' });
+  const { tier } = req.body;
+  if (!tier || typeof tier !== 'string' || tier.length > 64 || tier.length < 1)
+    return res.status(400).json({ error: 'Valid tier name required.' });
+
+  try {
+    const result = await db.collection('users').findOneAndUpdate(
+      { _id: oid },
+      { $set: { tier }, $inc: { tokenVersion: 1 } },
+      { returnDocument: 'after', projection: { tokenVersion: 1 } }
+    );
+    if (!result) return res.status(404).json({ error: 'User not found.' });
+    _tvCache.delete(req.params.id);
+    res.json({ ok: true, tokenVersion: result.tokenVersion });
+  } catch (e) {
+    console.error('[admin/users/:id/tier PATCH]', e);
+    res.status(500).json({ error: 'Internal error.' });
+  }
+});
+
+// PATCH /admin/users/:id/role — change user's role, bump tokenVersion
+app.patch('/admin/users/:id/role', ...requireAdmin, async (req, res) => {
+  const oid = safeObjectId(req.params.id);
+  if (!oid) return res.status(400).json({ error: 'Invalid userId.' });
+  const { role } = req.body;
+  if (!['user', 'admin'].includes(role))
+    return res.status(400).json({ error: "role must be 'user' or 'admin'." });
+
+  try {
+    const result = await db.collection('users').findOneAndUpdate(
+      { _id: oid },
+      { $set: { role }, $inc: { tokenVersion: 1 } },
+      { returnDocument: 'after', projection: { tokenVersion: 1 } }
+    );
+    if (!result) return res.status(404).json({ error: 'User not found.' });
+    _tvCache.delete(req.params.id);
+    res.json({ ok: true, tokenVersion: result.tokenVersion });
+  } catch (e) {
+    console.error('[admin/users/:id/role PATCH]', e);
     res.status(500).json({ error: 'Internal error.' });
   }
 });

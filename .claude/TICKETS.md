@@ -14,7 +14,7 @@ Before any marketing or scaling push, the order of priority is:
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
 3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
 4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
-5. **T-01** — Admin UI (T-03 ✓, T-04b ✓ — fully unblocked; fix inline radius table in location-service is part of T-01 scope)
+5. ~~**T-01**~~ — ✅ Done (2026-03-16)
 6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
 7. **T-02** — Analytics (low-risk, can slot in any time)
 8. **T-06** — Venue accounts (needs T-01 and T-03)
@@ -41,20 +41,20 @@ requires no new infrastructure.
 
 ## T-01 — Admin UI (`/admin`)
 
-**Status:** Not started. All prerequisites met (T-03 ✓, T-04b ✓). Hidden prerequisite: fix inline radius table in `location-service.js:300` — in scope for this ticket.
+**Status:** ✅ Complete (2026-03-16).
 
-### Requirements
+### Implemented (2026-03-16)
 
-- Search users by nickname, email, or userId.
-- Click a search result → expands core profile details (same fields as `/profile`).
-- Change a user's tier (e.g. `regular` → `developer`). On save:
-  - Backend updates `users.tier` in MongoDB.
-  - Issues a new JWT for the user (bump `tokenVersion` to invalidate the old one — same pattern as password change). See AUDIT.md 1.2.
-- Create, edit, and delete account types (see T-03).
-- Assign account types to existing users.
-- Manage tier feature flags and radii (see T-03).
-- Manage venue accounts (see T-06).
-- Protected route — admin-only JWT role (`role: 'admin'`). Must not be accessible to regular users.
+- `services/location-service.js` — replaced hardcoded inline radius table with cached fetch to tiers-service (5 min TTL, static fallback). New env var: `TIERS_SERVICE_URL`.
+- `services/users-service.js` — fixed tokenVersion check to include `admin` role. Added `requireAdmin` middleware. Added `GET /admin/users`, `PATCH /admin/users/:id/tier`, `PATCH /admin/users/:id/role`.
+- `services/tiers-service/src/main.rs` — admin tier CRUD: `GET/POST /admin/tiers`, `PUT/DELETE /admin/tiers/:name`. Each handler verifies adminUser JWT + tokenVersion from DB. Cache invalidated on every write.
+- `services/common/src/auth.rs` — added `AdminUser` Axum extractor (signature + role check).
+- `services/server.js` — added `requireAdmin` middleware, PATCH to CORS, admin proxy routes.
+- `ui/_layouts/default.html` — extended layout guard: `/admin/*` requires `role === 'admin'`.
+- `ui/_includes/offcanvas-menu.html` — admin nav link (hidden by default, shown by app.js for admin role).
+- `ui/scripts/app.js` — `syncOffcanvas` and `buildDesktopNav` show admin link when `role === 'admin'`.
+- `ui/scripts/api.js` — admin API methods: `adminSearchUsers`, `adminSetTier`, `adminSetRole`, `adminListTiers`, `adminCreateTier`, `adminUpdateTier`, `adminDeleteTier`.
+- `ui/admin/admin-index.html` + `ui/scripts/admin.js` — admin UI: user search/expand/tier+role change; tier CRUD.
 
 ### Notes
 

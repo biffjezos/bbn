@@ -94,6 +94,58 @@ where
     }
 }
 
+// ── Admin user extractor ──────────────────────────────────────────────────────
+
+/// Axum extractor for admin-only routes.
+/// Reads `Authorization: Bearer <token>`, verifies signature, checks role == "admin".
+/// Does NOT check tokenVersion — callers must do that themselves using the DB.
+pub struct AdminUser(pub UserClaims);
+
+impl<S> FromRequestParts<S> for AdminUser
+where
+    JwtSecret: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let JwtSecret(secret) = JwtSecret::from_ref(state);
+
+        let raw = parts
+            .headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        let token = raw
+            .strip_prefix("Bearer ")
+            .or_else(|| raw.strip_prefix("bearer "))
+            .unwrap_or(raw)
+            .trim();
+
+        if token.is_empty() {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "No token provided." })),
+            ));
+        }
+
+        let claims = decode_user_token(token, &secret).map_err(|_| (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "Token invalid or expired." })),
+        ))?;
+
+        if claims.role != "admin" {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" })),
+            ));
+        }
+
+        Ok(AdminUser(claims))
+    }
+}
+
 // ── User / guest token decode ─────────────────────────────────────────────────
 
 /// Claims embedded in a user or guest JWT.

@@ -18,9 +18,9 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use common::auth::{JwtSecret, ServiceToken};
+use common::auth::{AdminUser, JwtSecret, ServiceToken};
 use futures_util::TryStreamExt;
-use mongodb::{bson::{doc, DateTime}, Client, Database};
+use mongodb::{bson::{doc, oid::ObjectId, DateTime}, Client, Database};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::RwLock;
@@ -300,6 +300,193 @@ async fn not_found() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." })))
 }
 
+// ── Admin helpers ─────────────────────────────────────────────────────────────
+
+/// Input body for admin tier create / update.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TierInput {
+    /// Only required for create (POST). Ignored on update (PUT — name comes from path).
+    name:             Option<String>,
+    label:            String,
+    cls:              String,
+    rank:             u32,
+    nearby_radius_m:  u32,
+    message_radius_m: Option<u32>,
+}
+
+fn valid_tier_name(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 64
+        && s.chars().next().map_or(false, |c| c.is_ascii_lowercase())
+        && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+/// Verify admin tokenVersion against the users collection.
+/// Called at the top of every admin handler.
+async fn check_admin_tv(
+    db: &Database,
+    sub: &str,
+    tv: u32,
+) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    let oid = ObjectId::parse_str(sub).map_err(|_| (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({ "error": "Invalid token." })),
+    ))?;
+    let user = db
+        .collection::<mongodb::bson::Document>("users")
+        .find_one(doc! { "_id": oid })
+        .projection(doc! { "tokenVersion": 1 })
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))))?;
+    let db_tv = user
+        .as_ref()
+        .and_then(|u| u.get_i32("tokenVersion").ok())
+        .unwrap_or(0) as u32;
+    if db_tv != tv {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Token revoked.", "code": "TOKEN_REVOKED" })),
+        ));
+    }
+    Ok(())
+}
+
+// ── Admin handlers ────────────────────────────────────────────────────────────
+
+/// GET /admin/tiers — list all tiers fresh from DB (bypasses the 60 s read cache).
+async fn admin_list_tiers(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    match state.db.collection::<Tier>("tiers").find(doc! {}).await {
+        Err(e) => {
+            eprintln!("[tiers] admin_list_tiers: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response()
+        }
+        Ok(cursor) => {
+            let docs: Vec<Tier> = cursor.try_collect().await.unwrap_or_default();
+            Json(json!({ "tiers": docs })).into_response()
+        }
+    }
+}
+
+/// POST /admin/tiers — create a new tier.
+async fn admin_create_tier(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Json(body): Json<TierInput>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    let name = match &body.name {
+        Some(n) => n.clone(),
+        None => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "name is required." }))).into_response(),
+    };
+    if !valid_tier_name(&name) {
+        return (StatusCode::BAD_REQUEST, Json(json!({
+            "error": "name must start with a lowercase letter and contain only [a-z0-9_], max 64 chars."
+        }))).into_response();
+    }
+    let now = DateTime::now();
+    let doc = doc! {
+        "name":            &name,
+        "label":           &body.label,
+        "cls":             &body.cls,
+        "rank":            body.rank as i32,
+        "nearbyRadiusM":   body.nearby_radius_m as i32,
+        "messageRadiusM":  body.message_radius_m.map(|v| v as i32),
+        "createdAt":       now,
+        "updatedAt":       now,
+    };
+    match state.db.collection::<mongodb::bson::Document>("tiers").insert_one(doc).await {
+        Ok(_) => {
+            *state.tiers_cache.write().await = None;
+            Json(json!({ "ok": true, "name": name })).into_response()
+        }
+        Err(e) if e.to_string().contains("E11000") => {
+            (StatusCode::CONFLICT, Json(json!({ "error": "A tier with that name already exists." }))).into_response()
+        }
+        Err(e) => {
+            eprintln!("[tiers] admin_create_tier: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response()
+        }
+    }
+}
+
+/// PUT /admin/tiers/:name — update an existing tier's editable fields.
+async fn admin_update_tier(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Json(body): Json<TierInput>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    let msg_bson = body.message_radius_m
+        .map_or(mongodb::bson::Bson::Null, |v| (v as i32).into());
+    let result = state.db
+        .collection::<mongodb::bson::Document>("tiers")
+        .update_one(
+            doc! { "name": &name },
+            doc! { "$set": {
+                "label":           &body.label,
+                "cls":             &body.cls,
+                "rank":            body.rank as i32,
+                "nearbyRadiusM":   body.nearby_radius_m as i32,
+                "messageRadiusM":  msg_bson,
+                "updatedAt":       DateTime::now(),
+            }},
+        )
+        .await;
+    match result {
+        Ok(r) if r.matched_count == 0 => {
+            (StatusCode::NOT_FOUND, Json(json!({ "error": "Tier not found." }))).into_response()
+        }
+        Ok(_) => {
+            *state.tiers_cache.write().await = None;
+            Json(json!({ "ok": true })).into_response()
+        }
+        Err(e) => {
+            eprintln!("[tiers] admin_update_tier: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response()
+        }
+    }
+}
+
+/// DELETE /admin/tiers/:name — remove a tier document.
+async fn admin_delete_tier(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    match state.db.collection::<mongodb::bson::Document>("tiers").delete_one(doc! { "name": &name }).await {
+        Ok(r) if r.deleted_count == 0 => {
+            (StatusCode::NOT_FOUND, Json(json!({ "error": "Tier not found." }))).into_response()
+        }
+        Ok(_) => {
+            *state.tiers_cache.write().await = None;
+            Json(json!({ "ok": true })).into_response()
+        }
+        Err(e) => {
+            eprintln!("[tiers] admin_delete_tier: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response()
+        }
+    }
+}
+
 // ── Startup seeder ────────────────────────────────────────────────────────────
 
 /// Upserts the three base tiers into MongoDB on startup.
@@ -375,9 +562,12 @@ async fn main() {
         .route("/tiers/info",                  get(tiers_info))
         .route("/tiers/features",              get(tiers_features))
         .route("/tiers/check",                 post(tiers_check))
-        .route("/tiers/radius/nearby/{tier}",   get(nearby_radius))
-        .route("/tiers/radius/message/{tier}",  get(message_radius))
-        .route("/tiers/{name}/info",            get(tier_info))
+        .route("/tiers/radius/nearby/{tier}",  get(nearby_radius))
+        .route("/tiers/radius/message/{tier}", get(message_radius))
+        .route("/tiers/{name}/info",           get(tier_info))
+        // Admin — require both ServiceToken (from gateway) and AdminUser (from JWT)
+        .route("/admin/tiers",       get(admin_list_tiers).post(admin_create_tier))
+        .route("/admin/tiers/{name}", axum::routing::put(admin_update_tier).delete(admin_delete_tier))
         .fallback(not_found)
         .with_state(state);
 

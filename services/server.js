@@ -47,7 +47,7 @@ const ALLOWED_ORIGINS = [
 
 app.use(cors({
   origin: ALLOWED_ORIGINS,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
@@ -120,6 +120,23 @@ function serviceToken() {
   _svcToken = jwt.sign({ sub: 'gateway', role: 'service' }, CFG.JWT_SECRET, { expiresIn: '60s' });
   _svcTokenExpiry = Date.now() + 60_000;
   return _svcToken;
+}
+
+// ============================================================
+// ADMIN GUARD — enforced at the gateway before proxying.
+// Secondary check happens inside each service (users-service
+// checks tokenVersion; tiers-service checks role + TV via DB).
+// ============================================================
+async function requireAdmin(req, res, next) {
+  const auth  = req.headers['authorization'] || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'No token provided.' });
+  let payload;
+  try { payload = jwt.verify(token, CFG.JWT_SECRET); }
+  catch { return res.status(401).json({ error: 'Token invalid or expired.' }); }
+  if (payload.role !== 'admin')
+    return res.status(403).json({ error: 'Admin access required.', code: 'ADMIN_REQUIRED' });
+  next();
 }
 
 // ============================================================
@@ -223,6 +240,15 @@ app.delete('/api/blocks/:userId',  (req, res) => proxy(req, res, `${CFG.BLOCKS_S
 // --- Notifications ------------------------------------------
 app.get   ('/api/notifications',     (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/notifications`));
 app.delete('/api/notifications/:id', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/notifications/${req.params.id}`));
+
+// --- Admin (role:admin enforced at gateway + inside each service) ---
+app.get   ('/api/admin/users',          requireAdmin, (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/admin/users?${new URLSearchParams(req.query).toString()}`));
+app.patch ('/api/admin/users/:id/tier', requireAdmin, (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/admin/users/${req.params.id}/tier`));
+app.patch ('/api/admin/users/:id/role', requireAdmin, (req, res) => proxy(req, res, `${CFG.USER_SERVICE_URL}/admin/users/${req.params.id}/role`));
+app.get   ('/api/admin/tiers',          requireAdmin, (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/admin/tiers`));
+app.post  ('/api/admin/tiers',          requireAdmin, (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/admin/tiers`));
+app.put   ('/api/admin/tiers/:name',    requireAdmin, (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/admin/tiers/${req.params.name}`));
+app.delete('/api/admin/tiers/:name',    requireAdmin, (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/admin/tiers/${req.params.name}`));
 
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));

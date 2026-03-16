@@ -8,11 +8,12 @@
 // CONFIG
 // ============================================================
 const CFG = {
-  PORT:           process.env.PORT           || 8080,
-  MONGO_URI:      process.env.MONGO_URI,
-  DB_NAME:        process.env.DB_NAME        || 'boomboom',
-  JWT_SECRET:     process.env.JWT_SECRET,
-  FAV_SERVICE_URL: process.env.FAV_SERVICE_URL,
+  PORT:             process.env.PORT             || 8080,
+  MONGO_URI:        process.env.MONGO_URI,
+  DB_NAME:          process.env.DB_NAME          || 'boomboom',
+  JWT_SECRET:       process.env.JWT_SECRET,
+  FAV_SERVICE_URL:  process.env.FAV_SERVICE_URL,
+  TIERS_SERVICE_URL: process.env.TIERS_SERVICE_URL,
 
   UPDATE_INTERVAL_MS:  15_000,
   UPDATE_DISTANCE_M:   100,
@@ -22,7 +23,7 @@ const CFG = {
   MAX_VISIBLE_REGISTERED:  Infinity,
   VISIBLE_SELECTION_STRATEGY: 'random',  // 'random' | 'nearest' | 'newest'
 };
-const _missingCfg = ['JWT_SECRET', 'MONGO_URI', 'FAV_SERVICE_URL'].filter(k => !CFG[k]);
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI', 'FAV_SERVICE_URL', 'TIERS_SERVICE_URL'].filter(k => !CFG[k]);
 if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
@@ -85,6 +86,32 @@ async function getBlockedIds(callerId) {
   }
   _blockCache.set(callerId, { ids, expiresAt: Date.now() + BLOCK_CACHE_TTL_MS });
   return ids;
+}
+
+// Per-tier nearby radius cache — avoids a cross-service call on every nearby poll.
+// 5-minute TTL: tier radius changes made via the admin UI propagate within this window.
+const _tierRadiusCache = new Map(); // tier -> { radiusM: number, expiresAt: number }
+const TIER_RADIUS_CACHE_TTL_MS = 5 * 60_000;
+
+async function getNearbyRadiusM(tier) {
+  const cached = _tierRadiusCache.get(tier);
+  if (cached && cached.expiresAt > Date.now()) return cached.radiusM;
+  try {
+    const res = await fetch(
+      `${CFG.TIERS_SERVICE_URL}/tiers/radius/nearby/${encodeURIComponent(tier)}`,
+      { headers: { 'X-Service-Token': serviceToken() }, signal: AbortSignal.timeout(3000) }
+    );
+    if (!res.ok) throw new Error(`tiers-service ${res.status}`);
+    const data = await res.json();
+    const radiusM = typeof data.radiusM === 'number' ? data.radiusM : 500;
+    _tierRadiusCache.set(tier, { radiusM, expiresAt: Date.now() + TIER_RADIUS_CACHE_TTL_MS });
+    return radiusM;
+  } catch (err) {
+    console.error('[location] tiers-service radius fetch failed:', err.message);
+    // Static fallback — matches seed values; keeps nearby working if tiers-service is down
+    const fallback = { guest: 500, regular: 1_000, premium: 1_000 };
+    return fallback[tier] ?? 500;
+  }
 }
 
 function shouldUpdate(prev, next) {
@@ -293,16 +320,12 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       }
     }
 
-    // Inline radius table — mirrors the `tiers` collection (seeded by migration 004).
-    // Avoids a cross-service call on every nearby query.
-    // Update here when tier radii change via the admin UI (T-01).
-    const tier = req.auth.tier || 'guest';
-    const _nearbyRadii = { guest: 500, regular: 1_000, premium: 1_000 };
-    const radiusM = _nearbyRadii[tier] ?? null; // null = no cap (e.g. developer)
+    const tier    = req.auth.tier || 'guest';
+    const radiusM = await getNearbyRadiusM(tier);
 
     const withDist = nearby
       .map(u => ({ ...u, _dist: haversineDistance(lat, lon, u.lat, u.lon) }))
-      .filter(u => radiusM === null || u._dist <= radiusM);
+      .filter(u => u._dist <= radiusM);
 
     const visible = applyStrategy(withDist, Infinity, CFG.VISIBLE_SELECTION_STRATEGY);
 

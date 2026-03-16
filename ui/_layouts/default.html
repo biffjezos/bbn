@@ -37,22 +37,29 @@
 <script src="{{ '/scripts/app.js'    | relative_url }}?v={{ site.time | date: '%s' }}"></script>
 <script src="{{ '/scripts/blocks.js' | relative_url }}?v={{ site.time | date: '%s' }}"></script>
 
-<!-- Redirect guests away from protected pages -->
+<!-- Route guards: redirect unauthorised visitors before page content loads -->
 <script>
   (function () {
-    var base = window.BOOMBOOM_BASE || '';
-    var PROTECTED = [base + '/messages', base + '/favourites', base + '/profile'];
-    var path = window.location.pathname;
-    if (!PROTECTED.some(function(p) { return path.startsWith(p); })) return;
+    var base       = window.BOOMBOOM_BASE || '';
+    var PROTECTED  = [base + '/messages', base + '/favourites', base + '/profile'];
+    var ADMIN_ONLY = [base + '/admin'];
+    var path       = window.location.pathname;
+    var isAdmin    = ADMIN_ONLY.some(function(p) { return path.startsWith(p); });
+    var isProt     = PROTECTED.some(function(p)  { return path.startsWith(p); });
+    if (!isAdmin && !isProt) return;
     var token = localStorage.getItem('bbm_token');
     var valid = false;
     if (token) {
       try {
         var payload = JSON.parse(atob(token.split('.')[1]));
-        valid = ['user','admin'].includes(payload.role) && (payload.exp * 1000) > Date.now();
+        if ((payload.exp * 1000) > Date.now()) {
+          valid = isAdmin
+            ? payload.role === 'admin'
+            : ['user', 'admin'].includes(payload.role);
+        }
       } catch (e) {}
     }
-    if (!valid) { window.location.replace('{{ "/" | relative_url }}'); throw new Error('Guest redirect.'); }
+    if (!valid) { window.location.replace('{{ "/" | relative_url }}'); throw new Error('Auth redirect.'); }
   })();
 </script>
 

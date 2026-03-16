@@ -65,18 +65,11 @@ per-userId in-memory rate check.
 
 ---
 
-### 1.3 JWT tier claim goes stale after admin tier change (future risk)
+### 1.3 JWT tier claim goes stale after admin tier change
 
-**Files:** `services/server.js` (`checkTier`)
-
-The `tier` claim is baked into the JWT at login. `checkTier` reads it from the
-token payload, not from the DB. When the admin tier-change feature (T-01) is
-built, changing a tier in the DB has no effect until the old token expires.
-
-**Resolution (when T-01 is built):** Bump `tokenVersion` on tier change —
-same pattern already used for password changes. Cleanest fit with existing arch.
-
-**Priority:** Low now, blocks T-01 implementation.
+✅ **Resolved (2026-03-16, T-01):** Admin tier/role change bumps `tokenVersion`.
+All services reject the old JWT with `TOKEN_REVOKED` on the next request,
+forcing the user to re-login and receive a token with the updated claim.
 
 ---
 
@@ -296,7 +289,7 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 |---|---|---|---|---|
 | 🔲 | 1.1 | Security | HIGH | Plain password/email in POST request — needs OPAQUE/PAKE |
 | 🔲 | 1.2 | Security | MEDIUM | Gateway send-rate bypassable at messages-service level |
-| 🔲 | 1.3 | Security | LOW (future) | JWT tier claim stale after admin tier change |
+| ✅ | 1.3 | Security | LOW (future) | JWT tier claim stale after admin tier change — resolved T-01 |
 | 🔲 | 2.0 | Infrastructure | MEDIUM | MongoDB disk space — migration 003 not applied (dev-alpha: acceptable) |
 | 🔲 | 3.1 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
 | 🔲 | 3.2 | Bug | LOW | Tier badge in /profile has hard-coded values |
