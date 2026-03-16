@@ -374,10 +374,28 @@ async fn admin_list_tiers(
         Ok(cursor) => {
             let docs: Vec<Tier> = cursor.try_collect().await.unwrap_or_default();
             if docs.is_empty() {
-                // Collection not seeded yet — return static tiers so the admin UI is usable.
-                let mut fallback: Vec<Tier> = static_tiers().into_values().collect();
-                fallback.sort_by_key(|t| t.rank);
-                Json(json!({ "tiers": fallback })).into_response()
+                // Collection not seeded yet — seed static tiers now so edit/delete work immediately.
+                let now = DateTime::now();
+                let mut seed: Vec<Tier> = static_tiers().into_values().collect();
+                seed.sort_by_key(|t| t.rank);
+                let bson_docs: Vec<mongodb::bson::Document> = seed.iter().map(|t| doc! {
+                    "name":           &t.name,
+                    "label":          &t.label,
+                    "cls":            &t.cls,
+                    "rank":           t.rank as i32,
+                    "nearbyRadiusM":  t.nearby_radius_m as i32,
+                    "messageRadiusM": t.message_radius_m.map(|v| v as i32),
+                    "createdAt":      now,
+                    "updatedAt":      now,
+                }).collect();
+                if !bson_docs.is_empty() {
+                    let _ = state.db
+                        .collection::<mongodb::bson::Document>("tiers")
+                        .insert_many(bson_docs)
+                        .await;
+                    *state.tiers_cache.write().await = None;
+                }
+                Json(json!({ "tiers": seed })).into_response()
             } else {
                 Json(json!({ "tiers": docs })).into_response()
             }
