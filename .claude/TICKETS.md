@@ -56,6 +56,13 @@ requires no new infrastructure.
 - `ui/scripts/api.js` — admin API methods: `adminSearchUsers`, `adminSetTier`, `adminSetRole`, `adminListTiers`, `adminCreateTier`, `adminUpdateTier`, `adminDeleteTier`.
 - `ui/admin/admin-index.html` + `ui/scripts/admin.js` — admin UI: user search/expand/tier+role change; tier CRUD.
 
+### Tiers CRUD polish (2026-03-16 — follow-up session)
+
+- `tiers-service/src/main.rs` — `admin_list_tiers`: auto-seeds static tiers into the DB on first admin access (using `count_documents` guard, not deserialization result) so edit/delete immediately target real documents. Fetches the list as raw BSON `Document` to avoid silent `try_collect` failures causing spurious re-seeding.
+- `tiers-service/src/main.rs` — `admin_create_tier`: shifts all existing tiers with `rank >= new rank` up by 1 before inserting, keeping ranks contiguous.
+- `ui/scripts/admin.js` — edit form now expands inline below the clicked tier row instead of at the bottom of the list; heading removed; nearby/message radius fields on a dedicated second row; clicking a different row closes the previous form.
+- `ui/scripts/admin.js` — "New Tier" rank field is a select (0 → maxRank+1) labelled with the occupant tier at each position; defaults to "append".
+
 ### Notes
 
 - First use case: create a `developer` tier with expanded nearby and messaging radii.
