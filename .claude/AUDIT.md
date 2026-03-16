@@ -61,7 +61,7 @@ limit. A client with a valid JWT hitting the HTTP endpoint directly (or via
 multiple tabs) can exceed the per-user budget. messages-service needs its own
 per-userId in-memory rate check.
 
-**Priority:** Medium — actual spam risk before T-05 (blocking/reporting) is built.
+**Priority:** Medium — T-05 (blocking) is now live which reduces abuse risk, but the HTTP bypass remains. Address in T-03 iteration or as a standalone fix.
 
 ---
 

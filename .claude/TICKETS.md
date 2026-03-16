@@ -10,7 +10,7 @@ Technical debt and security findings live in `AUDIT.md`.
 
 Before any marketing or scaling push, the order of priority is:
 
-1. **T-05** — Blocking & reporting (user safety; no encrypted note yet — see T-05)
+1. ~~**T-05**~~ — ✅ Done (2026-03-16)
 2. **T-03** — DB-stored tiers (prerequisite for T-01; approved for implementation)
 3. **T-04a** — Rust port: `tiers-service` only (establishes Rust infra + Cargo workspace)
 4. **T-04b** — Rust port: `auth-service` + OPAQUE/PAKE (unlocks client-side key derivation)
@@ -234,11 +234,11 @@ tooling situation Node currently lacks.
 
 ## T-05 — Blocking & Reporting
 
-**Status:** Not started. **Highest priority ticket — must be done before growth.**
+**Status:** ✅ Phase 1 complete (2026-03-16). Deployed. Blocked on T-04b for phase 2.
 
 ### Phase split
 
-- **T-05 (now):** Block mechanism + reason enum + access_requests gate. No free-text note field yet.
+- **T-05 (done):** Block mechanism + reason enum. Deployed 2026-03-16.
 - **T-05b (after T-04b):** Add optional encrypted note field once OPAQUE-based key derivation is in place.
 
 ### Requirements
@@ -295,10 +295,28 @@ New endpoints on a new `blocks-service`:
 - `DELETE /blocks/:userId` — unblock
 - `GET /blocks` — list my blocked users (for settings page)
 
-The `location-service`, `messages-service`, and `users-service` must check the
-`blocks` collection directly (same MongoDB instance) before returning data.
+The `location-service`, `messages-service`, and `users-service` check the
+`blocks` collection directly (same MongoDB instance).
 
-### Rate limiting improvement (related — AUDIT.md 1.1)
+### Implemented (2026-03-16)
+
+- `services/blocks-service.js` — new service, deployed on Railway
+- `services/server.js` — proxy routes + health aggregator entry
+- `services/location-service.js` — block filter on nearby results (30 s cache)
+- `services/messages-service.js` — block check before message delivery
+- `services/users-service.js` — directional block check on `/profile`:
+  blockee gets 404; blocker sees profile with `blockedByViewer: true`
+- `services/migration-service.js` — migration `003_blocks_indexes`
+  (pending disk space — see AUDIT.md 2.0)
+- `ui/scripts/blocks.js` — `BlockModule` global, reason select modal
+- `ui/scripts/api.js` — `blockUser`, `unblockUser`, `getBlocks`
+- `ui/_layouts/default.html` — loads `blocks.js` on every page
+- `ui/_includes/modal-pin.html` — Report/Block in map pin modal
+- `ui/scripts/app.js` — wired pin block button
+- `ui/scripts/profile.js` — Block/Unblock button, Blocked badge, re-renders in-place
+- `ui/scripts/favourites.js` — blocked badge + disabled message btn in list/search
+
+### Rate limiting improvement (related — AUDIT.md 1.2)
 
 While building the blocking feature: add per-userId rate limiting at the
 messages-service level (not just the gateway WebSocket). A simple in-process
