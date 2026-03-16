@@ -62,6 +62,26 @@ const migrations = [
       await db.collection('blocks').createIndex({ blockedUserId: 1 });
     },
   },
+  {
+    id: '004_tiers_seed',
+    async up(db) {
+      await db.collection('tiers').createIndex({ name: 1 }, { unique: true });
+      const now = new Date();
+      const tiers = [
+        { name: 'guest',   label: 'Guest',   cls: 'secondary', rank: 0, nearbyRadiusM: 500,    messageRadiusM: null,   createdAt: now },
+        { name: 'regular', label: 'Regular', cls: 'primary',   rank: 1, nearbyRadiusM: 1_000,  messageRadiusM: 100,    createdAt: now },
+        { name: 'premium', label: 'Premium', cls: 'warning',   rank: 2, nearbyRadiusM: 23_000, messageRadiusM: 23_000, createdAt: now },
+      ];
+      for (const tier of tiers) {
+        // $setOnInsert: safe to re-run — won't overwrite values changed by admin later
+        await db.collection('tiers').updateOne(
+          { name: tier.name },
+          { $setOnInsert: tier },
+          { upsert: true }
+        );
+      }
+    },
+  },
 ];
 
 // ============================================================

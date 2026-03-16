@@ -118,8 +118,9 @@ Three independent copy-paste implementations of the same function. If a precisio
 
 ### 3.2 Tier badge in /profile has hard-coded values
 
-I changed the see_nearby values and added a fourth tier `developer` but the information of the tier-badge seems to be hard coded. We have to improve the tier system, so it also stores standard information per tier. Maybe adding a `GET /tier/{regular}/info` which would return standard phrases or values, which the ui could render as:
-See radius: x meters
+✅ **Resolved (2026-03-16, T-03):** `GET /api/tiers/:tier/info` added. Profile badge
+now fetches label, cls, and nearbyRadiusM dynamically from tiers-service. Also fixed
+a pre-existing bug where location-service had guest radius at 23,000 m instead of 500 m.
 
 ---
 

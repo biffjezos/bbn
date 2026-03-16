@@ -11,7 +11,7 @@ Technical debt and security findings live in `AUDIT.md`.
 Before any marketing or scaling push, the order of priority is:
 
 1. ~~**T-05**~~ — ✅ Done (2026-03-16)
-2. **T-03** — DB-stored tiers (prerequisite for T-01; approved for implementation)
+2. ~~**T-03**~~ — ✅ Done (2026-03-16)
 3. **T-04a** — Rust port: `tiers-service` only (establishes Rust infra + Cargo workspace)
 4. **T-04b** — Rust port: `auth-service` + OPAQUE/PAKE (unlocks client-side key derivation)
 5. **T-05b** — Add encrypted note field to blocks (now has correct key derivation foundation)
@@ -98,7 +98,7 @@ requires no new infrastructure.
 
 ## T-03 — DB-stored Tiers + Configurable RBAC
 
-**Status:** Approved for implementation. Prerequisite for T-01.
+**Status:** ✅ Complete (2026-03-16). Prerequisite for T-01 — now unblocked.
 
 ### Current state
 
@@ -167,6 +167,17 @@ optional `label` field to the radius value — no separate collection needed.
 2. `tiers-service.js` switches from static JSON to DB reads (with a short cache,
    e.g. 60 s TTL, to avoid a DB hit on every `checkTier` call).
 3. Admin UI endpoints for CRUD on tier documents.
+
+### Implemented (2026-03-16)
+
+- `services/migration-service.js` — migration `004_tiers_seed`: seeds guest/regular/premium into `tiers` collection (`$setOnInsert`, idempotent). Pending disk space (AUDIT.md 2.0) — static fallback active until applied.
+- `services/tiers-service.js` — full rewrite: MongoDB connection, 60s TTL cache (`loadTiers()`), `STATIC_TIERS` fallback if collection empty, new `GET /tiers/:name/info` endpoint, async radius lookups
+- `services/server.js` — added `GET /api/tiers/:tier/info` proxy route
+- `services/location-service.js` — fixed inline radius table (guest was 23,000 m → correct 500 m)
+- `ui/scripts/api.js` — added `getTierInfo(tier)` method
+- `ui/scripts/profile.js` — replaced hardcoded `TIER_DISPLAY` / `tierFeatureHtml` with API-driven version using `getTierInfo()` (fixes AUDIT.md 3.2)
+
+**New env vars for tiers-service:** `MONGO_URI`, `DB_NAME` (same values as other services).
 
 ### Owner's Comments
 
