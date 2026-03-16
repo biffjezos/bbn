@@ -18,6 +18,10 @@ Before any marketing or scaling push, the order of priority is:
 6. **T-07** — Settings page + device notifications (UX polish)
 7. **T-04** — Rust port (ongoing, start with simplest service; not blocking anything)
 
+### Owner's Comments
+
+- Generally agreed on the implementation order. T-05, T-03 approved for implementation, but need clarification. See my comments in the tickets and clarify open questions in the upcoming meeting.
+- I wonder if T-04 should have a higher priority. Probably less code to port, we could make use of common libraries earlier.
 ---
 
 ## T-01 — Admin UI (`/admin`)
@@ -43,6 +47,13 @@ Before any marketing or scaling push, the order of priority is:
 - Auth: a dedicated `admin` role added to JWT. Admin accounts created manually in DB for now.
 - The `/admin` route must be excluded from the Jekyll public build or served from a separate path with server-side auth checks.
 
+### Owner's Comments
+
+- I think there are a few things to clarify, what's a developer tier vs n admin role?
+- How do I create an elevated account? A change in the db ("regular" -> "admin") should not be permitted.
+- Maybe T-03 answers open questions.
+- Do not touch without explicit permission.
+
 ---
 
 ## T-02 — Analytics (`anal.js` / analytics-service)
@@ -63,6 +74,11 @@ Before any marketing or scaling push, the order of priority is:
 - **Option B — Log parsing:** Parse existing `console.log` output from Railway's log drain. Zero app changes, but requires a log aggregator.
 - **Recommendation:** Option A. One `analytics` collection, one `$inc` per event. The `anal.js` frontend script reads from a new `analytics-service` endpoint and renders simple charts (Chart.js is already included or trivial to add).
 - Do not add analytics writes to the hot path of high-frequency operations (location updates). Limit to: login, register, message sent, favourite added.
+
+### Owner's Comments
+
+- Option A it is.
+- Not a high priority at the moment. May be postponed.
 
 ---
 
@@ -138,6 +154,10 @@ optional `label` field to the radius value — no separate collection needed.
    e.g. 60 s TTL, to avoid a DB hit on every `checkTier` call).
 3. Admin UI endpoints for CRUD on tier documents.
 
+### Owner's Comments
+
+- Agreed to be of high priority, but needs clarification. Please elaborate in the upcoming meeting.
+
 ---
 
 ## T-04 — Port Services to Rust
@@ -183,6 +203,11 @@ The utilities duplicated across Node services (AUDIT.md 4.1) become a Rust
 shared crate. In a Cargo workspace at `/services-rs/Cargo.toml`, a `common`
 crate can hold JWT verification, ObjectId helpers, etc. This is the monorepo
 tooling situation Node currently lacks.
+
+### Owner's Comments
+
+- I wonder, if the port to rust should get a higher priority. If we port sooner, we could use common libs earlier and have less code to port. 
+- Tell me what you think in the upcoming meeting.
 
 ---
 
@@ -234,6 +259,14 @@ messages-service level (not just the gateway WebSocket). A simple in-process
 `Map<userId, { count, resetAt }>` in messages-service is sufficient for
 single-instance deployment.
 
+### Owner's Comments
+
+- Relates to T-05. 
+- Since the blocking information may contain personal information about the blocked user, I think the db entry or parts of it should be encrypted. 
+- Only the blocking user (through the UI) and an elevated account (admin / dev) should be able to  decrypt and read the blocking information. 
+- I could also think of a two-dimensional access system, in which a higher tier user (legal) must permit acccess (decryption in the admin ui) before the content can be decrypted. I want to avoid unrestricted access to the information. So, just because a user is an admin, access should not be granted, admins may access the information, but only if necessary and that is determined by a second account (ie a "legal"-role).
+- Short: Protected content can only be accessed by certain account types, but only if really necessary. Necessity must be approved by another account (or account type)
+
 ---
 
 ## T-06 — Venue Accounts
@@ -261,6 +294,10 @@ single-instance deployment.
   + AUDIT.md 1.2).
 - Venue login: same email/password, same JWT flow. Frontend detects
   `accountType: 'venue'` from the token and renders the venue profile view.
+
+### Owner's Comments
+
+- Not a high priority. Postponed until the rest is done. Remind me.
 
 ---
 
@@ -304,3 +341,8 @@ Notification events (priority order):
 
 The existing `notifications` collection (added 2026-03-16) already supports
 arbitrary `type` values. New event types are additive — no schema change needed.
+
+
+### Owner's Comments
+
+- Not a priority at the moment. May be postponed until after the rust port. Remind me.
