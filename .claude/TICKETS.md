@@ -12,7 +12,7 @@ Before any marketing or scaling push, the order of priority is:
 
 1. ~~**T-05**~~ — ✅ Done (2026-03-16)
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
-3. **T-04a** — Rust port: `tiers-service` only (establishes Rust infra + Cargo workspace)
+3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
 4. **T-04b** — Rust port: `auth-service` + OPAQUE/PAKE (unlocks client-side key derivation)
 5. **T-05b** — Add encrypted note field to blocks (now has correct key derivation foundation)
 6. **T-01** — Admin UI (needs T-03; benefits from auth being stable)
@@ -188,7 +188,7 @@ optional `label` field to the radius value — no separate collection needed.
 
 ## T-04 — Port Services to Rust
 
-**Status:** Not started. Priority elevated (2026-03-16). Sequenced as T-04a/b/c — see Implementation Order.
+**Status:** T-04a ✅ Complete (2026-03-16). T-04b next. Sequenced as T-04a/b/c — see Implementation Order.
 
 ### Rationale
 
