@@ -50,6 +50,18 @@ const migrations = [
       await db.collection('locations').createIndex({ location: '2dsphere' });
     },
   },
+  {
+    id: '003_blocks_indexes',
+    async up(db) {
+      // Unique: a user can only block another user once
+      await db.collection('blocks').createIndex(
+        { blockerUserId: 1, blockedUserId: 1 },
+        { unique: true }
+      );
+      // For "who has blocked me" lookups in location/messages/users services
+      await db.collection('blocks').createIndex({ blockedUserId: 1 });
+    },
+  },
 ];
 
 // ============================================================

@@ -18,6 +18,21 @@ extra_js:
       <div class="heading-serif fs-5" id="threadDisplayName">—</div>
       <div class="text-faint small" id="threadSubtitle"></div>
     </div>
+    <div class="ms-auto">
+      <div class="dropdown">
+        <button class="btn btn-bbm-ghost btn-sm px-2 py-1" type="button"
+          id="threadMenuBtn" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <button class="dropdown-item text-danger" id="threadBlockBtn">
+              <i class="bi bi-slash-circle me-2"></i>Block User
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
 
   <!-- Messages -->

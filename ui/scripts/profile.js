@@ -278,13 +278,29 @@ async function renderPublicProfile() {
       } catch { /* ok */ }
     }
 
+    const isBlocked = !!profile.blockedByViewer;
+    const msgBtnHtml = isBlocked
+      ? `<span class="btn btn-bbm-pink disabled" aria-disabled="true" style="opacity:0.5"><i class="bi bi-chat-dots me-2"></i>Message</span>`
+      : `<a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message</a>`;
+    const blockToggleHtml = isBlocked
+      ? `<button class="btn btn-link text-muted p-0" id="unblockUserBtn" style="font-size:0.875rem;text-decoration:none">
+           <i class="bi bi-slash-circle me-1"></i>Unblock
+         </button>`
+      : `<button class="btn btn-link text-danger p-0" id="blockUserBtn" style="font-size:0.875rem;text-decoration:none">
+           <i class="bi bi-slash-circle me-1"></i>Block User
+         </button>`;
+
     const actionBlock = viewerIsReg ? `
-      <div class="d-flex gap-3 flex-wrap mt-4">
-        <a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message</a>
+      <div class="d-flex gap-3 flex-wrap mt-4 align-items-center">
+        ${msgBtnHtml}
         <button class="btn ${isFav ? 'btn-bbm-outline-pink' : 'btn-bbm-ghost'}" id="favToggleBtn"
           data-userid="${escHtml(userId)}" data-fav="${isFav}">
           <i class="bi bi-star${isFav ? '-fill text-pink' : ''} me-2"></i>${isFav ? 'Favourited' : 'Add to Favourites'}
         </button>
+        ${isBlocked ? '<span class="badge bg-secondary" style="font-size:0.75rem">Blocked</span>' : ''}
+      </div>
+      <div class="mt-3">
+        ${blockToggleHtml}
       </div>` : `
       <div class="mt-4">
         <p class="text-muted-bb mb-3">Create an account to message and favourite people nearby.</p>
@@ -307,6 +323,19 @@ async function renderPublicProfile() {
       <div class="container-fluid px-4 px-md-5 py-4">
         <p class="text-faint small">More profile details coming soon.</p>
       </div>`;
+
+    const blockBtn = document.getElementById('blockUserBtn');
+    blockBtn?.addEventListener('click', () => {
+      window.BlockModule?.prompt(userId, profile.nickname || displayName);
+    });
+
+    const unblockBtn = document.getElementById('unblockUserBtn');
+    unblockBtn?.addEventListener('click', async () => {
+      try {
+        await window.Api.unblockUser(userId);
+        renderPublicProfile();
+      } catch (err) { alert('Error: ' + err.message); }
+    });
 
     const favBtn = document.getElementById('favToggleBtn');
     favBtn?.addEventListener('click', async () => {
@@ -333,6 +362,13 @@ async function renderPublicProfile() {
     </div>`;
   }
 }
+
+// After blocking from the public profile page, re-render to show Unblock button
+document.addEventListener('bbm:user-blocked', function () {
+  if (document.getElementById('pubProfilePage')) {
+    renderPublicProfile();
+  }
+});
 
 // Auto-run when loaded as extra_js
 (window.__authReady || Promise.resolve()).then(function() {

@@ -297,6 +297,13 @@ async function renderThread() {
   const nameEl = document.getElementById('threadDisplayName');
   if (nameEl) nameEl.textContent = displayName;
 
+  const threadBlockBtn = document.getElementById('threadBlockBtn');
+  if (threadBlockBtn) {
+    threadBlockBtn.onclick = function () {
+      window.BlockModule?.prompt(userId, displayName);
+    };
+  }
+
   if (!isRegistered() || !userId) {
     const _base = window.BOOMBOOM_BASE || '';
     window.location.href = isRegistered() ? _base + '/messages/' : _base + '/';
@@ -327,6 +334,13 @@ async function renderConversationList() {
   wrap.innerHTML = loadingHtml('Loading conversations…');
   // Actual data arrives via WS push → handleConversationsUpdate()
 }
+
+// After blocking from the message thread, go back to the conversations list
+document.addEventListener('bbm:user-blocked', function () {
+  if (document.getElementById('threadMsgs')) {
+    window.location.href = (window.BOOMBOOM_BASE || '') + '/messages/';
+  }
+});
 
 // ── Auto-run when loaded as extra_js ─────────────────────
 var _threadInitialized = false;

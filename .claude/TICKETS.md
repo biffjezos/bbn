@@ -10,18 +10,32 @@ Technical debt and security findings live in `AUDIT.md`.
 
 Before any marketing or scaling push, the order of priority is:
 
-1. **T-05** — Blocking & reporting (user safety prerequisite)
-2. **T-03** — DB-stored tiers (prerequisite for admin UI)
-3. **T-01** — Admin UI (ops enabler — tier/user management without code changes)
-4. **T-02** — Analytics (low-risk, can slot in any time)
-5. **T-06** — Venue accounts (needs admin UI, new market segment)
-6. **T-07** — Settings page + device notifications (UX polish)
-7. **T-04** — Rust port (ongoing, start with simplest service; not blocking anything)
+1. ~~**T-05**~~ — ✅ Done (2026-03-16)
+2. **T-03** — DB-stored tiers (prerequisite for T-01; approved for implementation)
+3. **T-04a** — Rust port: `tiers-service` only (establishes Rust infra + Cargo workspace)
+4. **T-04b** — Rust port: `auth-service` + OPAQUE/PAKE (unlocks client-side key derivation)
+5. **T-05b** — Add encrypted note field to blocks (now has correct key derivation foundation)
+6. **T-01** — Admin UI (needs T-03; benefits from auth being stable)
+7. **T-02** — Analytics (low-risk, can slot in any time)
+8. **T-06** — Venue accounts (needs T-01 and T-03)
+9. **T-07** — Settings page + device notifications (UX polish)
+10. **T-04c** — Rust port: remaining services (incremental, parallel with features)
+
+### Architectural Decision (2026-03-16)
+
+**Access control model: Enhanced RBAC + access gates. No full ABAC policy engine.**
+
+Roles are stored as DB documents (T-03 schema). Dual-control access (e.g. admin
+requesting block note decryption, legal approving it) is handled via a shared
+`access_requests` collection — not a policy engine. New gates are new
+`resourceType` values in that collection. This pattern ports cleanly to Rust and
+requires no new infrastructure.
 
 ### Owner's Comments
 
 - Generally agreed on the implementation order. T-05, T-03 approved for implementation, but need clarification. See my comments in the tickets and clarify open questions in the upcoming meeting.
 - I wonder if T-04 should have a higher priority. Probably less code to port, we could make use of common libraries earlier.
+- **2026-03-16:** Agreed. Enhanced RBAC + access_requests. No encryption of the optional note for now. Tiers-service Rust port moves up after T-05 and T-03. Then the rest.
 ---
 
 ## T-01 — Admin UI (`/admin`)
@@ -84,7 +98,7 @@ Before any marketing or scaling push, the order of priority is:
 
 ## T-03 — DB-stored Tiers + Configurable RBAC
 
-**Status:** Not started. Prerequisite for T-01.
+**Status:** Approved for implementation. Prerequisite for T-01.
 
 ### Current state
 
@@ -157,12 +171,13 @@ optional `label` field to the radius value — no separate collection needed.
 ### Owner's Comments
 
 - Agreed to be of high priority, but needs clarification. Please elaborate in the upcoming meeting.
+- **2026-03-16:** Approved for implementation.
 
 ---
 
 ## T-04 — Port Services to Rust
 
-**Status:** Not started. No external blockers.
+**Status:** Not started. Priority elevated (2026-03-16). Sequenced as T-04a/b/c — see Implementation Order.
 
 ### Rationale
 
@@ -199,21 +214,32 @@ gateway does not change when a service is ported.
 
 ### Note on shared code
 
-The utilities duplicated across Node services (AUDIT.md 4.1) become a Rust
+The utilities duplicated across Node services (AUDIT.md 6.1) become a Rust
 shared crate. In a Cargo workspace at `/services-rs/Cargo.toml`, a `common`
 crate can hold JWT verification, ObjectId helpers, etc. This is the monorepo
 tooling situation Node currently lacks.
 
 ### Owner's Comments
 
-- I wonder, if the port to rust should get a higher priority. If we port sooner, we could use common libs earlier and have less code to port. 
+- I wonder, if the port to rust should get a higher priority. If we port sooner, we could use common libs earlier and have less code to port.
 - Tell me what you think in the upcoming meeting.
+- **2026-03-16:** Priority elevated. Tiers-service first (T-04a), then auth-service + OPAQUE (T-04b) which unblocks T-05 block-note encryption. Remaining services (T-04c) follow incrementally.
+
+> **Reminder (2026-03-16):** Once T-04 (full Rust port) is complete, upgrade the
+> Railway MongoDB plan to free up disk space. This will unblock migration
+> `003_blocks_indexes` (see AUDIT.md 2.0) and should be done before any growth
+> push. Dev-alpha state is acceptable until then.
 
 ---
 
 ## T-05 — Blocking & Reporting
 
-**Status:** Not started. **Highest priority ticket — must be done before growth.**
+**Status:** ✅ Phase 1 complete (2026-03-16). Deployed. Blocked on T-04b for phase 2.
+
+### Phase split
+
+- **T-05 (done):** Block mechanism + reason enum. Deployed 2026-03-16.
+- **T-05b (after T-04b):** Add optional encrypted note field once OPAQUE-based key derivation is in place.
 
 ### Requirements
 
@@ -232,27 +258,65 @@ tooling situation Node currently lacks.
 
 ### Architecture
 
-New `blocks` collection:
+New `blocks` collection (T-05, phase 1 — no note field yet):
 ```json
 {
   "blockerUserId": "...",
   "blockedUserId": "...",
   "reason": "spam",
-  "note": "...",
   "createdAt": "..."
 }
 ```
 
-New endpoints on a new `blocks-service` (or added to `users-service`):
+Note field (`note: "..."`) is deferred to T-05b. Storing free-text without
+proper client-side encryption (pending T-04b + OPAQUE) would be a privacy
+regression. Reason enum is not sensitive.
+
+New `access_requests` collection (dual-control gate for future admin access to block data):
+```json
+{
+  "requestedBy": "admin_userId",
+  "resourceType": "block_note",
+  "resourceId": "block_id",
+  "approvedBy": "legal_userId",
+  "expiresAt": "...",
+  "usedAt": null
+}
+```
+
+Admin can request access to a block record. A `legal`-role account approves
+the request (time-limited). The decryption endpoint checks: `role === admin AND
+active approval EXISTS for (admin_id, block_id)`. This is the access gate
+pattern — no ABAC policy engine required. New resource types follow the same
+pattern.
+
+New endpoints on a new `blocks-service`:
 - `POST /blocks/:userId` — block a user with reason
 - `DELETE /blocks/:userId` — unblock
 - `GET /blocks` — list my blocked users (for settings page)
 
-The `location-service`, `messages-service`, and `users-service` must call the
-blocks-service (or check the `blocks` collection directly, since it's the same
-MongoDB instance) before returning data.
+The `location-service`, `messages-service`, and `users-service` check the
+`blocks` collection directly (same MongoDB instance).
 
-### Rate limiting improvement (related — AUDIT.md 1.1)
+### Implemented (2026-03-16)
+
+- `services/blocks-service.js` — new service, deployed on Railway
+- `services/server.js` — proxy routes + health aggregator entry
+- `services/location-service.js` — block filter on nearby results (30 s cache)
+- `services/messages-service.js` — block check before message delivery
+- `services/users-service.js` — directional block check on `/profile`:
+  blockee gets 404; blocker sees profile with `blockedByViewer: true`
+- `services/migration-service.js` — migration `003_blocks_indexes`
+  (pending disk space — see AUDIT.md 2.0)
+- `ui/scripts/blocks.js` — `BlockModule` global, reason select modal
+- `ui/scripts/api.js` — `blockUser`, `unblockUser`, `getBlocks`
+- `ui/_layouts/default.html` — loads `blocks.js` on every page
+- `ui/_includes/modal-pin.html` — Report/Block in map pin modal
+- `ui/scripts/app.js` — wired pin block button
+- `ui/scripts/profile.js` — Block/Unblock button, Blocked badge, re-renders in-place
+- `ui/scripts/favourites.js` — blocked badge + disabled message btn in list/search
+
+### Rate limiting improvement (related — AUDIT.md 1.2)
 
 While building the blocking feature: add per-userId rate limiting at the
 messages-service level (not just the gateway WebSocket). A simple in-process
