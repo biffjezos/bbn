@@ -61,7 +61,7 @@ function issueUserToken(user) {
       nickname: user.nickname,
       sex:      user.sex,
       age:      user.age      ?? null,
-      role:     'user',
+      role:     ['user','admin'].includes(user.role) ? user.role : 'user',
       tier:     user.tier || 'regular',
       tv:       user.tokenVersion ?? 0,
     },
@@ -83,7 +83,7 @@ async function verifyToken(req, res, next, requireRegistered = false) {
   } catch {
     return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
-  if (requireRegistered && payload.role !== 'user')
+  if (requireRegistered && !['user','admin'].includes(payload.role))
     return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
 
   // Verify tokenVersion so password changes invalidate old JWTs.

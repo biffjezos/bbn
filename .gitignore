@@ -9,6 +9,9 @@ services/node_modules/
 services/*.lockb
 services/.env
 
+# Rust build output
+services/target/
+
 # Root-level env files — NEVER commit secrets
 .env
 .env.local

@@ -20,7 +20,7 @@ use axum::{
 };
 use common::auth::{JwtSecret, ServiceToken};
 use futures_util::TryStreamExt;
-use mongodb::{bson::doc, Client, Database};
+use mongodb::{bson::{doc, DateTime}, Client, Database};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::RwLock;
@@ -300,6 +300,48 @@ async fn not_found() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." })))
 }
 
+// ── Startup seeder ────────────────────────────────────────────────────────────
+
+/// Upserts the three base tiers into MongoDB on startup.
+/// Uses $set for radius fields so corrections propagate to existing records,
+/// and $setOnInsert for immutable fields (name, label, cls, rank, createdAt).
+/// Does NOT create indexes (that remains migration 004's responsibility).
+async fn seed_tiers(db: &Database) {
+    let col = db.collection::<mongodb::bson::Document>("tiers");
+    let now = DateTime::now();
+    // (name, label, cls, rank, nearbyRadiusM, messageRadiusM)
+    let seeds: &[(&str, &str, &str, i32, i32, Option<i32>)] = &[
+        ("guest",   "Guest",   "secondary", 0, 500,   None),
+        ("regular", "Regular", "primary",   1, 1_000, Some(100)),
+        ("premium", "Premium", "warning",   2, 1_000, Some(1_000)),
+    ];
+    let mut seeded = 0u32;
+    for &(name, label, cls, rank, nearby, msg) in seeds {
+        let filter = doc! { "name": name };
+        let msg_bson = msg.map_or(mongodb::bson::Bson::Null, |v| v.into());
+        let update = doc! {
+            "$set": {
+                "nearbyRadiusM":  nearby,
+                "messageRadiusM": msg_bson,
+            },
+            "$setOnInsert": {
+                "name": name, "label": label, "cls": cls,
+                "rank": rank, "createdAt": now,
+            },
+        };
+        match col.update_one(filter, update).upsert(true).await {
+            Ok(r) if r.upserted_id.is_some() => seeded += 1,
+            Ok(_)  => {}
+            Err(e) => eprintln!("[tiers] seed warning ({name}): {e}"),
+        }
+    }
+    if seeded > 0 {
+        println!("[tiers] Seeded {seeded} tier(s) into DB.");
+    } else {
+        println!("[tiers] Tier radii synced.");
+    }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -316,6 +358,7 @@ async fn main() {
         .expect("Failed to connect to MongoDB")
         .database(&cfg.db_name);
     println!("[tiers] DB connected.");
+    seed_tiers(&db).await;
 
     let state = AppState {
         db,

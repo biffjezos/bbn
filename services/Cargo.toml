@@ -1,5 +1,5 @@
 [workspace]
-members  = ["common", "tiers-service"]
+members  = ["common", "tiers-service", "auth-service"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -13,3 +13,4 @@ futures-util  = "0.3"
 anyhow        = "1"
 tracing       = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+bcrypt        = "0.15"

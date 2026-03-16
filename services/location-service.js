@@ -145,7 +145,7 @@ async function verifyToken(req, res, next, requireRegistered = false) {
   } catch {
     return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
-  if (requireRegistered && payload.role !== 'user')
+  if (requireRegistered && !['user','admin'].includes(payload.role))
     return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
 
   // Verify tokenVersion so password changes invalidate old JWTs.
@@ -297,7 +297,7 @@ app.get('/location/nearby', requireAny, async (req, res) => {
     // Avoids a cross-service call on every nearby query.
     // Update here when tier radii change via the admin UI (T-01).
     const tier = req.auth.tier || 'guest';
-    const _nearbyRadii = { guest: 500, regular: 1_000, premium: 23_000 };
+    const _nearbyRadii = { guest: 500, regular: 1_000, premium: 1_000 };
     const radiusM = _nearbyRadii[tier] ?? null; // null = no cap (e.g. developer)
 
     const withDist = nearby

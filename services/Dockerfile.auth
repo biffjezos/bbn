@@ -1,20 +1,19 @@
 # ── Build stage ───────────────────────────────────────────────
-# rust:latest includes rustup — rust-toolchain.toml installs nightly automatically
 FROM rust:latest AS builder
 WORKDIR /build
 # Copy workspace files from services/ subdirectory (build context is repo root)
 COPY services/Cargo.toml services/rust-toolchain.toml ./
 COPY services/common ./common
-COPY services/tiers-service ./tiers-service
-COPY services/auth-service/Cargo.toml ./auth-service/Cargo.toml
-RUN mkdir -p ./auth-service/src && echo 'fn main(){}' > ./auth-service/src/main.rs
-RUN cargo build --release -p tiers-service
+COPY services/tiers-service/Cargo.toml ./tiers-service/Cargo.toml
+RUN mkdir -p ./tiers-service/src && echo 'fn main(){}' > ./tiers-service/src/main.rs
+COPY services/auth-service ./auth-service
+RUN cargo build --release -p auth-service
 
 # ── Runtime stage ─────────────────────────────────────────────
 FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /build/target/release/tiers-service /usr/local/bin/tiers-service
+COPY --from=builder /build/target/release/auth-service /usr/local/bin/auth-service
 EXPOSE 8080
-CMD ["/usr/local/bin/tiers-service"]
+CMD ["/usr/local/bin/auth-service"]

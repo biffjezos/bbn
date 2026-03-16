@@ -10,7 +10,7 @@ function isRegistered() {
   try {
     if (typeof window.Auth?.isRegistered === 'function') return window.Auth.isRegistered();
     const payload = JSON.parse(atob(window.Auth.getToken().split('.')[1]));
-    return payload.role === 'user';
+    return ['user', 'admin'].includes(payload.role);
   } catch { return false; }
 }
 

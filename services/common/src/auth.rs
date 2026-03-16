@@ -8,13 +8,18 @@
 /// # User token decode
 /// Call `decode_user_token(raw, secret)` to decode a user/guest JWT.
 /// The token-version DB check is service-specific and NOT done here.
+///
+/// # Token issuing
+/// `issue_user_token` and `issue_guest_token` are used by auth-service
+/// (and users-service when ported) to sign JWTs.
 use axum::{
     extract::{FromRef, FromRequestParts},
     http::{request::Parts, StatusCode},
     response::Json,
 };
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // ── Shared secret newtype ─────────────────────────────────────────────────────
 
@@ -96,9 +101,10 @@ where
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserClaims {
     pub sub:      String,
-    pub role:     String, // "user" | "guest"
+    pub role:     String, // "user" | "admin" | "guest"
     pub tier:     Option<String>,
     pub tv:       Option<u32>,   // tokenVersion
+    pub email:    Option<String>,
     pub nickname: Option<String>,
     pub age:      Option<u32>,
     pub sex:      Option<String>,
@@ -116,4 +122,93 @@ pub fn decode_user_token(
         &Validation::new(Algorithm::HS256),
     )?
     .claims)
+}
+
+// ── Token issuing ─────────────────────────────────────────────────────────────
+
+const USER_TOKEN_EXPIRY_SECS:  u64 = 7 * 24 * 3600; // 7 days
+const GUEST_TOKEN_EXPIRY_SECS: u64 = 15 * 60;        // 15 minutes
+
+#[derive(Serialize)]
+struct IssuedUserClaims {
+    sub:      String,
+    email:    String,
+    nickname: String,
+    sex:      String,
+    age:      Option<u32>,
+    role:     String,
+    tier:     String,
+    tv:       u32,
+    exp:      u64,
+    iat:      u64,
+}
+
+#[derive(Serialize)]
+struct IssuedGuestClaims {
+    sub:  String,
+    role: String,
+    tier: String,
+    exp:  u64,
+    iat:  u64,
+}
+
+fn now_unix() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+pub struct UserTokenParams<'a> {
+    pub sub:      &'a str,
+    pub email:    &'a str,
+    pub nickname: &'a str,
+    pub sex:      &'a str,
+    pub age:      Option<u32>,
+    pub role:     &'a str,
+    pub tier:     &'a str,
+    pub tv:       u32,
+}
+
+/// Sign a user JWT. `role` is typically `"user"` or `"admin"`.
+pub fn issue_user_token(
+    p: UserTokenParams<'_>,
+    secret: &str,
+) -> Result<String, jsonwebtoken::errors::Error> {
+    let now = now_unix();
+    encode(
+        &Header::new(Algorithm::HS256),
+        &IssuedUserClaims {
+            sub:      p.sub.to_string(),
+            email:    p.email.to_string(),
+            nickname: p.nickname.to_string(),
+            sex:      p.sex.to_string(),
+            age:      p.age,
+            role:     p.role.to_string(),
+            tier:     p.tier.to_string(),
+            tv:       p.tv,
+            exp:      now + USER_TOKEN_EXPIRY_SECS,
+            iat:      now,
+        },
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+}
+
+/// Sign a guest JWT.
+pub fn issue_guest_token(
+    guest_id: &str,
+    secret: &str,
+) -> Result<String, jsonwebtoken::errors::Error> {
+    let now = now_unix();
+    encode(
+        &Header::new(Algorithm::HS256),
+        &IssuedGuestClaims {
+            sub:  guest_id.to_string(),
+            role: "guest".to_string(),
+            tier: "guest".to_string(),
+            exp:  now + GUEST_TOKEN_EXPIRY_SECS,
+            iat:  now,
+        },
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
 }

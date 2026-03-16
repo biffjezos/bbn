@@ -13,7 +13,7 @@ Before any marketing or scaling push, the order of priority is:
 1. ~~**T-05**~~ — ✅ Done (2026-03-16)
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
 3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
-4. **T-04b** — Rust port: `auth-service` + OPAQUE/PAKE (unlocks client-side key derivation)
+4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
 5. **T-05b** — Add encrypted note field to blocks (now has correct key derivation foundation)
 6. **T-01** — Admin UI (needs T-03; benefits from auth being stable)
 7. **T-02** — Analytics (low-risk, can slot in any time)
@@ -58,8 +58,30 @@ requires no new infrastructure.
 ### Notes
 
 - First use case: create a `developer` tier with expanded nearby and messaging radii.
-- Auth: a dedicated `admin` role added to JWT. Admin accounts created manually in DB for now.
+- Auth: a dedicated `admin` role added to JWT. **Not** created manually in DB — see bootstrap mechanism below.
 - The `/admin` route must be excluded from the Jekyll public build or served from a separate path with server-side auth checks.
+
+### On `admin` role vs tiers
+
+`admin` is a **role**, not a tier. A tier controls feature access (see_map, message_online, etc.). A role controls what actions the user can perform on other users and system data. A user can be `tier: premium, role: admin`. They are orthogonal. The JWT must carry both.
+
+Currently only `tier` is in the JWT. `role` needs to be added when T-01 is built. A plain DB edit to the `tier` field does not grant admin access — roles are separate and enforced separately.
+
+### Bootstrap mechanism (prerequisite for T-01)
+
+**Problem:** You need an admin to create an admin. Manual DB edits must not be the answer — they bypass auth and are not portable.
+
+**Solution: `ADMIN_BOOTSTRAP_USER_ID` env var on auth-service (or gateway)**
+
+1. Developer registers a normal account via the app.
+2. Sets `ADMIN_BOOTSTRAP_USER_ID=<userId>` as an env var on Railway.
+3. On next service boot: if no admin exists yet, the service promotes that userId to `role: admin`, bumps their `tokenVersion`.
+4. Developer re-logs in → receives a JWT with `role: admin`.
+5. Env var is removed from Railway (the service is a no-op if an admin already exists, but it should be removed as hygiene).
+
+This is the only path to the first admin. All subsequent admin promotions go through the admin UI with an authenticated admin JWT. Raw DB edits to role/tier fields have no effect without a `tokenVersion` bump, which only the service can perform.
+
+**Implementation note:** Must be part of T-04b (auth-service Rust port) or implemented in the current `auth-service.js` as a startup hook. Cannot be done before `role` is added to the JWT.
 
 ### Owner's Comments
 
@@ -67,6 +89,7 @@ requires no new infrastructure.
 - How do I create an elevated account? A change in the db ("regular" -> "admin") should not be permitted.
 - Maybe T-03 answers open questions.
 - Do not touch without explicit permission.
+- **2026-03-16:** Confirmed: admin is a role, not a tier. Bootstrap via env var is the right approach. Raw DB edits must not grant access.
 
 ---
 
@@ -188,7 +211,22 @@ optional `label` field to the radius value — no separate collection needed.
 
 ## T-04 — Port Services to Rust
 
-**Status:** T-04a ✅ Complete (2026-03-16). T-04b next. Sequenced as T-04a/b/c — see Implementation Order.
+**Status:** T-04a ✅ Complete (2026-03-16). T-04b ✅ Complete (2026-03-16). T-01 now unblocked. Sequenced as T-04a/b/c — see Implementation Order.
+
+### T-04b — What was implemented (2026-03-16)
+
+- `services/auth-service/` — full Rust port (axum 0.8, bcrypt, mongodb 3)
+- `common/src/auth.rs` — added `email` to `UserClaims`, added `issue_user_token` / `issue_guest_token` (reusable for future service ports)
+- `role` field added to JWT (`user` | `admin`). Read from DB on login; new users get `role: user` on register.
+- Bootstrap mechanism: `ADMIN_BOOTSTRAP_USER_ID` env var. On boot, if set and no admin exists, promotes that user and bumps `tokenVersion`. Safe to leave set (no-op after first run, but should be removed).
+- `services/Dockerfile.auth` for Railway deployment.
+- Identical HTTP contract to `auth-service.js` — gateway unchanged.
+
+**New env vars for auth-service:** `MONGO_URI`, `DB_NAME`, `JWT_SECRET` (same values as other services), `ADMIN_BOOTSTRAP_USER_ID` (one-time, remove after use).
+
+### T-04b — OPAQUE/PAKE (deferred)
+
+OPAQUE requires client-side protocol participation (JS changes to login/register forms). The Rust infrastructure is now in place. This is a separate workstream — see AUDIT.md 1.1.
 
 ### Rationale
 

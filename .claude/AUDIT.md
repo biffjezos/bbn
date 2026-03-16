@@ -181,6 +181,50 @@ The following utilities are copy-pasted across 3–4 files each:
 
 If the JWT payload structure changes (e.g., adding a field), every `issueUserToken` and `verifyToken` in every service must be updated. This is a recurring maintenance risk.
 
+### 6.3 Auth validation is duplicated across every service (root cause of the admin-role bug cascade)
+
+**Date:** 2026-03-16
+**Files:** `services/messages-service.js`, `services/favourites-service.js`, `services/blocks-service.js`, `services/users-service.js`, `services/server.js`, `ui/_layouts/default.html`
+
+**What happened.**
+Adding a second privileged role (`admin`) required changes in 6 separate files. The bug had *three* distinct failure layers, all hit in sequence:
+
+1. **Frontend layout guard** (`default.html` inline `<script>`) — hard-coded `payload.role === 'user'`, rejecting admin tokens before the page even loaded. Redirected to `/` immediately.
+2. **Backend `verifyToken` functions** — every service independently checks `payload.role !== 'user'` and returns 403 `REGISTERED_REQUIRED`. Four services had this guard.
+3. **`issueUserToken` in `users-service.js`** — hard-coded `role: 'user'`, silently downgrading the admin to a regular user token after a password change.
+
+None of these components communicates with each other. Each enforces its own auth rules from a local copy-paste of `verifyToken`. Changing the role model (any new role, any new field) requires finding and updating every copy.
+
+**Why the design ended up this way.**
+The microservice architecture was chosen to allow services to be deployed and scaled independently. Each service is intentionally self-contained (no shared library, no private package registry — see 6.1). The consequence is that shared logic like token validation must be replicated verbatim. This is a well-known microservice trade-off and was noted in 6.1 as deferred. The admin role was added *after* the pattern was established, so the role check in every existing `verifyToken` was never updated.
+
+**Root cause (design).**
+There is no single point of auth enforcement. The gateway (`server.js`) already sits in front of all services and already decodes the JWT for tier checks. But it does not validate role or tokenVersion — it passes the raw `Authorization` header to each service. Each service therefore re-implements the same auth logic independently.
+
+**Suggested solution — centralise auth validation in the gateway.**
+
+The gateway already:
+- Holds the JWT secret
+- Decodes the token for `checkTier`
+- Forwards the raw `Authorization` header to services
+
+The minimal change: add a `verifyUserToken` step in the gateway proxy that validates signature + role + tokenVersion, then injects `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers. Services would read these headers instead of re-verifying the JWT. They are already protected from external callers by `X-Service-Token`.
+
+Benefits:
+- Role-model changes touch exactly **one file** (gateway).
+- tokenVersion DB check runs in one place (with one cache).
+- Individual services become thinner; no JWT dependency.
+
+**Prerequisites / cost:**
+- Medium refactor: gateway `proxy()` helper grows a `verifyUserToken` step; each service's `verifyToken` is replaced by a header read.
+- The frontend layout guard is a separate concern (client-side gate for UX); must stay but should be the *only* client-side check, not duplicated.
+- Requires careful handling of routes that allow guests (header `X-Auth-Role: guest` for unauthenticated requests).
+- Token: ~1–2 days for a careful port + test across all services.
+
+**Priority:** MEDIUM. The immediate bug is fixed. The risk persists for any future role or field change.
+
+---
+
 ### 6.2 `app.js` mixes four distinct module concerns
 
 **File:** `ui/scripts/app.js`
@@ -260,3 +304,4 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 | 🔲 | 4.2 | Performance | LOW | Notification poll scales linearly with active users |
 | 🔲 | 6.1 | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated |
 | 🔲 | 6.2 | Maintainability | LOW | app.js mixes four module concerns |
+| 🔲 | 6.3 | Maintainability | MEDIUM | Auth validation duplicated per-service — role changes require 6+ file edits |

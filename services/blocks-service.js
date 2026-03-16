@@ -64,10 +64,11 @@ async function verifyToken(req, res, next) {
   } catch {
     return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
-  if (payload.role !== 'user')
+  if (!['user','admin'].includes(payload.role))
     return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
 
-  try {
+  // Admin tokens skip tokenVersion check — consistent with users-service and location-service.
+  if (payload.role === 'user') try {
     const cached = _tvCache.get(payload.sub);
     let dbTv;
     if (cached && cached.exp > Date.now()) {
