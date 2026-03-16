@@ -331,9 +331,9 @@ async fn main() {
         .route("/tiers/info",                  get(tiers_info))
         .route("/tiers/features",              get(tiers_features))
         .route("/tiers/check",                 post(tiers_check))
-        .route("/tiers/radius/nearby/:tier",   get(nearby_radius))
-        .route("/tiers/radius/message/:tier",  get(message_radius))
-        .route("/tiers/:name/info",            get(tier_info))
+        .route("/tiers/radius/nearby/{tier}",   get(nearby_radius))
+        .route("/tiers/radius/message/{tier}",  get(message_radius))
+        .route("/tiers/{name}/info",            get(tier_info))
         .fallback(not_found)
         .with_state(state);
 
