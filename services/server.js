@@ -17,11 +17,12 @@ const CFG = {
   MSG_SERVICE_URL:       process.env.MSG_SERVICE_URL,
   FAV_SERVICE_URL:       process.env.FAV_SERVICE_URL,
   TIERS_SERVICE_URL:     process.env.TIERS_SERVICE_URL,
+  BLOCKS_SERVICE_URL:    process.env.BLOCKS_SERVICE_URL,
   MIGRATION_SERVICE_URL: process.env.MIGRATION_SERVICE_URL,
   JWT_SECRET:            process.env.JWT_SECRET,
 };
 const _missingCfg = ['AUTH_SERVICE_URL','USER_SERVICE_URL','LOC_SERVICE_URL','MSG_SERVICE_URL',
-  'FAV_SERVICE_URL','TIERS_SERVICE_URL','MIGRATION_SERVICE_URL','JWT_SECRET'].filter(k => !CFG[k]);
+  'FAV_SERVICE_URL','TIERS_SERVICE_URL','BLOCKS_SERVICE_URL','MIGRATION_SERVICE_URL','JWT_SECRET'].filter(k => !CFG[k]);
 if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 // ============================================================
 
@@ -79,6 +80,7 @@ app.get('/api/health', async (_req, res) => {
     messages:   `${CFG.MSG_SERVICE_URL}/health`,
     favourites: `${CFG.FAV_SERVICE_URL}/health`,
     tiers:      `${CFG.TIERS_SERVICE_URL}/health`,
+    blocks:     `${CFG.BLOCKS_SERVICE_URL}/health`,
   };
 
   const results = await Promise.allSettled(
@@ -211,6 +213,11 @@ app.get   ('/api/favourites',                  checkTier('manage_favourites'), (
 app.get   ('/api/favourites/is-mutual/:userId', checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/is-mutual/${req.params.userId}`));
 app.post  ('/api/favourites/:userId',           checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
 app.delete('/api/favourites/:userId',           checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
+
+// --- Blocks -------------------------------------------------
+app.get   ('/api/blocks',          (req, res) => proxy(req, res, `${CFG.BLOCKS_SERVICE_URL}/blocks`));
+app.post  ('/api/blocks/:userId',  (req, res) => proxy(req, res, `${CFG.BLOCKS_SERVICE_URL}/blocks/${req.params.userId}`));
+app.delete('/api/blocks/:userId',  (req, res) => proxy(req, res, `${CFG.BLOCKS_SERVICE_URL}/blocks/${req.params.userId}`));
 
 // --- Notifications ------------------------------------------
 app.get   ('/api/notifications',     (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/notifications`));

@@ -302,6 +302,20 @@ app.get('/users/:userId/profile', requireAny, async (req, res) => {
   try {
     const oid = safeObjectId(req.params.userId);
     if (!oid) return res.status(400).json({ error: 'Invalid userId.' });
+
+    // Block check — registered viewers only (guests cannot block or be blocked)
+    if (req.auth.role === 'user') {
+      const viewerId = req.auth.sub;
+      const targetId = req.params.userId;
+      const block = await db.collection('blocks').findOne({
+        $or: [
+          { blockerUserId: viewerId, blockedUserId: targetId },
+          { blockerUserId: targetId, blockedUserId: viewerId },
+        ],
+      });
+      if (block) return res.status(404).json({ error: 'User not found.' });
+    }
+
     const user = await db.collection('users').findOne(
       { _id: oid },
       { projection: { nickname: 1, age: 1, sex: 1, publicKey: 1, _id: 0 } }

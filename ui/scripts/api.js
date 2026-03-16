@@ -194,6 +194,23 @@ const Api = {
     return apiFetch(`/favourites/is-mutual/${encodeURIComponent(userId)}`);
   },
 
+  // ---- Blocks -------------------------------------------------
+
+  blockUser(userId, reason) {
+    return apiFetch(`/blocks/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  unblockUser(userId) {
+    return apiFetch(`/blocks/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+  },
+
+  getBlocks() {
+    return apiFetch('/blocks');
+  },
+
   // ---- Notifications ------------------------------------------
 
   getNotifications() {

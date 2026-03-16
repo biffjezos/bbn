@@ -323,6 +323,14 @@
             };
           }).catch(function() { /* ignore */ });
         }
+
+        var pinBlockBtn = $('pinBlockBtn');
+        if (pinBlockBtn) {
+          pinBlockBtn.onclick = function () {
+            bootstrap.Modal.getInstance($('pinModal'))?.hide();
+            window.BlockModule?.prompt(userId, nickname || 'this user');
+          };
+        }
       }
 
       new bootstrap.Modal($('pinModal')).show();

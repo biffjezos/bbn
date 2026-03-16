@@ -285,6 +285,11 @@ async function renderPublicProfile() {
           data-userid="${escHtml(userId)}" data-fav="${isFav}">
           <i class="bi bi-star${isFav ? '-fill text-pink' : ''} me-2"></i>${isFav ? 'Favourited' : 'Add to Favourites'}
         </button>
+      </div>
+      <div class="mt-3">
+        <button class="btn btn-link text-danger p-0" id="blockUserBtn" style="font-size:0.875rem;text-decoration:none">
+          <i class="bi bi-slash-circle me-1"></i>Block User
+        </button>
       </div>` : `
       <div class="mt-4">
         <p class="text-muted-bb mb-3">Create an account to message and favourite people nearby.</p>
@@ -307,6 +312,11 @@ async function renderPublicProfile() {
       <div class="container-fluid px-4 px-md-5 py-4">
         <p class="text-faint small">More profile details coming soon.</p>
       </div>`;
+
+    const blockBtn = document.getElementById('blockUserBtn');
+    blockBtn?.addEventListener('click', () => {
+      window.BlockModule?.prompt(userId, profile.nickname || displayName);
+    });
 
     const favBtn = document.getElementById('favToggleBtn');
     favBtn?.addEventListener('click', async () => {
@@ -333,6 +343,13 @@ async function renderPublicProfile() {
     </div>`;
   }
 }
+
+// After blocking from the public profile page, go back to the map
+document.addEventListener('bbm:user-blocked', function () {
+  if (document.getElementById('pubProfilePage')) {
+    window.location.href = (window.BOOMBOOM_BASE || '') + '/';
+  }
+});
 
 // Auto-run when loaded as extra_js
 (window.__authReady || Promise.resolve()).then(function() {

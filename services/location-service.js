@@ -67,6 +67,26 @@ function notifyRangeSync(userId, lat, lon) {
 const NEARBY_CACHE_TTL_MS = 2_000;
 let _activeUsersCache = null; // { users: Array, expiresAt: number }
 
+// Per-user block list cache — avoids a DB round-trip on every 5-second nearby poll.
+// Blocks change infrequently; 30-second staleness is acceptable.
+const _blockCache = new Map(); // userId -> { ids: Set<string>, expiresAt: number }
+const BLOCK_CACHE_TTL_MS = 30_000;
+
+async function getBlockedIds(callerId) {
+  const cached = _blockCache.get(callerId);
+  if (cached && cached.expiresAt > Date.now()) return cached.ids;
+  const docs = await db.collection('blocks').find(
+    { $or: [{ blockerUserId: callerId }, { blockedUserId: callerId }] },
+    { projection: { blockerUserId: 1, blockedUserId: 1 } }
+  ).toArray();
+  const ids = new Set();
+  for (const d of docs) {
+    ids.add(d.blockerUserId === callerId ? d.blockedUserId : d.blockerUserId);
+  }
+  _blockCache.set(callerId, { ids, expiresAt: Date.now() + BLOCK_CACHE_TTL_MS });
+  return ids;
+}
+
 function shouldUpdate(prev, next) {
   if (!prev) return true;
   const timePassed = Date.now() - new Date(prev.updatedAt).getTime() >= CFG.UPDATE_INTERVAL_MS;
@@ -263,7 +283,15 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       const all    = await db.collection('locations').find({ updatedAt: { $gt: cutoff } }).toArray();
       _activeUsersCache = { users: all, expiresAt: now + NEARBY_CACHE_TTL_MS };
     }
-    const nearby = _activeUsersCache.users.filter(u => u.userId !== callerId);
+    let nearby = _activeUsersCache.users.filter(u => u.userId !== callerId);
+
+    // Filter out blocked / blocking users — registered users only (guests cannot block)
+    if (req.auth.role === 'user') {
+      const blockedIds = await getBlockedIds(callerId);
+      if (blockedIds.size > 0) {
+        nearby = nearby.filter(u => !blockedIds.has(u.userId));
+      }
+    }
 
     // Inline radius table — avoids a cross-service call on every nearby query.
     // guest=23 km, all registered tiers=unlimited (null).

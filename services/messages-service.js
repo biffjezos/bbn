@@ -238,6 +238,15 @@ app.post('/messages/:userId', verifyToken, async (req, res) => {
     );
     if (!toUser) return res.status(404).json({ error: 'Recipient not found.' });
 
+    // --- Block check (either direction) ---
+    const blockDoc = await db.collection('blocks').findOne({
+      $or: [
+        { blockerUserId: fromId, blockedUserId: toId },
+        { blockerUserId: toId,   blockedUserId: fromId },
+      ],
+    });
+    if (blockDoc) return res.status(403).json({ error: 'You cannot message this user.' });
+
     const svcAuth = { Authorization: `Bearer ${serviceToken()}`, 'X-Service-Token': serviceToken() };
 
     // --- Step 1: mutual favourites check + stored withinRange flag ---
