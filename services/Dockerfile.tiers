@@ -6,7 +6,7 @@ WORKDIR /build
 COPY services/Cargo.toml services/rust-toolchain.toml ./
 COPY services/common ./common
 COPY services/tiers-service ./tiers-service
-COPY services/auth-service ./auth-service
+COPY services/auth-service/Cargo.toml ./auth-service/Cargo.toml
 RUN cargo build --release -p tiers-service
 
 # ── Runtime stage ─────────────────────────────────────────────
