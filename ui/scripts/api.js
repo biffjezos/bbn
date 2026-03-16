@@ -215,6 +215,48 @@ const Api = {
     return apiFetch('/blocks');
   },
 
+  // ---- Admin --------------------------------------------------
+
+  adminSearchUsers({ q, by } = {}) {
+    const qs = new URLSearchParams();
+    if (q  != null && q  !== '') qs.set('q',  q);
+    if (by != null && by !== '') qs.set('by', by);
+    return apiFetch(`/admin/users?${qs.toString()}`);
+  },
+
+  adminSetTier(userId, tier) {
+    return apiFetch(`/admin/users/${encodeURIComponent(userId)}/tier`, {
+      method: 'PATCH',
+      body: JSON.stringify({ tier }),
+    });
+  },
+
+  adminSetRole(userId, role) {
+    return apiFetch(`/admin/users/${encodeURIComponent(userId)}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  },
+
+  adminListTiers() {
+    return apiFetch('/admin/tiers');
+  },
+
+  adminCreateTier(data) {
+    return apiFetch('/admin/tiers', { method: 'POST', body: JSON.stringify(data) });
+  },
+
+  adminUpdateTier(name, data) {
+    return apiFetch(`/admin/tiers/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminDeleteTier(name) {
+    return apiFetch(`/admin/tiers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  },
+
   // ---- Notifications ------------------------------------------
 
   getNotifications() {

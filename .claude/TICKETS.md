@@ -14,12 +14,13 @@ Before any marketing or scaling push, the order of priority is:
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
 3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
 4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
-5. **T-05b** — Add encrypted note field to blocks (now has correct key derivation foundation)
-6. **T-01** — Admin UI (needs T-03; benefits from auth being stable)
+5. ~~**T-01**~~ — ✅ Done (2026-03-16)
+6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
 7. **T-02** — Analytics (low-risk, can slot in any time)
 8. **T-06** — Venue accounts (needs T-01 and T-03)
 9. **T-07** — Settings page + device notifications (UX polish)
 10. **T-04c** — Rust port: remaining services (incremental, parallel with features)
+11. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c underway)
 
 ### Architectural Decision (2026-03-16)
 
@@ -40,20 +41,27 @@ requires no new infrastructure.
 
 ## T-01 — Admin UI (`/admin`)
 
-**Status:** Not started. Blocked by T-03 (tiers must be in DB to be editable).
+**Status:** ✅ Complete (2026-03-16).
 
-### Requirements
+### Implemented (2026-03-16)
 
-- Search users by nickname, email, or userId.
-- Click a search result → expands core profile details (same fields as `/profile`).
-- Change a user's tier (e.g. `regular` → `developer`). On save:
-  - Backend updates `users.tier` in MongoDB.
-  - Issues a new JWT for the user (bump `tokenVersion` to invalidate the old one — same pattern as password change). See AUDIT.md 1.2.
-- Create, edit, and delete account types (see T-03).
-- Assign account types to existing users.
-- Manage tier feature flags and radii (see T-03).
-- Manage venue accounts (see T-06).
-- Protected route — admin-only JWT role (`role: 'admin'`). Must not be accessible to regular users.
+- `services/location-service.js` — replaced hardcoded inline radius table with cached fetch to tiers-service (5 min TTL, static fallback). New env var: `TIERS_SERVICE_URL`.
+- `services/users-service.js` — fixed tokenVersion check to include `admin` role. Added `requireAdmin` middleware. Added `GET /admin/users`, `PATCH /admin/users/:id/tier`, `PATCH /admin/users/:id/role`.
+- `services/tiers-service/src/main.rs` — admin tier CRUD: `GET/POST /admin/tiers`, `PUT/DELETE /admin/tiers/:name`. Each handler verifies adminUser JWT + tokenVersion from DB. Cache invalidated on every write.
+- `services/common/src/auth.rs` — added `AdminUser` Axum extractor (signature + role check).
+- `services/server.js` — added `requireAdmin` middleware, PATCH to CORS, admin proxy routes.
+- `ui/_layouts/default.html` — extended layout guard: `/admin/*` requires `role === 'admin'`.
+- `ui/_includes/offcanvas-menu.html` — admin nav link (hidden by default, shown by app.js for admin role).
+- `ui/scripts/app.js` — `syncOffcanvas` and `buildDesktopNav` show admin link when `role === 'admin'`.
+- `ui/scripts/api.js` — admin API methods: `adminSearchUsers`, `adminSetTier`, `adminSetRole`, `adminListTiers`, `adminCreateTier`, `adminUpdateTier`, `adminDeleteTier`.
+- `ui/admin/admin-index.html` + `ui/scripts/admin.js` — admin UI: user search/expand/tier+role change; tier CRUD.
+
+### Tiers CRUD polish (2026-03-16 — follow-up session)
+
+- `tiers-service/src/main.rs` — `admin_list_tiers`: auto-seeds static tiers into the DB on first admin access (using `count_documents` guard, not deserialization result) so edit/delete immediately target real documents. Fetches the list as raw BSON `Document` to avoid silent `try_collect` failures causing spurious re-seeding.
+- `tiers-service/src/main.rs` — `admin_create_tier`: shifts all existing tiers with `rank >= new rank` up by 1 before inserting, keeping ranks contiguous.
+- `ui/scripts/admin.js` — edit form now expands inline below the clicked tier row instead of at the bottom of the list; heading removed; nearby/message radius fields on a dedicated second row; clicking a different row closes the previous form.
+- `ui/scripts/admin.js` — "New Tier" rank field is a select (0 → maxRank+1) labelled with the occupant tier at each position; defaults to "append".
 
 ### Notes
 
@@ -459,3 +467,127 @@ arbitrary `type` values. New event types are additive — no schema change neede
 ### Owner's Comments
 
 - Not a priority at the moment. May be postponed until after the rust port. Remind me.
+
+---
+
+## T-08 — Authority Service (auth + tiers consolidation + gateway-centralised RBAC)
+
+**Status:** Not started. Addresses AUDIT.md 6.3 definitively.
+
+### Problem
+
+There is no single authority for user rights and limits.
+Today's distribution:
+
+| What | Where |
+|---|---|
+| JWT issue & tokenVersion | `auth-service` (Rust) |
+| Tier definitions & feature flags | `tiers-service` (Rust) |
+| Radius lookups | `tiers-service` (Rust) + hardcoded table in `location-service.js` |
+| Token verification | Copy-pasted `verifyToken` in every JS service (×5) |
+| Role enforcement | Copy-pasted role check in every JS service (×5) |
+
+Any role model change (new role, new field) currently requires edits in 6+ places. This was the root cause of the admin-role cascade bug documented in AUDIT.md 6.3.
+
+### Proposed architecture
+
+**Step 1 — Merge auth-service and tiers-service into a single `authority-service` Rust binary:**
+
+- All JWT issuing and verification
+- tokenVersion DB check (single place, with short cache)
+- Tier definitions, feature flag checks, radius lookups
+- Admin role management (promote/demote, tokenVersion bumps)
+
+Exposes a single internal endpoint:
+
+```
+POST /authority/verify
+Body: { token: "...", feature?: "message_online" }
+→ 200 { sub, role, tier, tv, features[], radii{} }
+→ 401/403 on invalid/expired/insufficient
+```
+
+**Step 2 — Gateway becomes the single enforcer (implements AUDIT.md 6.3):**
+
+Gateway calls `/authority/verify` once per incoming request.
+On success, injects trusted headers into the proxied request:
+- `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV`
+- `X-Auth-Features` (JSON array), `X-Auth-Radii` (JSON object)
+
+Gateway's `checkTier()` becomes a header read — no separate tiers-service call.
+
+**Step 3 — Services drop `verifyToken` copy-paste:**
+
+Each service reads `X-Auth-*` headers instead of re-verifying the JWT.
+`X-Service-Token` still protects services from external callers.
+tokenVersion DB check moves entirely to the gateway step.
+
+**Step 4 — Retire tiers-service:**
+
+Remove from Railway once authority-service is live and all services have been migrated to header-based auth.
+
+### Security properties
+
+- Role and tier changes take effect immediately — gateway re-verifies on every request, not just at login.
+- Stale JWT carrying a downgraded role is rejected at the gateway as soon as `tokenVersion` is bumped.
+- New roles or features require changes in exactly **one place** (authority-service).
+- `X-Auth-*` headers are only trusted because they are injected by the gateway; services are unreachable from the outside without `X-Service-Token`.
+
+### Prerequisites
+
+- T-01 complete (admin CRUD for tiers is established and tested before the service is merged)
+- T-04c in progress (JS services being ported to Rust; authority header pattern is adopted as services are ported)
+- No new infrastructure required
+
+### What this is NOT
+
+- Not a policy engine (no ABAC). The `authority/verify` response is a flat permission set, not a policy tree.
+- Not a reverse proxy. The gateway remains the routing layer. Authority is a verification call only.
+- Does not replace `X-Service-Token` inter-service authentication.
+
+### Implementation order (within this ticket)
+
+1. Extend auth-service to absorb tiers-service routes (internally, same binary, same DB).
+2. Add `POST /authority/verify` endpoint.
+3. Update gateway to call authority and inject headers (replaces `checkTier` + `verifyToken`).
+4. Update each JS service to read headers (one service at a time, backwards-compatible).
+5. When all services are updated, retire tiers-service on Railway.
+
+### Owner's Comments
+
+- 2026-03-16: Proposed by Claude based on the admin-role cascade bug post-mortem (AUDIT.md 6.3). Makes auth-service the true single authority for all rights and limits. Feasible once T-01 is done and T-04c is underway. tiers-service to be retired after merge.
+
+---
+
+## T-09 — Role CRUD with Permissions UI
+
+**Status:** Not started. Requires backend changes.
+
+### Problem
+
+Roles are currently hardcoded strings (`user`, `admin`) validated inline in each service. The admin Roles tab (added T-01 follow-up, 2026-03-16) is read-only. Adding custom roles or per-role permission sets requires:
+
+1. A `roles` MongoDB collection: `{ name, label, permissions[], rank, createdAt }`
+2. Role validation in `users-service` updated from hardcoded list to DB lookup
+3. Gateway or authority service reads role permissions at request time (see T-08)
+4. Admin UI: form to define role name, label, and permission toggles
+
+### Standalone guard (can be done without T-09)
+
+**Admin self-modification block** (AUDIT.md 1.4): prevent admins from changing their own tier or role via the API. One-line fix per handler in `users-service.js`:
+
+```
+if (targetId === req.auth.sub)
+  return res.status(403).json({ error: 'Cannot modify your own tier or role.', code: 'SELF_MODIFICATION_FORBIDDEN' })
+```
+
+This does not require a `roles` collection and can be implemented at any time.
+
+### Prerequisites
+
+- T-08 (Authority service) is the natural home for role-to-permissions resolution. Without T-08, the change touches 5+ services (same anti-pattern as AUDIT.md 6.3).
+- T-09 full implementation should follow T-08.
+
+### Owner's Comments
+
+- 2026-03-16: Raised by owner — need ability to add/edit/remove roles with permissions. Custom roles and permissions require backend work; tracked here. Standalone self-modification guard (AUDIT 1.4) can be patched sooner.

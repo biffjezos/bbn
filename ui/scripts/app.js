@@ -53,6 +53,12 @@
 
   // ── Desktop nav links ─────────────────────────────────────
   var BASE = (window.BOOMBOOM_BASE || '');
+  function getRole() {
+    try {
+      var t = Auth.getToken();
+      return t ? JSON.parse(atob(t.split('.')[1])).role : null;
+    } catch (e) { return null; }
+  }
   function buildDesktopNav(isReg) {
     var el = $('navLinksDesktop');
     if (!el) return;
@@ -66,14 +72,20 @@
         '<a href="' + BASE + '/messages/"   class="nav-link ' + (p.startsWith(BASE + '/messages/')   ? 'active' : '') + '"><i class="bi bi-chat-dots me-1"></i>Messages</a>' +
         '<a href="' + BASE + '/favourites/" class="nav-link ' + (p.startsWith(BASE + '/favourites/') ? 'active' : '') + '"><i class="bi bi-star me-1"></i>Favourites</a>' +
         '<a href="' + BASE + '/profile/"    class="nav-link ' + (p.startsWith(BASE + '/profile/')    ? 'active' : '') + '"><i class="bi bi-person-circle me-1"></i>Profile</a>';
+      if (getRole() === 'admin') {
+        el.innerHTML +=
+          '<a href="' + BASE + '/admin/" class="nav-link ' + (p.startsWith(BASE + '/admin/') ? 'active' : '') + '"><i class="bi bi-shield-lock me-1"></i>Admin</a>';
+      }
     }
   }
 
   // ── Offcanvas state ───────────────────────────────────────
   function syncOffcanvas(isReg) {
-    var guestMenu = $('guestMenu');
-    var userMenu  = $('userMenu');
+    var guestMenu  = $('guestMenu');
+    var userMenu   = $('userMenu');
+    var adminLink  = $('adminNavLink');
     if (!guestMenu || !userMenu) return;
+    if (adminLink) adminLink.classList.toggle('d-none', !(isReg && getRole() === 'admin'));
     if (isReg) {
       guestMenu.classList.add('d-none');
       userMenu.classList.remove('d-none');
@@ -110,7 +122,7 @@
   Auth.onLogout = function () {
     applyAuthState(false);
     window.MapModule && window.MapModule.refreshMarkers();
-    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile'];
+    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile', BASE + '/admin'];
     if (prot.some(function(p) { return location.pathname.startsWith(p); })) {
       window.location.href = BASE + '/';
     }
