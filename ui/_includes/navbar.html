@@ -34,16 +34,22 @@
         </a>
 
         <!-- Hamburger — always visible, never pushed to next line -->
-        <button
-          class="navbar-toggler flex-shrink-0"
-          type="button"
-          data-bs-toggle="offcanvas"
-          data-bs-target="#appMenu"
-          aria-controls="appMenu"
-          aria-label="Menu"
-        >
-          <span class="navbar-toggler-icon"></span>
-        </button>
-    
+        <div class="position-relative flex-shrink-0">
+          <span id="notifDot" class="d-none" style="width:8px;height:8px;background:#e5005a;border-radius:50%;position:absolute;top:4px;right:4px;pointer-events:none;z-index:1"></span>
+          <button
+            class="navbar-toggler"
+            type="button"
+            data-bs-toggle="offcanvas"
+            data-bs-target="#appMenu"
+            aria-controls="appMenu"
+            aria-label="Menu"
+          >
+            <span class="navbar-toggler-icon"></span>
+          </button>
+        </div>
+
       </div>
     </nav>
+
+    <!-- Notification banners (populated by NotifModule in app.js) -->
+    <div id="notifBanner" style="position:fixed;top:56px;left:0;right:0;z-index:1029"></div>

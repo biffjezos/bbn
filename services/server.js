@@ -212,6 +212,10 @@ app.get   ('/api/favourites/is-mutual/:userId', checkTier('manage_favourites'), 
 app.post  ('/api/favourites/:userId',           checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
 app.delete('/api/favourites/:userId',           checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites/${req.params.userId}`));
 
+// --- Notifications ------------------------------------------
+app.get   ('/api/notifications',     (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/notifications`));
+app.delete('/api/notifications/:id', (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/notifications/${req.params.id}`));
+
 // --- 404 + error --------------------------------------------
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
 app.use((err, _req, res, _next) => res.status(500).json({ error: 'Internal server error.' }));
