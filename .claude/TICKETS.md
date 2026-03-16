@@ -14,12 +14,13 @@ Before any marketing or scaling push, the order of priority is:
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
 3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
 4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
-5. **T-01** — Admin UI (T-03 ✓, T-04b ✓ — fully unblocked; unlocks T-06)
+5. **T-01** — Admin UI (T-03 ✓, T-04b ✓ — fully unblocked; fix inline radius table in location-service is part of T-01 scope)
 6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
 7. **T-02** — Analytics (low-risk, can slot in any time)
 8. **T-06** — Venue accounts (needs T-01 and T-03)
 9. **T-07** — Settings page + device notifications (UX polish)
 10. **T-04c** — Rust port: remaining services (incremental, parallel with features)
+11. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c underway)
 
 ### Architectural Decision (2026-03-16)
 
@@ -40,7 +41,7 @@ requires no new infrastructure.
 
 ## T-01 — Admin UI (`/admin`)
 
-**Status:** Not started. Blocked by T-03 (tiers must be in DB to be editable).
+**Status:** Not started. All prerequisites met (T-03 ✓, T-04b ✓). Hidden prerequisite: fix inline radius table in `location-service.js:300` — in scope for this ticket.
 
 ### Requirements
 
@@ -459,3 +460,92 @@ arbitrary `type` values. New event types are additive — no schema change neede
 ### Owner's Comments
 
 - Not a priority at the moment. May be postponed until after the rust port. Remind me.
+
+---
+
+## T-08 — Authority Service (auth + tiers consolidation + gateway-centralised RBAC)
+
+**Status:** Not started. Addresses AUDIT.md 6.3 definitively.
+
+### Problem
+
+There is no single authority for user rights and limits.
+Today's distribution:
+
+| What | Where |
+|---|---|
+| JWT issue & tokenVersion | `auth-service` (Rust) |
+| Tier definitions & feature flags | `tiers-service` (Rust) |
+| Radius lookups | `tiers-service` (Rust) + hardcoded table in `location-service.js` |
+| Token verification | Copy-pasted `verifyToken` in every JS service (×5) |
+| Role enforcement | Copy-pasted role check in every JS service (×5) |
+
+Any role model change (new role, new field) currently requires edits in 6+ places. This was the root cause of the admin-role cascade bug documented in AUDIT.md 6.3.
+
+### Proposed architecture
+
+**Step 1 — Merge auth-service and tiers-service into a single `authority-service` Rust binary:**
+
+- All JWT issuing and verification
+- tokenVersion DB check (single place, with short cache)
+- Tier definitions, feature flag checks, radius lookups
+- Admin role management (promote/demote, tokenVersion bumps)
+
+Exposes a single internal endpoint:
+
+```
+POST /authority/verify
+Body: { token: "...", feature?: "message_online" }
+→ 200 { sub, role, tier, tv, features[], radii{} }
+→ 401/403 on invalid/expired/insufficient
+```
+
+**Step 2 — Gateway becomes the single enforcer (implements AUDIT.md 6.3):**
+
+Gateway calls `/authority/verify` once per incoming request.
+On success, injects trusted headers into the proxied request:
+- `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV`
+- `X-Auth-Features` (JSON array), `X-Auth-Radii` (JSON object)
+
+Gateway's `checkTier()` becomes a header read — no separate tiers-service call.
+
+**Step 3 — Services drop `verifyToken` copy-paste:**
+
+Each service reads `X-Auth-*` headers instead of re-verifying the JWT.
+`X-Service-Token` still protects services from external callers.
+tokenVersion DB check moves entirely to the gateway step.
+
+**Step 4 — Retire tiers-service:**
+
+Remove from Railway once authority-service is live and all services have been migrated to header-based auth.
+
+### Security properties
+
+- Role and tier changes take effect immediately — gateway re-verifies on every request, not just at login.
+- Stale JWT carrying a downgraded role is rejected at the gateway as soon as `tokenVersion` is bumped.
+- New roles or features require changes in exactly **one place** (authority-service).
+- `X-Auth-*` headers are only trusted because they are injected by the gateway; services are unreachable from the outside without `X-Service-Token`.
+
+### Prerequisites
+
+- T-01 complete (admin CRUD for tiers is established and tested before the service is merged)
+- T-04c in progress (JS services being ported to Rust; authority header pattern is adopted as services are ported)
+- No new infrastructure required
+
+### What this is NOT
+
+- Not a policy engine (no ABAC). The `authority/verify` response is a flat permission set, not a policy tree.
+- Not a reverse proxy. The gateway remains the routing layer. Authority is a verification call only.
+- Does not replace `X-Service-Token` inter-service authentication.
+
+### Implementation order (within this ticket)
+
+1. Extend auth-service to absorb tiers-service routes (internally, same binary, same DB).
+2. Add `POST /authority/verify` endpoint.
+3. Update gateway to call authority and inject headers (replaces `checkTier` + `verifyToken`).
+4. Update each JS service to read headers (one service at a time, backwards-compatible).
+5. When all services are updated, retire tiers-service on Railway.
+
+### Owner's Comments
+
+- 2026-03-16: Proposed by Claude based on the admin-role cascade bug post-mortem (AUDIT.md 6.3). Makes auth-service the true single authority for all rights and limits. Feasible once T-01 is done and T-04c is underway. tiers-service to be retired after merge.

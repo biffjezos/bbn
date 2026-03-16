@@ -221,7 +221,7 @@ Benefits:
 - Requires careful handling of routes that allow guests (header `X-Auth-Role: guest` for unauthenticated requests).
 - Token: ~1–2 days for a careful port + test across all services.
 
-**Priority:** MEDIUM. The immediate bug is fixed. The risk persists for any future role or field change.
+**Priority:** MEDIUM. The immediate bug is fixed. The risk persists for any future role or field change. **T-08** tracks the full architectural resolution (authority service + gateway centralisation).
 
 ---
 
