@@ -110,12 +110,13 @@ function fmtRangeDate(iso) {
   return d.getFullYear() === now.getFullYear() ? `${day} ${time}` : `${day} ${d.getFullYear()}`;
 }
 
-function favItemHtml(f, isFav, unreadIds = new Set()) {
+function favItemHtml(f, isFav, unreadIds = new Set(), blockedIds = new Set()) {
   const _base       = window.BOOMBOOM_BASE || '';
   const profileHref = `${_base}/profile/view/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
   const threadHref  = `${_base}/messages/thread/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
   const meetUid     = getMeetUid();
   const isMeet      = meetUid === f.userId;
+  const isBlocked   = blockedIds.has(f.userId);
   const badge       = f.online
     ? '<span class="badge badge-online">online</span>'
     : '<span class="badge badge-offline">offline</span>';
@@ -125,13 +126,15 @@ function favItemHtml(f, isFav, unreadIds = new Set()) {
   const meetIcon    = isMeet ? 'bi-compass-fill' : 'bi-compass';
   const hasUnread   = unreadIds.has(f.userId);
   const msgCls      = `fav-msg-btn${hasUnread ? ' fav-msg--unread' : ''}`;
-  const canMsg      = f.withinRange === true;
+  const canMsg      = !isBlocked && f.withinRange === true;
   const msgBtnHtml  = canMsg
     ? `<a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="Message"><i class="bi bi-chat-dots"></i></a>`
-    : `<span class="btn fav-action-btn fav-msg--disabled" title="Not in range"><i class="bi bi-chat-dots"></i></span>`;
+    : `<span class="btn fav-action-btn fav-msg--disabled" title="${isBlocked ? 'User blocked' : 'Not in range'}"><i class="bi bi-chat-dots"></i></span>`;
 
   let rangeLine = '';
-  if (f.withinRange === true) {
+  if (isBlocked) {
+    rangeLine = ' <span class="badge bg-secondary">blocked</span>';
+  } else if (f.withinRange === true) {
     rangeLine = ' <span class="badge badge-in-range">in range</span>';
   } else if (f.withinRangeAt) {
     rangeLine = ` <span class="fav-range-hint">Last in range: ${fmtRangeDate(f.withinRangeAt)}</span>`;
@@ -160,17 +163,18 @@ function favItemHtml(f, isFav, unreadIds = new Set()) {
   </div>`;
 }
 
-function sectionHtml(title, items, isFav, unreadIds = new Set()) {
+function sectionHtml(title, items, isFav, unreadIds = new Set(), blockedIds = new Set()) {
   if (!items.length) return '';
   return `<div class="bbm-search-section mb-2">
     <div class="bbm-search-section-label text-muted-bb small mb-1">${escHtml(title)}</div>
-    ${items.map(f => favItemHtml(f, isFav, unreadIds)).join('')}
+    ${items.map(f => favItemHtml(f, isFav, unreadIds, blockedIds)).join('')}
   </div>`;
 }
 
 // ── State ─────────────────────────────────────────────────────
 
 let cachedFavourites = null; // loaded once; invalidated on add/remove
+let cachedBlockedIds = null; // Set<userId>, same lifecycle as cachedFavourites
 let searchDebounce   = null;
 
 // ── Main render ───────────────────────────────────────────────
@@ -186,7 +190,7 @@ async function renderFavourites(forceReload = false) {
     return;
   }
 
-  // Fetch favourites if needed
+  // Fetch favourites and blocked IDs if needed
   if (!cachedFavourites || forceReload) {
     wrap.innerHTML = loadingHtml('Loading favourites…');
     try {
@@ -200,32 +204,39 @@ async function renderFavourites(forceReload = false) {
       }
       return;
     }
+    try {
+      const { blocks = [] } = await window.Api.getBlocks();
+      cachedBlockedIds = new Set(blocks.map(b => b.userId));
+    } catch {
+      cachedBlockedIds = new Set();
+    }
   }
 
+  const blockedIds = cachedBlockedIds || new Set();
   const rawQuery = document.getElementById('favSearch')?.value || '';
   const q        = parseSearchQuery(rawQuery);
   const hasQuery = rawQuery.trim().length > 0;
 
   if (!hasQuery) {
-    await renderFavList(wrap, cachedFavourites);
+    await renderFavList(wrap, cachedFavourites, blockedIds);
   } else {
-    await renderSearchResults(wrap, q, rawQuery);
+    await renderSearchResults(wrap, q, rawQuery, blockedIds);
   }
 
   bindListEvents(wrap);
 }
 
-async function renderFavList(wrap, favourites) {
+async function renderFavList(wrap, favourites, blockedIds = new Set()) {
   if (!favourites.length) {
     wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-star"></i>
       <p>No favourites yet.<br>Tap a user on the map to add them.</p></div>`;
     return;
   }
   const unreadIds = await fetchUnreadIds();
-  wrap.innerHTML = favourites.map(f => favItemHtml(f, true, unreadIds)).join('');
+  wrap.innerHTML = favourites.map(f => favItemHtml(f, true, unreadIds, blockedIds)).join('');
 }
 
-async function renderSearchResults(wrap, q, rawQuery) {
+async function renderSearchResults(wrap, q, rawQuery, blockedIds = new Set()) {
   const favIds = new Set((cachedFavourites || []).map(f => f.userId));
 
   // Client-side filter on favourites
@@ -256,8 +267,8 @@ async function renderSearchResults(wrap, q, rawQuery) {
 
   const unreadIds = await fetchUnreadIds();
   wrap.innerHTML =
-    sectionHtml('In your favourites', matchedFavs, true,  unreadIds) +
-    sectionHtml('Other users',        globalUsers, false, unreadIds);
+    sectionHtml('In your favourites', matchedFavs, true,  unreadIds, blockedIds) +
+    sectionHtml('Other users',        globalUsers, false, unreadIds, blockedIds);
 }
 
 function bindListEvents(wrap) {
@@ -270,7 +281,7 @@ function bindListEvents(wrap) {
       if (getMeetUid() === btn.dataset.userid) localStorage.removeItem('bbm_meet');
       try {
         await window.Api.removeFavourite(btn.dataset.userid);
-        cachedFavourites = null;
+        cachedFavourites = null; cachedBlockedIds = null;
         await renderFavourites(true);
       } catch (err) { alert('Error: ' + err.message); }
     });
@@ -280,7 +291,7 @@ function bindListEvents(wrap) {
     btn.addEventListener('click', async () => {
       try {
         await window.Api.addFavourite(btn.dataset.userid);
-        cachedFavourites = null;
+        cachedFavourites = null; cachedBlockedIds = null;
         // Re-run search so the new fav appears in the favourites section
         await renderFavourites();
       } catch (err) { alert('Error: ' + err.message); }

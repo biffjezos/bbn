@@ -313,7 +313,18 @@ app.get('/users/:userId/profile', requireAny, async (req, res) => {
           { blockerUserId: targetId, blockedUserId: viewerId },
         ],
       });
-      if (block) return res.status(404).json({ error: 'User not found.' });
+      if (block) {
+        // Target blocked the viewer — 404 (no info leak)
+        if (block.blockerUserId === targetId)
+          return res.status(404).json({ error: 'User not found.' });
+        // Viewer blocked the target — return profile with flag so UI can offer Unblock
+        const blockedUser = await db.collection('users').findOne(
+          { _id: oid },
+          { projection: { nickname: 1, age: 1, sex: 1, publicKey: 1, _id: 0 } }
+        );
+        if (!blockedUser) return res.status(404).json({ error: 'User not found.' });
+        return res.json({ ...blockedUser, blockedByViewer: true });
+      }
     }
 
     const user = await db.collection('users').findOne(
