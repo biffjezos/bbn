@@ -816,17 +816,22 @@
         '</div>';
     }).join('');
 
+    function dismiss(alertEl) {
+      if (!alertEl) return;
+      var id = alertEl.dataset.notifId;
+      alertEl.remove();
+      if (window.Api) window.Api.dismissNotification(id).catch(function () {});
+      if (container.querySelectorAll('[data-notif-id]').length === 0) {
+        if (dot) dot.classList.add('d-none');
+      }
+    }
+
     container.querySelectorAll('.btn-close').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var alertEl = btn.closest('[data-notif-id]');
-        if (!alertEl) return;
-        var id = alertEl.dataset.notifId;
-        alertEl.remove();
-        if (window.Api) window.Api.dismissNotification(id).catch(function () {});
-        if (container.querySelectorAll('[data-notif-id]').length === 0) {
-          if (dot) dot.classList.add('d-none');
-        }
-      });
+      btn.addEventListener('click', function () { dismiss(btn.closest('[data-notif-id]')); });
+    });
+
+    container.querySelectorAll('.alert-link').forEach(function (link) {
+      link.addEventListener('click', function () { dismiss(link.closest('[data-notif-id]')); });
     });
   }
 
