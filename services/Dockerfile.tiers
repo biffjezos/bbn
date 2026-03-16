@@ -7,6 +7,7 @@ COPY services/Cargo.toml services/rust-toolchain.toml ./
 COPY services/common ./common
 COPY services/tiers-service ./tiers-service
 COPY services/auth-service/Cargo.toml ./auth-service/Cargo.toml
+RUN mkdir -p ./auth-service/src && echo 'fn main(){}' > ./auth-service/src/main.rs
 RUN cargo build --release -p tiers-service
 
 # ── Runtime stage ─────────────────────────────────────────────
