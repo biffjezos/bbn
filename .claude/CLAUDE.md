@@ -2,9 +2,9 @@
 
 ## On Session Start
 
-1. Read `AUDIT.md`. Present it, greet the user, ask what to do.
+1. Read `.claude/AUDIT.md`. Present it, greet the user, ask what to do.
 2. Do not read the entire codebase. Only load files relevant to the task.
-3. If working on a ticket from `TICKETS.md`, read the relevant ticket first.
+3. If working on a ticket from `.claude/TICKETS.md`, read the relevant ticket first.
 
 ## The Two Persistent Files
 
