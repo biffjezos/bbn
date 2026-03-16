@@ -274,9 +274,11 @@ function _renderTiersList(tiers) {
     '  </button>',
     '</div>',
     '<div id="tiersList">',
-    sorted.map(renderTierRow).join(''),
+    sorted.map(function (t) {
+      return renderTierRow(t) + '<div id="tier-form-' + escHtml(t.name) + '" class="d-none mb-3"></div>';
+    }).join(''),
     '</div>',
-    '<div id="tierFormWrap" class="d-none mt-4"></div>',
+    '<div id="tierFormWrap" class="d-none mt-2"></div>',
   ].join('');
 
   content.querySelector('#addTierBtn').addEventListener('click', function () {
@@ -319,32 +321,44 @@ function renderTierRow(t) {
 }
 
 function showTierForm(existing, allTiers) {
-  var wrap = document.getElementById('tierFormWrap');
+  var isEdit = !!existing;
+
+  // Close all open forms before opening a new one.
+  document.querySelectorAll('[id^="tier-form-"], #tierFormWrap').forEach(function (el) {
+    el.classList.add('d-none');
+    el.innerHTML = '';
+  });
+
+  var wrap = isEdit
+    ? document.getElementById('tier-form-' + existing.name)
+    : document.getElementById('tierFormWrap');
   if (!wrap) return;
-  var isEdit  = !!existing;
-  var nameRow = isEdit ? '' : [
-    '<div class="col-12 col-md-4">',
-    '  <label class="form-label">Name <span class="text-muted-bb" style="font-size:0.75rem">(slug, e.g. "vip")</span></label>',
-    '  <input type="text" class="form-control" id="tf-name" placeholder="vip" />',
-    '</div>',
-  ].join('');
 
   var cls     = existing ? existing.cls || 'secondary' : 'secondary';
   var nearby  = existing ? (existing.nearbyRadiusM  != null ? existing.nearbyRadiusM  : (existing.nearby_radius_m  || 1000)) : 1000;
   var message = existing ? (existing.messageRadiusM != null ? existing.messageRadiusM : (existing.message_radius_m || '')) : '';
 
+  var nameRow = isEdit ? '' : [
+    '<div class="col-12 col-sm-6 col-md-3">',
+    '  <label class="form-label">Name <span class="text-muted-bb" style="font-size:0.75rem">(slug, e.g. "vip")</span></label>',
+    '  <input type="text" class="form-control" id="tf-name" placeholder="vip" />',
+    '</div>',
+  ].join('');
+
+  var heading = isEdit ? '' : '<h6 class="mb-3">New Tier</h6>';
+
   wrap.classList.remove('d-none');
   wrap.innerHTML = [
     '<div class="bbm-section">',
-    '  <h6 class="mb-3">' + (isEdit ? 'Edit Tier: <code>' + escHtml(existing.name) + '</code>' : 'New Tier') + '</h6>',
+    heading,
     '  <div id="tierFormAlert" class="d-none mb-3"></div>',
     '  <div class="row g-3">',
     nameRow,
-    '    <div class="col-12 col-md-4">',
+    '    <div class="col-12 col-sm-6 col-md-4">',
     '      <label class="form-label">Label</label>',
     '      <input type="text" class="form-control" id="tf-label" value="' + escHtml(existing ? existing.label : '') + '" placeholder="VIP" />',
     '    </div>',
-    '    <div class="col-6 col-md-2">',
+    '    <div class="col-6 col-md-3">',
     '      <label class="form-label">Badge class</label>',
     '      <select class="form-select" id="tf-cls">',
     ['secondary','primary','success','warning','danger','info'].map(function (c) {
@@ -356,16 +370,18 @@ function showTierForm(existing, allTiers) {
     '      <label class="form-label">Rank</label>',
     '      <input type="number" class="form-control" id="tf-rank" value="' + escHtml(String(existing ? existing.rank : 1)) + '" min="0" />',
     '    </div>',
-    '    <div class="col-6 col-md-3">',
+    '  </div>',
+    '  <div class="row g-3 mt-0">',
+    '    <div class="col-6">',
     '      <label class="form-label">Nearby radius (m)</label>',
     '      <input type="number" class="form-control" id="tf-nearby" value="' + escHtml(String(nearby)) + '" min="1" />',
     '    </div>',
-    '    <div class="col-6 col-md-3">',
+    '    <div class="col-6">',
     '      <label class="form-label">Message radius (m)</label>',
     '      <input type="number" class="form-control" id="tf-message" value="' + escHtml(String(message)) + '" min="1" placeholder="leave blank = none" />',
     '    </div>',
     '  </div>',
-    '  <div class="d-flex gap-2 mt-4">',
+    '  <div class="d-flex gap-2 mt-3">',
     '    <button class="btn btn-bbm-primary btn-sm" id="saveTierBtn">',
     '      <i class="bi bi-check2 me-1"></i>' + (isEdit ? 'Update Tier' : 'Create Tier'),
     '    </button>',
