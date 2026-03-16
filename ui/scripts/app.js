@@ -587,6 +587,7 @@
   Auth.onGuestExpired = function () {
     if (_origOnGuestExpired) _origOnGuestExpired();
     closeLocWS();
+    window.Api.deleteLocation().catch(function() {});
     setStatus('session expired', 'off');
     window.MapModule && window.MapModule.onGuestExpired();
   };
