@@ -214,7 +214,7 @@ gateway does not change when a service is ported.
 
 ### Note on shared code
 
-The utilities duplicated across Node services (AUDIT.md 4.1) become a Rust
+The utilities duplicated across Node services (AUDIT.md 6.1) become a Rust
 shared crate. In a Cargo workspace at `/services-rs/Cargo.toml`, a `common`
 crate can hold JWT verification, ObjectId helpers, etc. This is the monorepo
 tooling situation Node currently lacks.
@@ -224,6 +224,11 @@ tooling situation Node currently lacks.
 - I wonder, if the port to rust should get a higher priority. If we port sooner, we could use common libs earlier and have less code to port.
 - Tell me what you think in the upcoming meeting.
 - **2026-03-16:** Priority elevated. Tiers-service first (T-04a), then auth-service + OPAQUE (T-04b) which unblocks T-05 block-note encryption. Remaining services (T-04c) follow incrementally.
+
+> **Reminder (2026-03-16):** Once T-04 (full Rust port) is complete, upgrade the
+> Railway MongoDB plan to free up disk space. This will unblock migration
+> `003_blocks_indexes` (see AUDIT.md 2.0) and should be done before any growth
+> push. Dev-alpha state is acceptable until then.
 
 ---
 
