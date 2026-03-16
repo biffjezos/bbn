@@ -58,8 +58,30 @@ requires no new infrastructure.
 ### Notes
 
 - First use case: create a `developer` tier with expanded nearby and messaging radii.
-- Auth: a dedicated `admin` role added to JWT. Admin accounts created manually in DB for now.
+- Auth: a dedicated `admin` role added to JWT. **Not** created manually in DB — see bootstrap mechanism below.
 - The `/admin` route must be excluded from the Jekyll public build or served from a separate path with server-side auth checks.
+
+### On `admin` role vs tiers
+
+`admin` is a **role**, not a tier. A tier controls feature access (see_map, message_online, etc.). A role controls what actions the user can perform on other users and system data. A user can be `tier: premium, role: admin`. They are orthogonal. The JWT must carry both.
+
+Currently only `tier` is in the JWT. `role` needs to be added when T-01 is built. A plain DB edit to the `tier` field does not grant admin access — roles are separate and enforced separately.
+
+### Bootstrap mechanism (prerequisite for T-01)
+
+**Problem:** You need an admin to create an admin. Manual DB edits must not be the answer — they bypass auth and are not portable.
+
+**Solution: `ADMIN_BOOTSTRAP_USER_ID` env var on auth-service (or gateway)**
+
+1. Developer registers a normal account via the app.
+2. Sets `ADMIN_BOOTSTRAP_USER_ID=<userId>` as an env var on Railway.
+3. On next service boot: if no admin exists yet, the service promotes that userId to `role: admin`, bumps their `tokenVersion`.
+4. Developer re-logs in → receives a JWT with `role: admin`.
+5. Env var is removed from Railway (the service is a no-op if an admin already exists, but it should be removed as hygiene).
+
+This is the only path to the first admin. All subsequent admin promotions go through the admin UI with an authenticated admin JWT. Raw DB edits to role/tier fields have no effect without a `tokenVersion` bump, which only the service can perform.
+
+**Implementation note:** Must be part of T-04b (auth-service Rust port) or implemented in the current `auth-service.js` as a startup hook. Cannot be done before `role` is added to the JWT.
 
 ### Owner's Comments
 
@@ -67,6 +89,7 @@ requires no new infrastructure.
 - How do I create an elevated account? A change in the db ("regular" -> "admin") should not be permitted.
 - Maybe T-03 answers open questions.
 - Do not touch without explicit permission.
+- **2026-03-16:** Confirmed: admin is a role, not a tier. Bootstrap via env var is the right approach. Raw DB edits must not grant access.
 
 ---
 
