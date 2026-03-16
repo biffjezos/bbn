@@ -293,10 +293,12 @@ app.get('/location/nearby', requireAny, async (req, res) => {
       }
     }
 
-    // Inline radius table — avoids a cross-service call on every nearby query.
-    // guest=23 km, all registered tiers=unlimited (null).
-    const tier    = req.auth.tier || 'guest';
-    const radiusM = tier === 'guest' ? 23_000 : null;
+    // Inline radius table — mirrors the `tiers` collection (seeded by migration 004).
+    // Avoids a cross-service call on every nearby query.
+    // Update here when tier radii change via the admin UI (T-01).
+    const tier = req.auth.tier || 'guest';
+    const _nearbyRadii = { guest: 500, regular: 1_000, premium: 23_000 };
+    const radiusM = _nearbyRadii[tier] ?? null; // null = no cap (e.g. developer)
 
     const withDist = nearby
       .map(u => ({ ...u, _dist: haversineDistance(lat, lon, u.lat, u.lon) }))

@@ -145,6 +145,10 @@ const Api = {
     return apiFetch(`/tiers/radius/nearby/${encodeURIComponent(tier)}`);
   },
 
+  getTierInfo(tier) {
+    return apiFetch(`/tiers/${encodeURIComponent(tier)}/info`);
+  },
+
   searchUsers({ nickname, ageMin, ageMax, sex, online } = {}) {
     const qs = new URLSearchParams();
     if (nickname != null && nickname !== '') qs.set('nickname', nickname);

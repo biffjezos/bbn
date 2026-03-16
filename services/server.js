@@ -204,9 +204,10 @@ app.get   ('/api/messages/:userId', checkTier('message_online'), (req, res) => p
 app.post  ('/api/messages/:userId', checkTier('message_online'), (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.userId}`));
 app.delete('/api/messages/:id',     checkTier('message_online'), (req, res) => proxy(req, res, `${CFG.MSG_SERVICE_URL}/messages/${req.params.id}`));
 
-// --- Tiers (public radius queries — no tier enforcement needed) ---
+// --- Tiers (public queries — no tier enforcement needed) ---
 app.get('/api/tiers/radius/nearby/:tier',  (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/tiers/radius/nearby/${req.params.tier}`));
 app.get('/api/tiers/radius/message/:tier', (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/tiers/radius/message/${req.params.tier}`));
+app.get('/api/tiers/:tier/info',           (req, res) => proxy(req, res, `${CFG.TIERS_SERVICE_URL}/tiers/${req.params.tier}/info`));
 
 // --- Favourites ---------------------------------------------
 app.get   ('/api/favourites',                  checkTier('manage_favourites'), (req, res) => proxy(req, res, `${CFG.FAV_SERVICE_URL}/favourites`));

@@ -28,19 +28,18 @@ function loadingHtml(text = 'Loading…') {
 }
 
 // ── My Profile ────────────────────────────────────────────
-const TIER_DISPLAY = {
-  guest:   { label: 'Guest',   cls: 'secondary' },
-  regular: { label: 'Regular', cls: 'primary'   },
-  premium: { label: 'Premium', cls: 'warning'   },
-};
 
-function tierFeatureHtml(tier) {
-  const nearbyKm = tier === 'guest' ? '23 km' : '9,700 km';
+function tierFeatureHtml(tierInfo) {
+  const nearbyM  = tierInfo?.nearbyRadiusM;
+  const nearbyLabel = nearbyM == null ? '—'
+    : nearbyM >= 1_000 ? (nearbyM / 1_000).toLocaleString() + ' km'
+    : nearbyM + ' m';
+  const isGuest = tierInfo?.name === 'guest';
   const items = [
     `<li>See the map and nearby users</li>`,
-    `<li>Nearby radius: <strong>${nearbyKm}</strong></li>`,
+    `<li>Nearby radius: <strong>${nearbyLabel}</strong></li>`,
   ];
-  if (tier === 'guest') {
+  if (isGuest) {
     items.push(`<li class="text-muted">Messaging — requires an account</li>`);
     items.push(`<li class="text-muted">Favourites — requires an account</li>`);
   } else {
@@ -66,10 +65,13 @@ async function renderMyProfile() {
 
   wrap.innerHTML = loadingHtml('Loading profile…');
 
-  const tier      = getJwtField('tier') || 'regular';
-  const tierDef   = TIER_DISPLAY[tier] || TIER_DISPLAY.regular;
-  const tierLabel = tierDef.label;
-  const tierCls   = tierDef.cls;
+  const tier = getJwtField('tier') || 'regular';
+
+  // Fetch tier info from tiers-service (label, cls, radii)
+  let tierInfo = null;
+  try { tierInfo = await window.Api.getTierInfo(tier); } catch { /* use fallback */ }
+  const tierLabel = tierInfo?.label || tier.charAt(0).toUpperCase() + tier.slice(1);
+  const tierCls   = tierInfo?.cls   || 'primary';
 
   // Always fetch from API — authoritative source
   let current = {};
@@ -161,7 +163,7 @@ async function renderMyProfile() {
       html:      true,
       sanitize:  false,
       title:     escHtml(tierLabel) + ' plan',
-      content:   tierFeatureHtml(tier),
+      content:   tierFeatureHtml(tierInfo),
       placement: 'bottom',
     });
     // Close when clicking outside

@@ -1,7 +1,9 @@
 // ============================================================
 // bOOmbOOm.NOW! — tiers-service.js
 // Single source of truth for all feature/tier rules.
-// The gateway calls this before proxying any request.
+// Tier display info and radii are stored in the `tiers` MongoDB
+// collection (seeded by migration 004_tiers_seed). Static fallback
+// is used if the collection is empty (e.g. migration pending).
 //
 // TO ADD A NEW FEATURE:
 //   1. Add an entry to FEATURES below with a minTier
@@ -12,21 +14,60 @@
 const CFG = {
   PORT:       process.env.PORT       || 8080,
   JWT_SECRET: process.env.JWT_SECRET,
+  MONGO_URI:  process.env.MONGO_URI,
+  DB_NAME:    process.env.DB_NAME    || 'boomboom',
 };
-if (!CFG.JWT_SECRET) { console.error('FATAL: JWT_SECRET not set'); process.exit(1); }
+const _missingCfg = ['JWT_SECRET', 'MONGO_URI'].filter(k => !CFG[k]);
+if (_missingCfg.length) { console.error('FATAL: missing env vars:', _missingCfg.join(', ')); process.exit(1); }
 
-import express from 'express';
-import jwt     from 'jsonwebtoken';
+import express        from 'express';
+import { MongoClient } from 'mongodb';
+import jwt            from 'jsonwebtoken';
+
+const db = (await new MongoClient(CFG.MONGO_URI).connect()).db(CFG.DB_NAME);
+console.log('[tiers] DB connected.');
 
 // ============================================================
 // TIER RANKS — higher number = more access
+// Includes developer (code-only until admin UI is ready — T-01)
 // ============================================================
 const TIERS = {
-  guest:   0,
-  regular: 1,
-  premium: 2,
-  developer: 3
+  guest:     0,
+  regular:   1,
+  premium:   2,
+  developer: 3,
 };
+
+// ============================================================
+// STATIC FALLBACK — used when tiers collection is empty
+// (e.g. migration 004_tiers_seed not yet applied)
+// ============================================================
+const STATIC_TIERS = {
+  guest:   { name: 'guest',   label: 'Guest',   cls: 'secondary', rank: 0, nearbyRadiusM: 500,    messageRadiusM: null   },
+  regular: { name: 'regular', label: 'Regular', cls: 'primary',   rank: 1, nearbyRadiusM: 1_000,  messageRadiusM: 100    },
+  premium: { name: 'premium', label: 'Premium', cls: 'warning',   rank: 2, nearbyRadiusM: 23_000, messageRadiusM: 23_000 },
+};
+
+// ============================================================
+// TIER CACHE — 60 s TTL; reloads from DB on expiry
+// ============================================================
+let _tiersCache      = null;
+let _tiersCacheExpiry = 0;
+const TIERS_CACHE_TTL_MS = 60_000;
+
+async function loadTiers() {
+  if (_tiersCache && Date.now() < _tiersCacheExpiry) return _tiersCache;
+  try {
+    const docs = await db.collection('tiers').find({}).toArray();
+    _tiersCache = docs.length > 0
+      ? Object.fromEntries(docs.map(t => [t.name, t]))
+      : STATIC_TIERS; // migration not yet applied
+  } catch {
+    _tiersCache = STATIC_TIERS; // DB unreachable — serve static data
+  }
+  _tiersCacheExpiry = Date.now() + TIERS_CACHE_TTL_MS;
+  return _tiersCache;
+}
 
 // ============================================================
 // FEATURE DEFINITIONS
@@ -39,12 +80,6 @@ const FEATURES = {
 
   see_nearby: {
     minTier: 'guest',
-    radius: {
-      guest:   500,
-      regular: 1_000,
-      premium: 23_000,
-      developer: 9_700_000
-    },
   },
 
   // Message a user who is currently online (has active location)
@@ -57,16 +92,8 @@ const FEATURES = {
     minTier: 'regular',
   },
 
-  // Distance cap when messaging.
-  // Infinity → returned as -1 from the API → messages-service skips the online/distance check
-  // so registered users can message anyone (online or offline).
   message_radius: {
     minTier: 'regular',
-    radius: {
-      regular: 1_00,
-      premium: 23_000,
-      developer: 9_700_000
-    },
   },
 
   manage_favourites: {
@@ -81,15 +108,6 @@ const FEATURES = {
 };
 
 // ============================================================
-// TIER BADGE — UI display config
-// ============================================================
-const TIER_BADGE = {
-  guest:   { label: 'Guest',   cls: 'secondary' },
-  regular: { label: 'Regular', cls: 'primary'   },
-  premium: { label: 'Premium', cls: 'warning'   },
-};
-
-// ============================================================
 // HELPERS
 // ============================================================
 function can(tier, feature) {
@@ -100,12 +118,14 @@ function can(tier, feature) {
   return userRank >= requiredRank;
 }
 
-function getNearbyRadius(tier) {
-  return FEATURES.see_nearby.radius[tier] ?? FEATURES.see_nearby.radius.guest;
+async function getNearbyRadius(tier) {
+  const tiers = await loadTiers();
+  return tiers[tier]?.nearbyRadiusM ?? STATIC_TIERS.guest.nearbyRadiusM;
 }
 
-function getMessageRadius(tier) {
-  return FEATURES.message_radius.radius[tier] ?? FEATURES.message_radius.radius.regular;
+async function getMessageRadius(tier) {
+  const tiers = await loadTiers();
+  return tiers[tier]?.messageRadiusM ?? null;
 }
 
 // ============================================================
@@ -131,16 +151,40 @@ app.use((req, res, next) => {
   requireServiceToken(req, res, next);
 });
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', async (_req, res) => {
+  try {
+    await db.command({ ping: 1 });
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false, error: 'DB unreachable' });
+  }
+});
 
-// GET /tiers/info — badge labels and colours for the UI
-app.get('/tiers/info', (_req, res) => {
-  res.json({ tiers: TIER_BADGE });
+// GET /tiers/info — badge labels and colours for all tiers (internal)
+app.get('/tiers/info', async (_req, res) => {
+  const tiers = await loadTiers();
+  const info = Object.fromEntries(
+    Object.entries(tiers).map(([name, t]) => [name, { label: t.label, cls: t.cls }])
+  );
+  res.json({ tiers: info });
+});
+
+// GET /tiers/:name/info — full tier info for UI rendering (profile badge)
+app.get('/tiers/:name/info', async (req, res) => {
+  const tiers = await loadTiers();
+  const tier  = tiers[req.params.name];
+  if (!tier) return res.status(404).json({ error: 'Unknown tier.' });
+  res.json({
+    name:          tier.name,
+    label:         tier.label,
+    cls:           tier.cls,
+    nearbyRadiusM: tier.nearbyRadiusM,
+    messageRadiusM: tier.messageRadiusM,
+    features:      Object.keys(FEATURES).filter(f => can(tier.name, f)),
+  });
 });
 
 // GET /tiers/features — full feature definitions
-// Note: Infinity is not valid JSON — serialised as null here.
-// Services should use /tiers/radius/message/:tier for numeric values.
 app.get('/tiers/features', (_req, res) => {
   res.json({ features: FEATURES });
 });
@@ -165,21 +209,22 @@ app.post('/tiers/check', (req, res) => {
 });
 
 // GET /tiers/radius/nearby/:tier — nearby radius for a tier
-app.get('/tiers/radius/nearby/:tier', (req, res) => {
+app.get('/tiers/radius/nearby/:tier', async (req, res) => {
   const { tier } = req.params;
   if (!(tier in TIERS))
     return res.status(400).json({ error: 'Unknown tier.' });
-  res.json({ tier, radiusM: getNearbyRadius(tier) });
+  const radiusM = await getNearbyRadius(tier);
+  res.json({ tier, radiusM });
 });
 
 // GET /tiers/radius/message/:tier — message radius for a tier
-// Returns -1 to represent Infinity (JSON safe)
-app.get('/tiers/radius/message/:tier', (req, res) => {
+// Returns -1 to represent Infinity/null (JSON safe)
+app.get('/tiers/radius/message/:tier', async (req, res) => {
   const { tier } = req.params;
   if (!(tier in TIERS))
     return res.status(400).json({ error: 'Unknown tier.' });
-  const radiusM = getMessageRadius(tier);
-  res.json({ tier, radiusM: radiusM === Infinity ? -1 : radiusM });
+  const radiusM = await getMessageRadius(tier);
+  res.json({ tier, radiusM: radiusM == null ? -1 : radiusM });
 });
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found.' }));
