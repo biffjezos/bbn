@@ -291,6 +291,9 @@
         var favIcon  = $('pinFavIcon');
         var favLabel = $('pinFavLabel');
         if (favBtn) {
+          if (!window.Auth || !window.Auth.isRegistered()) {
+            favBtn.classList.add('d-none');
+          } else {
           favBtn.disabled = false;
           if (favIcon)  { favIcon.className  = 'bi bi-star me-2'; }
           if (favLabel) { favLabel.textContent = 'Add to Favourites'; }
@@ -322,6 +325,7 @@
               }
             };
           }).catch(function() { /* ignore */ });
+          } // end isRegistered
         }
 
         var pinBlockBtn = $('pinBlockBtn');
