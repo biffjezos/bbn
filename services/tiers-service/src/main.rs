@@ -20,7 +20,7 @@ use axum::{
 };
 use common::auth::{JwtSecret, ServiceToken};
 use futures_util::TryStreamExt;
-use mongodb::{bson::doc, Client, Database};
+use mongodb::{bson::{doc, DateTime}, Client, Database};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::RwLock;
@@ -299,6 +299,37 @@ async fn not_found() -> impl IntoResponse {
     (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." })))
 }
 
+// ── Startup seeder ────────────────────────────────────────────────────────────
+
+/// Upserts the three base tiers into MongoDB on startup.
+/// Uses $setOnInsert — safe to re-run: existing documents are never overwritten,
+/// so any changes made via the future admin UI are preserved.
+/// Does NOT create indexes (that remains migration 004's responsibility).
+async fn seed_tiers(db: &Database) {
+    let col = db.collection::<mongodb::bson::Document>("tiers");
+    let now = DateTime::now();
+    let seeds = [
+        doc! { "name": "guest",   "label": "Guest",   "cls": "secondary", "rank": 0_i32, "nearbyRadiusM": 500_i32,   "messageRadiusM": mongodb::bson::Bson::Null, "createdAt": now },
+        doc! { "name": "regular", "label": "Regular", "cls": "primary",   "rank": 1_i32, "nearbyRadiusM": 1000_i32,  "messageRadiusM": 100_i32,   "createdAt": now },
+        doc! { "name": "premium", "label": "Premium", "cls": "warning",   "rank": 2_i32, "nearbyRadiusM": 23000_i32, "messageRadiusM": 23000_i32, "createdAt": now },
+    ];
+    let mut seeded = 0u32;
+    for seed in &seeds {
+        let filter = doc! { "name": seed.get_str("name").unwrap() };
+        let update = doc! { "$setOnInsert": seed };
+        match col.update_one(filter, update).upsert(true).await {
+            Ok(r) if r.upserted_id.is_some() => seeded += 1,
+            Ok(_)  => {}
+            Err(e) => eprintln!("[tiers] seed warning ({}): {e}", seed.get_str("name").unwrap()),
+        }
+    }
+    if seeded > 0 {
+        println!("[tiers] Seeded {seeded} tier(s) into DB.");
+    } else {
+        println!("[tiers] Tiers already present — no seed needed.");
+    }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -315,6 +346,7 @@ async fn main() {
         .expect("Failed to connect to MongoDB")
         .database(&cfg.db_name);
     println!("[tiers] DB connected.");
+    seed_tiers(&db).await;
 
     let state = AppState {
         db,
