@@ -1,17 +1,44 @@
-# bOOmbOOm.NOW! — Code & Security Audit
+# bOOmbOOm.NOW! — Technical Audit Log
 
-**Date:** 2026-03-10
-**Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
-**Auditor:** Claude (claude-sonnet-4-6)
-**Note:** Carries forward postponed items from AUDIT-20260310-1425.md
+**This file is for Claude only.** It contains unresolved technical findings:
+security bugs, performance issues, architectural debt, and deferred decisions.
+Feature requests and roadmap items live in `TICKETS.md`.
 
----
-
-## Executive Summary
+Last full audit: 2026-03-10 (9 backend services, 9 frontend scripts)
+Carries forward items from AUDIT-20260310-1425.md
 
 ---
 
-## 1. Security Bugs
+## 1. Security
+
+### 1.1 Gateway send-rate limit bypassable at messages-service level
+
+**File:** `services/server.js` (`_wsSendCounts`), `services/messages-service.js`
+
+The per-user send rate (10 msg / 10 s) is enforced only at the WebSocket layer in
+the gateway. The messages-service HTTP endpoint has no independent rate limit.
+A client that opens multiple tabs, or an attacker with a valid JWT hitting the
+HTTP endpoint directly, can exceed the per-user budget. The messages-service
+must add its own per-userId rate check (in-memory is fine for single-instance).
+
+**Priority:** Medium — actual spam risk before blocking/reporting is built.
+
+---
+
+### 1.2 JWT tier claim goes stale after admin tier change (future risk)
+
+**Files:** `services/server.js` (`checkTier`), `services/auth-service.js`
+
+The `tier` claim is baked into the JWT at login. `checkTier` in the gateway
+reads the tier from the token payload, not from the DB. When the planned admin
+tier-change feature (T-01) is built, changing a user's tier in the DB will have
+no effect until their token expires (TTL dependent). Must be resolved before
+the admin tier-change endpoint goes live. Options:
+- (a) `checkTier` fetches tier from DB on every request (adds latency + DB load).
+- (b) Short JWT TTL with silent refresh (already worth doing for other reasons).
+- (c) A token-version bump (same pattern as `tokenVersion` used for password changes) — this is the cleanest fit with existing architecture.
+
+**Priority:** Low now, blocks T-01 when built.
 
 ---
 
@@ -21,68 +48,80 @@
 
 **Files:** `services/server.js`, `services/messages-service.js`, `services/location-service.js`
 
-Three independent copy-paste implementations of the same function. If a precision bug is found, all three need patching. `services/lib/geo.js` exists but is not imported by the services that need it.
+Three independent copy-paste implementations. If a precision bug is found, all
+three need patching. `services/lib/geo.js` exists but is unused.
 
-**Context:** A shared internal library is not currently possible (no private package registry, no monorepo tooling). Each service is intentionally self-contained. Consolidation is deferred until the infrastructure to support a shared lib is in place. MongoDB geospatial indexes are also unavailable (free tier RAM limits + migration 002 failure), so haversine-in-JS is the correct approach for distance filtering regardless.
+**Context:** Shared internal library not possible yet (no monorepo tooling, no
+private registry). MongoDB geospatial indexes also unavailable (free-tier RAM +
+migration 002 failure), so haversine-in-JS is correct regardless. Deferred
+until infrastructure supports a shared lib. See T-04 (Rust port) — this becomes
+a non-issue if the service is rewritten.
 
 ---
 
 ## 3. Performance
 
-### 3.1 Send-rate bucket is in-process — not safe for multi-instance gateway
+### 3.1 In-process send-rate bucket — not safe for multi-instance gateway
 
-**File:** `services/server.js` (in-memory `_wsSendCounts`)
+**File:** `services/server.js` (`_wsSendCounts`)
 
-The per-user send-rate bucket is stored in-process:
+Bucket is in-process. Two connections from the same user on different instances
+have separate budgets. Safe while Railway runs a single gateway instance.
 
-```js
-const _wsSendCounts = new Map(); // userId -> { count, connections, timer }
-```
-
-If the gateway scales to multiple instances, two connections from the same user on different instances will have separate buckets, doubling the effective send rate. As long as Railway runs a single gateway instance this is fine, but it's worth noting before horizontal scaling.
-
-**Context:** Redis is not currently available. Adding Redis is planned when the app scales, at which point the bucket can be migrated to a shared store (e.g. Redis `INCR` with a TTL key).
+**Context:** Redis not available. Migrate to Redis `INCR + TTL` when scaling.
+Documented prerequisite for horizontal gateway scaling.
 
 ---
 
-## 4. Usability
+### 3.2 Notification poll adds one HTTP request per active user per 30 s
+
+**File:** `ui/scripts/app.js` (NotifModule), `services/favourites-service.js`
+
+Each logged-in user polls `GET /api/notifications` every 30 s. At small scale
+(< 1 000 concurrent) this is negligible. At larger scale, push delivery
+(WebSocket or SSE) would be more efficient. Acceptable for current load.
 
 ---
 
-## 5. Maintainability
+## 4. Maintainability
 
-### 5.1 Core utilities duplicated across all services
+### 4.1 Core utilities duplicated across all services
 
 **Files:** All services
 
-The following utilities are copy-pasted across 3–4 files each:
-
-**Note:** All duplication is intentional at this stage. A shared internal library is not currently possible (no private package registry, no monorepo tooling). Each service is intentionally self-contained. Consolidation is deferred until the infrastructure to support a shared lib is in place.
-
 | Utility | Duplicated in |
 |---|---|
-| `verifyToken` | auth, users, messages, location, favourites — intentional copy per service |
-| `requireServiceToken` | all 6 services — intentional copy per service |
-| `serviceToken` (caching) | server.js, messages-service.js — intentional copy per service |
-| `haversineDistance` | server.js, messages-service.js, location-service.js — intentional: MongoDB geospatial indexes unavailable (free tier RAM + migration 002 failure), distance filtering must run in JS per service; deferred with 2.1 |
-| `safeObjectId` | users, messages, favourites — intentional copy per service |
-| `issueUserToken` | auth-service.js, users-service.js — intentional copy per service |
+| `verifyToken` | auth, users, messages, location, favourites |
+| `requireServiceToken` | all 6 services |
+| `serviceToken` (caching) | server.js, messages-service.js |
+| `haversineDistance` | server.js, messages-service.js, location-service.js |
+| `safeObjectId` | users, messages, favourites |
+| `issueUserToken` | auth-service.js, users-service.js |
 
-If the JWT payload structure changes (e.g., adding a field), every `issueUserToken` and `verifyToken` in every service must be updated. This is a recurring maintenance risk.
-
-### 5.2 `app.js` mixes three distinct module concerns
-
-**File:** `ui/scripts/app.js`
-
-The file contains the main app shell, `GeoModule`, and `LockModule` — three concerns with distinct lifecycles. Each wraps itself in an IIFE, which helps, but a 718-line file that must be loaded on every page adds cognitive overhead. As the app grows, splitting into separate files (which Jekyll already supports via `extra_js`) would improve navigation and testability.
+All intentional at this stage — no monorepo tooling. If the JWT payload
+structure changes, every `issueUserToken` and `verifyToken` copy must be
+updated. Recurring risk. Resolved naturally as services are ported to Rust (T-04).
 
 ---
 
-## 6. Summary Table
+### 4.2 `app.js` mixes three distinct module concerns
+
+**File:** `ui/scripts/app.js`
+
+Main shell + GeoModule + LockModule + NotifModule in one file (~800 lines).
+Each is wrapped in an IIFE, which helps. Low priority; split via Jekyll
+`extra_js` when the file becomes unwieldy.
+
+---
+
+## 5. Summary Table
 
 | Status | # | Area | Severity | Finding |
 |---|---|---|---|---|
-| 🔲 | 2.1 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
-| 🔲 | 3.1 | Performance | LOW | Send-rate bucket is in-process — not safe for multi-instance gateway |
-| 🔲 | 5.1 | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated across all services |
-| 🔲 | 5.2 | Maintainability | LOW | app.js mixes three distinct module concerns |
+| 🔲 | 1.1 | Security | MEDIUM | Gateway send-rate bypassable at messages-service level |
+| 🔲 | 1.2 | Security | LOW (future) | JWT tier claim stale after admin tier change |
+| 🔲 | 2.1 | Bug | LOW | haversineDistance copy-pasted in 3 files |
+| 🔲 | 3.1 | Performance | LOW | In-process send-rate bucket not safe for multi-instance |
+| 🔲 | 3.2 | Performance | LOW | Notification poll scales linearly with active users |
+| 🔲 | 4.1 | Maintainability | MEDIUM | Core utilities duplicated across all services |
+| 🔲 | 4.2 | Maintainability | LOW | app.js mixes four module concerns |
