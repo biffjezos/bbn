@@ -75,7 +75,7 @@ async function verifyToken(req, res, next) {
   } catch {
     return res.status(401).json({ error: 'Token invalid or expired.', code: 'TOKEN_INVALID' });
   }
-  if (payload.role !== 'user')
+  if (!['user','admin'].includes(payload.role))
     return res.status(403).json({ error: 'Registered account required.', code: 'REGISTERED_REQUIRED' });
 
   // Verify tokenVersion so password changes invalidate old JWTs.

@@ -425,7 +425,7 @@ wssMsg.on('connection', ws => {
 
     const payload = verifyToken(msg.token);
     if (!payload)                  { ws.close(4001, 'Invalid token'); return; }
-    if (payload.role !== 'user')   { ws.close(4003, 'Registered account required'); return; }
+    if (!['user','admin'].includes(payload.role))   { ws.close(4003, 'Registered account required'); return; }
 
     setupMsgConnection(ws, payload.sub, msg.token);
   });
