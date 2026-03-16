@@ -13,7 +13,7 @@ Before any marketing or scaling push, the order of priority is:
 1. ~~**T-05**~~ — ✅ Done (2026-03-16)
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
 3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
-4. **T-04b** — Rust port: `auth-service` + OPAQUE/PAKE (unlocks client-side key derivation)
+4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
 5. **T-05b** — Add encrypted note field to blocks (now has correct key derivation foundation)
 6. **T-01** — Admin UI (needs T-03; benefits from auth being stable)
 7. **T-02** — Analytics (low-risk, can slot in any time)
@@ -211,7 +211,22 @@ optional `label` field to the radius value — no separate collection needed.
 
 ## T-04 — Port Services to Rust
 
-**Status:** T-04a ✅ Complete (2026-03-16). T-04b next. Sequenced as T-04a/b/c — see Implementation Order.
+**Status:** T-04a ✅ Complete (2026-03-16). T-04b ✅ Complete (2026-03-16). T-01 now unblocked. Sequenced as T-04a/b/c — see Implementation Order.
+
+### T-04b — What was implemented (2026-03-16)
+
+- `services/auth-service/` — full Rust port (axum 0.8, bcrypt, mongodb 3)
+- `common/src/auth.rs` — added `email` to `UserClaims`, added `issue_user_token` / `issue_guest_token` (reusable for future service ports)
+- `role` field added to JWT (`user` | `admin`). Read from DB on login; new users get `role: user` on register.
+- Bootstrap mechanism: `ADMIN_BOOTSTRAP_USER_ID` env var. On boot, if set and no admin exists, promotes that user and bumps `tokenVersion`. Safe to leave set (no-op after first run, but should be removed).
+- `services/Dockerfile.auth` for Railway deployment.
+- Identical HTTP contract to `auth-service.js` — gateway unchanged.
+
+**New env vars for auth-service:** `MONGO_URI`, `DB_NAME`, `JWT_SECRET` (same values as other services), `ADMIN_BOOTSTRAP_USER_ID` (one-time, remove after use).
+
+### T-04b — OPAQUE/PAKE (deferred)
+
+OPAQUE requires client-side protocol participation (JS changes to login/register forms). The Rust infrastructure is now in place. This is a separate workstream — see AUDIT.md 1.1.
 
 ### Rationale
 

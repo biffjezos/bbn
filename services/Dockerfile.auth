@@ -1,0 +1,17 @@
+# ── Build stage ───────────────────────────────────────────────
+FROM rust:latest AS builder
+WORKDIR /build
+# Copy workspace files from services/ subdirectory (build context is repo root)
+COPY services/Cargo.toml services/rust-toolchain.toml ./
+COPY services/common ./common
+COPY services/auth-service ./auth-service
+RUN cargo build --release -p auth-service
+
+# ── Runtime stage ─────────────────────────────────────────────
+FROM debian:bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /build/target/release/auth-service /usr/local/bin/auth-service
+EXPOSE 8080
+CMD ["/usr/local/bin/auth-service"]
