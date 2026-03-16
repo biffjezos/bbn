@@ -53,9 +53,9 @@ impl Config {
 
 // ── Valid tiers ───────────────────────────────────────────────────────────────
 
-/// Tiers that a regular user account may hold.
+/// Tiers that a user account may hold.
 /// Any unrecognised DB value falls back to "regular".
-const VALID_USER_TIERS: &[&str] = &["regular", "premium"];
+const VALID_USER_TIERS: &[&str] = &["regular", "premium", "developer"];
 
 fn sanitize_tier(tier: Option<&str>) -> &str {
     tier.filter(|t| VALID_USER_TIERS.contains(t))
