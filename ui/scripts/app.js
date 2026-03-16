@@ -122,7 +122,7 @@
   Auth.onLogout = function () {
     applyAuthState(false);
     window.MapModule && window.MapModule.refreshMarkers();
-    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile'];
+    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile', BASE + '/admin'];
     if (prot.some(function(p) { return location.pathname.startsWith(p); })) {
       window.location.href = BASE + '/';
     }

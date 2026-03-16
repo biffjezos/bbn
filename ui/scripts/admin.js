@@ -15,6 +15,34 @@ function getAdminRole() {
   } catch (e) { return null; }
 }
 
+// ── Tier cache (for user card dropdown) ──────────────────────
+
+var _cachedTiers = [];
+
+async function _loadTiers() {
+  try {
+    var data = await window.Api.adminListTiers();
+    _cachedTiers = (data.tiers || []).slice().sort(function (a, b) { return (a.rank || 0) - (b.rank || 0); });
+  } catch (e) {
+    _cachedTiers = [];
+  }
+}
+
+function _buildTierSelect(uid, currentTier) {
+  if (!_cachedTiers.length) {
+    return '<input type="text" class="form-control form-control-sm" id="tier-' + escHtml(uid) + '"'
+      + ' value="' + escHtml(currentTier) + '" placeholder="e.g. premium" />';
+  }
+  var opts = _cachedTiers.map(function (t) {
+    return '<option value="' + escHtml(t.name) + '"' + (t.name === currentTier ? ' selected' : '') + '>'
+      + escHtml(t.label || t.name) + '</option>';
+  });
+  if (!_cachedTiers.some(function (t) { return t.name === currentTier; })) {
+    opts.unshift('<option value="' + escHtml(currentTier) + '" selected>' + escHtml(currentTier) + '</option>');
+  }
+  return '<select class="form-select form-select-sm" id="tier-' + escHtml(uid) + '">' + opts.join('') + '</select>';
+}
+
 // ── Bootstrap ────────────────────────────────────────────────
 
 async function initAdmin() {
@@ -36,6 +64,10 @@ async function initAdmin() {
     '    <button class="nav-link" data-tab="tiers" type="button">',
     '      <i class="bi bi-layers me-2"></i>Tiers</button>',
     '  </li>',
+    '  <li class="nav-item" role="presentation">',
+    '    <button class="nav-link" data-tab="roles" type="button">',
+    '      <i class="bi bi-person-badge me-2"></i>Roles</button>',
+    '  </li>',
     '</ul>',
     '<div id="adminTabContent"></div>',
   ].join('');
@@ -45,7 +77,8 @@ async function initAdmin() {
       panel.querySelectorAll('[data-tab]').forEach(function (b) { b.classList.remove('active'); });
       btn.classList.add('active');
       if (btn.dataset.tab === 'users') renderUsersTab();
-      else renderTiersTab();
+      else if (btn.dataset.tab === 'tiers') renderTiersTab();
+      else renderRolesTab();
     });
   });
 
@@ -54,7 +87,8 @@ async function initAdmin() {
 
 // ── Users tab ────────────────────────────────────────────────
 
-function renderUsersTab() {
+async function renderUsersTab() {
+  await _loadTiers();
   var content = document.getElementById('adminTabContent');
   content.innerHTML = [
     '<div class="row g-3 mb-4">',
@@ -97,6 +131,14 @@ async function runUserSearch() {
     out.querySelectorAll('[data-save-user]').forEach(function (btn) {
       btn.addEventListener('click', function () { saveUserChanges(btn.dataset.saveUser); });
     });
+    out.querySelectorAll('[data-copy-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        navigator.clipboard.writeText(btn.dataset.copyId).then(function () {
+          var icon = btn.querySelector('i');
+          if (icon) { icon.className = 'bi bi-clipboard-check'; setTimeout(function () { icon.className = 'bi bi-clipboard'; }, 2000); }
+        }).catch(function () {});
+      });
+    });
   } catch (err) {
     out.innerHTML = '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
   }
@@ -126,7 +168,12 @@ function renderUserCard(u) {
     '    <div class="row g-3 mb-3">',
     '      <div class="col-12 col-sm-6 col-md-4">',
     '        <div class="small text-muted-bb mb-1">User ID</div>',
-    '        <code style="font-size:0.72rem;word-break:break-all">' + escHtml(u.userId) + '</code>',
+    '        <div class="d-flex align-items-center gap-1">',
+    '          <code style="font-size:0.72rem;word-break:break-all">' + escHtml(u.userId) + '</code>',
+    '          <button class="btn btn-bbm-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.userId) + '" title="Copy ID" style="line-height:1">',
+    '            <i class="bi bi-clipboard" style="font-size:0.72rem"></i>',
+    '          </button>',
+    '        </div>',
     '      </div>',
     '      <div class="col-6 col-md-2">',
     '        <div class="small text-muted-bb mb-1">Age / Sex</div>',
@@ -138,8 +185,7 @@ function renderUserCard(u) {
     '      </div>',
     '      <div class="col-6 col-md-2">',
     '        <label class="form-label small mb-1" for="tier-' + escHtml(u.userId) + '">Tier</label>',
-    '        <input type="text" class="form-control form-control-sm" id="tier-' + escHtml(u.userId) + '"',
-    '               value="' + escHtml(u.tier) + '" placeholder="e.g. premium" />',
+    '        ' + _buildTierSelect(u.userId, u.tier),
     '      </div>',
     '      <div class="col-6 col-md-2">',
     '        <label class="form-label small mb-1" for="role-' + escHtml(u.userId) + '">Role</label>',
@@ -390,6 +436,46 @@ async function deleteTier(name) {
   } catch (err) {
     alert('Error: ' + err.message);
   }
+}
+
+// ── Roles tab ─────────────────────────────────────────────────
+
+function renderRolesTab() {
+  var content = document.getElementById('adminTabContent');
+  content.innerHTML = [
+    '<p class="text-muted-bb small mb-4">',
+    '  Roles define what actions a user can perform. Tier controls feature access.',
+    '  Role and tier are orthogonal — a user can be <code>tier: premium, role: admin</code>.',
+    '</p>',
+    '<div class="bbm-section mb-3">',
+    '  <div class="d-flex align-items-center justify-content-between mb-2">',
+    '    <div><strong>user</strong> <span class="badge bg-secondary ms-2">default</span></div>',
+    '  </div>',
+    '  <ul class="text-muted-bb small mb-0" style="padding-left:1.2rem">',
+    '    <li>Standard account. Access to all tier-gated features (map, messages, favourites).</li>',
+    '    <li>Cannot access the admin panel or modify other users.</li>',
+    '  </ul>',
+    '</div>',
+    '<div class="bbm-section mb-3">',
+    '  <div class="d-flex align-items-center justify-content-between mb-2">',
+    '    <div><strong>admin</strong> <span class="badge bg-danger ms-2">elevated</span></div>',
+    '  </div>',
+    '  <ul class="text-muted-bb small mb-2" style="padding-left:1.2rem">',
+    '    <li>Full access to admin panel: user search, tier changes, role changes, tier CRUD.</li>',
+    '    <li>Cannot be self-assigned — must be granted by another admin.</li>',
+    '    <li>Changing a user\'s tier or role invalidates their active session (tokenVersion bump).</li>',
+    '  </ul>',
+    '  <div class="small" style="color:var(--bbm-yellow, #f0c040)">',
+    '    <i class="bi bi-exclamation-triangle me-1"></i>',
+    '    No server-side guard currently prevents an admin from modifying their own tier or role (AUDIT 1.4).',
+    '  </div>',
+    '</div>',
+    '<div class="alert alert-info small mt-3 mb-0" role="alert">',
+    '  <i class="bi bi-info-circle me-1"></i>',
+    '  Custom roles and per-role permission sets require backend changes (T-09).',
+    '  Until T-09 is implemented, roles are limited to <code>user</code> and <code>admin</code>.',
+    '</div>',
+  ].join('');
 }
 
 // Auto-run when loaded as extra_js

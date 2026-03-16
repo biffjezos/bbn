@@ -549,3 +549,38 @@ Remove from Railway once authority-service is live and all services have been mi
 ### Owner's Comments
 
 - 2026-03-16: Proposed by Claude based on the admin-role cascade bug post-mortem (AUDIT.md 6.3). Makes auth-service the true single authority for all rights and limits. Feasible once T-01 is done and T-04c is underway. tiers-service to be retired after merge.
+
+---
+
+## T-09 — Role CRUD with Permissions UI
+
+**Status:** Not started. Requires backend changes.
+
+### Problem
+
+Roles are currently hardcoded strings (`user`, `admin`) validated inline in each service. The admin Roles tab (added T-01 follow-up, 2026-03-16) is read-only. Adding custom roles or per-role permission sets requires:
+
+1. A `roles` MongoDB collection: `{ name, label, permissions[], rank, createdAt }`
+2. Role validation in `users-service` updated from hardcoded list to DB lookup
+3. Gateway or authority service reads role permissions at request time (see T-08)
+4. Admin UI: form to define role name, label, and permission toggles
+
+### Standalone guard (can be done without T-09)
+
+**Admin self-modification block** (AUDIT.md 1.4): prevent admins from changing their own tier or role via the API. One-line fix per handler in `users-service.js`:
+
+```
+if (targetId === req.auth.sub)
+  return res.status(403).json({ error: 'Cannot modify your own tier or role.', code: 'SELF_MODIFICATION_FORBIDDEN' })
+```
+
+This does not require a `roles` collection and can be implemented at any time.
+
+### Prerequisites
+
+- T-08 (Authority service) is the natural home for role-to-permissions resolution. Without T-08, the change touches 5+ services (same anti-pattern as AUDIT.md 6.3).
+- T-09 full implementation should follow T-08.
+
+### Owner's Comments
+
+- 2026-03-16: Raised by owner — need ability to add/edit/remove roles with permissions. Custom roles and permissions require backend work; tracked here. Standalone self-modification guard (AUDIT 1.4) can be patched sooner.
