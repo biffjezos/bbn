@@ -35,11 +35,13 @@ login({ email, password, guestId }) {
   },
 ```
 
-Why is that? Hash the email address and password right in the client. The app doesn't have any purpose for a plain text eMail address. Find the issuea. Show me the concrete code snippet. If `/services` encrypt or hash data a second time, that's ok. I do not want any unencrypted/unhasshed communication between server and clients (later also encrypt location data). Look into SRP or even better OPAQUE / PAKE to solve this. Include items 6.* before contemplating about this ticket. Could we implement OPAQUE if we would port the auth-service to rust as a test run?
+Why is that? Hash the email address and password right in the client. The app doesn't have any purpose for a plain text eMail address. Find the issue. Show me the concrete code snippet. If `/services` encrypt or hash data a second time, that's ok. I do not want any unencrypted/unhashed communication between server and clients (later also encrypt location data). Look into SRP or even better OPAQUE / PAKE to solve this. Include items 6.* before contemplating about this ticket. Could we implement OPAQUE if we would port the auth-service to rust as a test run?
 
 On account creation the eMail should be hashed, just like the password, sent and stored in the db.
 
 The eMail address and password should always be hashed right after it was added into the text field (of the account creation, login-modal).
+
+---
 
 ### 1.2 Gateway send-rate limit bypassable at messages-service level
 
@@ -63,10 +65,8 @@ The `tier` claim is baked into the JWT at login. `checkTier` reads it from the
 token payload, not from the DB. When the admin tier-change feature (T-01) is
 built, changing a tier in the DB has no effect until the old token expires.
 
-**Resolution options (when T-01 is built):**
-- Bump `tokenVersion` on tier change — same pattern as password change. Cleanest fit.
-- Short JWT TTL with silent refresh.
-- Read tier from DB in `checkTier` (adds latency).
+**Resolution (when T-01 is built):** Bump `tokenVersion` on tier change —
+same pattern already used for password changes. Cleanest fit with existing arch.
 
 **Priority:** Low now, blocks T-01 implementation.
 
@@ -84,10 +84,11 @@ Three independent copy-paste implementations of the same function. If a precisio
 
 **Context:** A shared internal library is not currently possible (no private package registry, no monorepo tooling). Each service is intentionally self-contained. Consolidation is deferred until the infrastructure to support a shared lib is in place. MongoDB geospatial indexes are also unavailable (free tier RAM limits + migration 002 failure), so haversine-in-JS is the correct approach for distance filtering regardless.
 
-### 2.2 tier badge in /profile with hard coded values
+### 2.2 Tier badge in /profile has hard-coded values
 
-I changed the see_nearby values and added a fourth tier `developer` but the information of the tier-badge seems to be hard coded. We have to improve the tier system, so it also stores standard information per tier. Maybe adding a GET /tier/{regular}/info which would return standard phrases or values, which the ui could render as:
+I changed the see_nearby values and added a fourth tier `developer` but the information of the tier-badge seems to be hard coded. We have to improve the tier system, so it also stores standard information per tier. Maybe adding a `GET /tier/{regular}/info` which would return standard phrases or values, which the ui could render as:
 See radius: x meters
+
 ---
 
 ## 3. Performance
@@ -107,6 +108,8 @@ const _wsSendCounts = new Map(); // userId -> { count, connections, timer }
 If the gateway scales to multiple instances, two connections from the same user on different instances will have separate buckets, doubling the effective send rate. As long as Railway runs a single gateway instance this is fine, but it's worth noting before horizontal scaling.
 
 **Context:** Redis is not currently available. Adding Redis is planned when the app scales, at which point the bucket can be migrated to a shared store (e.g. Redis `INCR` with a TTL key).
+
+---
 
 ### 3.2 Notification poll scales linearly with active users
 
@@ -145,71 +148,68 @@ The following utilities are copy-pasted across 3–4 files each:
 
 If the JWT payload structure changes (e.g., adding a field), every `issueUserToken` and `verifyToken` in every service must be updated. This is a recurring maintenance risk.
 
-### 5.2 `app.js` mixes three distinct module concerns
+### 5.2 `app.js` mixes four distinct module concerns
 
 **File:** `ui/scripts/app.js`
 
-The file contains the main app shell, `GeoModule`, and `LockModule` — three concerns with distinct lifecycles. Each wraps itself in an IIFE, which helps, but a 718-line file that must be loaded on every page adds cognitive overhead. As the app grows, splitting into separate files (which Jekyll already supports via `extra_js`) would improve navigation and testability.
+The file contains the main app shell, `GeoModule`, `LockModule`, and `NotifModule` — four concerns with distinct lifecycles. Each wraps itself in an IIFE, which helps, but the file must be loaded on every page. As the app grows, splitting into separate files (which Jekyll already supports via `extra_js`) would improve navigation and testability.
 
 ---
 
-## 6 Other Tickets (new features, evaluations, questions)
+## 6. Other Tickets (new features, evaluations, questions)
 
-### 6.1. TTL for inactive users
+### 6.1 TTL for inactive users
 
 ***Note:*** added by project owner (12 March 2026)
 
 Related to 1.1.
 
-I want to follow a (lost password - lost access)-approach. If a user forgets the password, there should be no way to recover the account, set a new password, being able to login, (and) or delete the acount read existing messages.
+I want to follow a (lost password - lost access)-approach. If a user forgets the password, there should be no way to recover the account, set a new password, being able to login, (and) or delete the account or read existing messages.
 
 Therefore, inactive users should be auto-deleted after 90 days. I prefer a TTL initially set on account creation and updated on each login.
 
-### 6.2. Evaluate stricter data protection feasibilty
+### 6.2 Evaluate stricter data protection feasibility
 
 ***Note:*** added by project owner (12 March 2026)
 
-In the best case, all information stored in the database is either hashed or encrypted. No user related data should be transmitted in any direction unencrypted or unhashed. Services should get their own private / public key pairs with which they can encrypt/decrypt data if necessary. 
+In the best case, all information stored in the database is either hashed or encrypted. No user related data should be transmitted in any direction unencrypted or unhashed. Services should get their own private / public key pairs with which they can encrypt/decrypt data if necessary.
 
 Evaluate in which way it's feasible to:
 
 - encrypt geo location data on the client side
 - being transmitted from a client (user) in an encrypted fashion
-- stored only encrypted in the backend (mongodb) 
+- stored only encrypted in the backend (mongodb)
 - geo location sent out encrypted to all other `/location/nearby..`)
 - decrypted by various clients (users) with different private keys.
 
-### 6.3 Evaluate a port of all `/services` to rust
+### 6.3 Evaluate a port of all `/services` to Rust
 
 ***Note:*** added by project owner (12 March 2026)
 
-In the medium-term I want to port the node.js `/services` to rust and have railway pull the project without manual work.
-
-Evaluate the prerequisites, milestones to guarantee a uninterrupted service of the app. 
+In the medium-term I want to port the node.js `/services` to rust and have railway pull the project without manual work. Evaluate the prerequisites, milestones to guarantee an uninterrupted service of the app.
 
 - Is it necessary to create a new project on github / railway?
-- Can node.js and rust.rs services be included in the same repository
+- Can node.js and rust.rs services be included in the same repository?
 - Which service is the easiest to port, which utility, and models modules should be ported first?
 - What performance improvement can be expected?
-- and all the other things you know better than I
 
-### 6.4 Question: Is there a secure way to proof that the service running is running the code in the public repo
+### 6.4 Question: Is there a secure way to prove that the running service matches the public repo?
 
-***Note:*** added by project onwer (12 March 2026)
+***Note:*** added by project owner (12 March 2026)
 
 I want to give users a way to validate the code that runs the services, by matching a signature of the binary or in another way. Please elaborate on the feasible options.
 
-### 6.5 Simple admin ui
+### 6.5 Simple admin UI
 
-***Note:*** added by project onwer (14 March 2026)
+***Note:*** added by project owner (14 March 2026)
 
-I need a admin ui, in which i can as a developer change the current profile information (including current tier) of a specific user. It should look similar to the /profile page with the search bar. I would be able to search for a user using the same filters, then a click on a user entry expands the profile information. If I change the tier make sure that this change is effectively working (token generation etc) and not just changing the tier string in the db of the user.
+I need an admin UI, in which I can as a developer change the current profile information (including current tier) of a specific user. It should look similar to the /profile page with the search bar. I would be able to search for a user using the same filters, then a click on a user entry expands the profile information. If I change the tier make sure that this change is effectively working (token generation etc) and not just changing the tier string in the db of the user.
 
 ### 6.6 Admin UI > Adding, changing, removing tiers
 
-***Note:*** added by project onwer (14 March 2026)
+***Note:*** added by project owner (14 March 2026)
 
-The admin ui should be able to add, edit, change, remove tiers. Therefore, I think it's also necessary to store the tier information in the db, rather than in a js. Please prepare a concrete plan for the implementation, estimate how difficult the implementation is.
+The admin UI should be able to add, edit, change, remove tiers. Therefore, I think it's also necessary to store the tier information in the db, rather than in a js. Please prepare a concrete plan for the implementation, estimate how difficult the implementation is.
 
 ---
 

@@ -4,12 +4,12 @@
 
 - Create a new branch and pull from the default `dev`-branch.
 - Do not read the codebase on session start.
-- Read `.claude/audit/AUDIT.md` first. Do not start reading the entire codebase. Greet me, present the last audit, and ask me what to do.
+- Read `.claude/AUDIT.md` first. Do not start reading the entire codebase. Greet me, present the last audit, and ask me what to do.
 - Also check `.claude/TICKETS.md` for any pending tickets relevant to the current session.
 
 ## The Two Persistent Files
 
-### `.claude/audit/AUDIT.md` — Claude's technical log
+### `.claude/AUDIT.md` — Claude's technical log
 Contains: security bugs, performance issues, architectural debt, deferred decisions, known risks.
 You are the owner. Add, remove, or edit entries any time without permission.
 Do not put feature requests or roadmap items here.
