@@ -792,8 +792,9 @@
 // ============================================================
 (function () {
 
-  var POLL_INTERVAL_MS = 30 * 1000;
+  var POLL_INTERVAL_MS = 2 * 60 * 1000; // 2 min — notifications are low-urgency
   var _pollTimer = null;
+  var _paused = false;
 
   function esc(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -845,6 +846,7 @@
   }
 
   function pollNotifications() {
+    if (_paused) return;
     if (!window.Auth || !window.Auth.isRegistered()) return;
     window.Api && window.Api.getNotifications().then(function (data) {
       showBanners(data.notifications || []);
@@ -858,6 +860,12 @@
     pollNotifications();
     _pollTimer = setInterval(pollNotifications, POLL_INTERVAL_MS);
   }
+
+  document.addEventListener('visibilitychange', function () {
+    _paused = document.hidden;
+    // Poll immediately when user returns to the tab
+    if (!document.hidden && _pollTimer) pollNotifications();
+  });
 
   function stopNotifPoll() {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
