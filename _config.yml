@@ -1,10 +1,10 @@
 title:       "bOOmbOOm.NOW!"
 description: "Find who's nearby. Message in the moment."
-baseurl:     ""
-url:         "https://hmmly-boom.up.railway.app"
+baseurl:     "https://biffjezos.github.io"
+url:         "/bbn"
 
 # Backend API base URL (used in default.html layout)
-api_url: "https://hmmly-boom.up.railway.app/api"
+api_url: "https://boom.up.railway.app/api"
 
 # Markdown processor
 markdown: kramdown
@@ -24,6 +24,8 @@ collections:
 
 # Exclude from build
 exclude:
+  - docs
+  - .claude
   - README.md
   - "*.sh"
   - node_modules/

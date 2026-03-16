@@ -2,50 +2,37 @@
 
 ## On Session Start
 
-1. Read `AUDIT.md`. Present it, greet the user, ask what to do.
-2. Do not read the entire codebase. Only load files relevant to the task.
-3. If working on a ticket from `TICKETS.md`, read the relevant ticket first.
+- Create a new branch and pull from the default `dev`-branch.
+- Do not read the codebase on session start.
+- Read `.claude/audit/AUDIT.md` first. Do not start reading the entire codebase. Greet me, present the last audit, and ask me what to do.
+- Also check `.claude/TICKETS.md` for any pending tickets relevant to the current session.
 
 ## The Two Persistent Files
 
-### `AUDIT.md` — Claude's technical log (your private notebook)
-Contains only: security bugs, performance issues, architectural debt, deferred
-technical decisions, and known risks that need attention some day.
-- **Add to it** when you discover a bug, a security gap, or a deferred decision.
-- **Update it** when a finding is resolved (mark ✅ with date).
-- **Remove entries** when they become obsolete (e.g. after a Rust port makes a
-  Node duplication issue irrelevant).
-- Do not put feature requests or roadmap items here.
+### `.claude/audit/AUDIT.md` — Claude's technical log
+Contains: security bugs, performance issues, architectural debt, deferred decisions, known risks.
+You are the owner. Add, remove, or edit entries any time without permission.
+Do not put feature requests or roadmap items here.
 
-### `TICKETS.md` — Feature backlog and roadmap
-Contains: planned features, postponed work, architectural proposals, and
-implementation strategies that the owner has approved or wants to track.
-- **Add to it** when the owner asks for something you cannot or should not
-  implement immediately (wrong prerequisites, too large, needs planning).
-- **Update status** when work on a ticket begins or completes.
-- **Do not remove tickets** unless the owner explicitly says to.
+### `.claude/TICKETS.md` — Feature backlog
+Contains: planned features, postponed work, architectural proposals, implementation strategies.
+You maintain it. The project owner may also add items directly.
+Do not remove tickets unless the owner explicitly says to.
 
 ## Things You Must Never Do
 
-- **Do not change the business model.** No changes to account types, tier
-  definitions, or the features available per tier (until T-01/T-03 are built and
-  the owner explicitly approves a change via the admin UI).
-- **Do not make changes that require new infrastructure** such as: running
-  multiple instances of the same service, adding geospatial filtering to the
-  database, switching databases, or adding Redis.
-- **Do not read README.md or any other linked markdown files.** Do not open
-  them, do not reference them.
-- **Do not change `var DEBUG` in `ui/scripts/api.js`.** Ever. Not the value,
-  not the name, not the structure. Leave it exactly as-is.
+- **Do not change the business model.** No changes to account types, tier definitions, or the features available per tier without explicit permission.
+- Do not remove any hashing, or encryption mechanism currently in use! NEVER EVER touch working hash/encryption functions.
+- THIS IS A PRIVACY-BY-DESIGN APP! NEVER EVER allow data leaks, plain passwords, email addresses, or otherwise encrypted data to be stored or sent if not 100% necessary for a particular (single) action.
+- **Do not make changes, that require backend modifications, new service plans** such as: running multiple instances of the same service, adding geospatial filtering to the database, switching databases, or adding infrastructure (e.g. Redis) to handle higher loads.
+- **Do not read the `docs`-folder.** Do not open the files in it, do not reference them. Do not base your suggestions on those files without explicit permission.
+- **Do not change `var DEBUG` in `ui/scripts/api.js`** without explicit permission.
 - **Do not tell me what the project is about.** I already know.
 
 ## Things You Must Do
 
-- After each commit, state which services in `/services` must be redeployed and
-  whether any environment variables must be added, updated, or can be removed.
-- If you identify something you cannot implement (requires backend infra,
-  business model change, wrong prerequisites), add it to `TICKETS.md` with a
-  short rationale and prerequisites. Do not implement it.
-- If you cannot reproduce a reported bug, do not invent errors. Check: are all
-  services running? Are all env vars set? Are URLs correct? Only then report
-  what you found.
+- Only load files relevant to the task. If it means you have to read all of them you have the permission. Think first, be token-sparing. It's good for the environment.
+- **If you identify a change you are not allowed to make** (e.g. requires backend changes, infrastructure, or affects the business model), add it to `.claude/TICKETS.md` with a short rationale and prerequisites. Do not implement it.
+- After each commit, tell me which `/services` must be redeployed and if any environment variables must be added, updated or can be removed from a service.
+- If you cannot find an error for the bug reported, do not fucking invent (hallucinate) errors that don't exist. Analyze, if other components of the app are down, running incorrectly, if all environment variables are set, URLs are correct.
+- If the project owner suggests improvements that are a chore to implement, have severe implications, stray from a privacy-by-design approach, or are not feasible: explain why, suggest a better solution and a path to the finished product by feasible milestones.

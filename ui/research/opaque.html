@@ -1,0 +1,233 @@
+---
+layout: default
+title: "BBN RESEARCH | SRP Demo"
+permalink: /research/opaque
+---
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>OPAQUE Demo (libsodium)</title>
+<style>
+    body { background:#111; color:#eee; font-family:system-ui; padding:20px; }
+    input, button { padding:6px 10px; margin:4px; background:#222; color:#eee; border:1px solid #444; border-radius:4px; }
+    textarea { width:100%; height:160px; background:#181818; color:#eee; border:1px solid #444; border-radius:4px; padding:6px; font-family:monospace; }
+    .cols { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+</style>
+</head>
+
+<body>
+
+<h1>OPAQUE-style Demo (libsodium + Argon2id)</h1>
+
+<div>
+    <input id="username" value="alice">
+    <input id="password" type="password" value="qwerty123">
+    <button id="registerBtn">Register</button>
+    <button id="loginBtn">Login</button>
+</div>
+
+<div class="cols">
+    <div>
+        <h2>Client</h2>
+        <textarea id="clientLog" readonly></textarea>
+    </div>
+    <div>
+        <h2>Server</h2>
+        <textarea id="serverLog" readonly></textarea>
+    </div>
+</div>
+
+<div id="status" style="margin-top:20px; font-size:1.1em; color:#9fd29f;"></div>
+
+<!-- 1) Load libsodium FIRST -->
+<script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers/dist/libsodium-wrappers.min.js"></script>
+
+<!-- 2) Your script AFTER libsodium -->
+<script>
+(async () => {
+
+    // Check if libsodium loaded at all
+    if (!window.sodium) {
+        document.getElementById("status").textContent =
+            "ERROR: libsodium failed to load. GitHub Pages may be caching an old version.";
+        console.error("libsodium missing");
+        return;
+    }
+
+    // Wait for WASM
+    await sodium.ready;
+    const s = sodium;
+
+    console.log("libsodium loaded:", s);
+
+    const serverDb = { user: null };
+
+    function log(id, msg) {
+        const el = document.getElementById(id);
+        el.value += msg + "\n";
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function setStatus(msg) {
+        document.getElementById("status").textContent = msg;
+    }
+
+    // -----------------------------
+    // REGISTRATION
+    // -----------------------------
+    document.getElementById("registerBtn").onclick = async () => {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+
+        document.getElementById("clientLog").value = "";
+        document.getElementById("serverLog").value = "";
+
+        // Argon2id
+        const salt = s.randombytes_buf(s.crypto_pwhash_SALTBYTES);
+        const pwKey = s.crypto_pwhash(
+            32,
+            password,
+            salt,
+            s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+            s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+            s.crypto_pwhash_ALG_ARGON2ID13
+        );
+
+        // Client static keypair
+        const clientKp = s.crypto_kx_keypair();
+
+        // Envelope
+        const nonce = s.randombytes_buf(s.crypto_secretbox_NONCEBYTES);
+        const envelopeCt = s.crypto_secretbox_easy(
+            clientKp.privateKey,
+            nonce,
+            pwKey
+        );
+
+        log("clientLog",
+            "=== REGISTRATION (CLIENT) ===\n" +
+            "salt: " + s.to_hex(salt) + "\n" +
+            "clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
+            "envelope.nonce: " + s.to_hex(nonce) + "\n" +
+            "envelope.ct: " + s.to_hex(envelopeCt) + "\n"
+        );
+
+        // Server static keypair
+        const serverStaticKp = s.crypto_kx_keypair();
+
+        serverDb.user = {
+            username,
+            salt,
+            envelopeNonce: nonce,
+            envelopeCt,
+            clientPub: clientKp.publicKey,
+            serverStaticPub: serverStaticKp.publicKey,
+            serverStaticSec: serverStaticKp.privateKey
+        };
+
+        log("serverLog",
+            "=== REGISTRATION (SERVER) ===\n" +
+            "Stored salt: " + s.to_hex(salt) + "\n" +
+            "Stored clientPub: " + s.to_hex(clientKp.publicKey) + "\n" +
+            "serverStaticPub: " + s.to_hex(serverStaticKp.publicKey) + "\n"
+        );
+
+        setStatus("Registration complete. Now click Login.");
+    };
+
+    // -----------------------------
+    // LOGIN
+    // -----------------------------
+    document.getElementById("loginBtn").onclick = async () => {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+
+        document.getElementById("clientLog").value = "";
+        document.getElementById("serverLog").value = "";
+
+        const u = serverDb.user;
+        if (!u || u.username !== username) {
+            setStatus("User not registered.");
+            return;
+        }
+
+        log("serverLog",
+            "=== LOGIN (SERVER → CLIENT) ===\n" +
+            "salt: " + s.to_hex(u.salt) + "\n" +
+            "envelope.nonce: " + s.to_hex(u.envelopeNonce) + "\n" +
+            "envelope.ct: " + s.to_hex(u.envelopeCt) + "\n" +
+            "serverStaticPub: " + s.to_hex(u.serverStaticPub) + "\n"
+        );
+
+        // Argon2id again
+        const pwKey = s.crypto_pwhash(
+            32,
+            password,
+            u.salt,
+            s.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+            s.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+            s.crypto_pwhash_ALG_ARGON2ID13
+        );
+
+        // Decrypt envelope
+        let clientPriv;
+        try {
+            clientPriv = s.crypto_secretbox_open_easy(
+                u.envelopeCt,
+                u.envelopeNonce,
+                pwKey
+            );
+        } catch {
+            log("clientLog", "Decryption failed — wrong password.");
+            setStatus("Login failed.");
+            return;
+        }
+
+        const clientPub = u.clientPub;
+
+        log("clientLog",
+            "=== LOGIN (CLIENT) ===\n" +
+            "Decrypted clientPriv: " + s.to_hex(clientPriv) + "\n" +
+            "clientPub: " + s.to_hex(clientPub) + "\n"
+        );
+
+        // Session keys
+        const clientSession = s.crypto_kx_client_session_keys(
+            clientPub,
+            clientPriv,
+            u.serverStaticPub
+        );
+
+        const serverSession = s.crypto_kx_server_session_keys(
+            u.serverStaticPub,
+            u.serverStaticSec,
+            clientPub
+        );
+
+        log("clientLog",
+            "client rx: " + s.to_hex(clientSession.sharedRx) + "\n" +
+            "client tx: " + s.to_hex(clientSession.sharedTx) + "\n"
+        );
+
+        log("serverLog",
+            "=== LOGIN (SERVER) ===\n" +
+            "server rx: " + s.to_hex(serverSession.sharedRx) + "\n" +
+            "server tx: " + s.to_hex(serverSession.sharedTx) + "\n"
+        );
+
+        const ok =
+            s.to_hex(clientSession.sharedRx) === s.to_hex(serverSession.sharedTx) &&
+            s.to_hex(clientSession.sharedTx) === s.to_hex(serverSession.sharedRx);
+
+        setStatus(ok
+            ? "OPAQUE-style login successful — session keys match."
+            : "Session key mismatch."
+        );
+    };
+
+})();
+</script>
+
+</body>
+</html>
