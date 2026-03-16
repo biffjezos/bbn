@@ -1,5 +1,6 @@
 # ── Build stage ───────────────────────────────────────────────
-FROM rust:nightly AS builder
+# rust:latest includes rustup — rust-toolchain.toml installs nightly automatically
+FROM rust:latest AS builder
 WORKDIR /build
 # Copy entire workspace (Cargo.toml, common/, tiers-service/)
 COPY . .
