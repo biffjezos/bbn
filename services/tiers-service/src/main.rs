@@ -366,39 +366,59 @@ async fn admin_list_tiers(
     if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
         return e.into_response();
     }
-    match state.db.collection::<Tier>("tiers").find(doc! {}).await {
+    let coll = state.db.collection::<mongodb::bson::Document>("tiers");
+
+    // Use count_documents (not deserialization) to decide whether to seed —
+    // this prevents re-seeding caused by any silent deserialization failure.
+    let count = match coll.count_documents(doc! {}).await {
         Err(e) => {
-            eprintln!("[tiers] admin_list_tiers: {e}");
+            eprintln!("[tiers] admin_list_tiers count: {e}");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response();
+        }
+        Ok(n) => n,
+    };
+
+    if count == 0 {
+        let now = DateTime::now();
+        let mut seed: Vec<Tier> = static_tiers().into_values().collect();
+        seed.sort_by_key(|t| t.rank);
+        let bson_docs: Vec<mongodb::bson::Document> = seed.iter().map(|t| doc! {
+            "name":           &t.name,
+            "label":          &t.label,
+            "cls":            &t.cls,
+            "rank":           t.rank as i32,
+            "nearbyRadiusM":  t.nearby_radius_m as i32,
+            "messageRadiusM": t.message_radius_m.map(|v| v as i32),
+            "createdAt":      now,
+            "updatedAt":      now,
+        }).collect();
+        let _ = coll.insert_many(bson_docs).await;
+        *state.tiers_cache.write().await = None;
+        return Json(json!({ "tiers": seed })).into_response();
+    }
+
+    match coll.find(doc! {}).await {
+        Err(e) => {
+            eprintln!("[tiers] admin_list_tiers find: {e}");
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response()
         }
         Ok(cursor) => {
-            let docs: Vec<Tier> = cursor.try_collect().await.unwrap_or_default();
-            if docs.is_empty() {
-                // Collection not seeded yet — seed static tiers now so edit/delete work immediately.
-                let now = DateTime::now();
-                let mut seed: Vec<Tier> = static_tiers().into_values().collect();
-                seed.sort_by_key(|t| t.rank);
-                let bson_docs: Vec<mongodb::bson::Document> = seed.iter().map(|t| doc! {
-                    "name":           &t.name,
-                    "label":          &t.label,
-                    "cls":            &t.cls,
-                    "rank":           t.rank as i32,
-                    "nearbyRadiusM":  t.nearby_radius_m as i32,
-                    "messageRadiusM": t.message_radius_m.map(|v| v as i32),
-                    "createdAt":      now,
-                    "updatedAt":      now,
-                }).collect();
-                if !bson_docs.is_empty() {
-                    let _ = state.db
-                        .collection::<mongodb::bson::Document>("tiers")
-                        .insert_many(bson_docs)
-                        .await;
-                    *state.tiers_cache.write().await = None;
-                }
-                Json(json!({ "tiers": seed })).into_response()
-            } else {
-                Json(json!({ "tiers": docs })).into_response()
-            }
+            let raw: Vec<mongodb::bson::Document> = cursor.try_collect().await.unwrap_or_default();
+            let tiers: Vec<serde_json::Value> = raw.iter().map(|d| {
+                let name    = d.get_str("name").unwrap_or("").to_string();
+                let label   = d.get_str("label").unwrap_or("").to_string();
+                let cls     = d.get_str("cls").unwrap_or("secondary").to_string();
+                let rank    = d.get_i32("rank").unwrap_or(0);
+                let nearby  = d.get_i32("nearbyRadiusM").unwrap_or(0);
+                let message = d.get_i32("messageRadiusM").ok();
+                json!({
+                    "name": name, "label": label, "cls": cls,
+                    "rank": rank, "nearbyRadiusM": nearby, "messageRadiusM": message,
+                })
+            }).collect();
+            let mut sorted = tiers;
+            sorted.sort_by_key(|t| t["rank"].as_i64().unwrap_or(0));
+            Json(json!({ "tiers": sorted })).into_response()
         }
     }
 }
