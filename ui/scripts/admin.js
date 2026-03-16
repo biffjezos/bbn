@@ -28,6 +28,11 @@ async function _loadTiers() {
   }
 }
 
+function _tierCls(tierName) {
+  var t = _cachedTiers.find(function (t) { return t.name === tierName; });
+  return t && t.cls ? t.cls : 'secondary';
+}
+
 function _buildTierSelect(uid, currentTier) {
   if (!_cachedTiers.length) {
     return '<input type="text" class="form-control form-control-sm" id="tier-' + escHtml(uid) + '"'
@@ -158,7 +163,7 @@ function renderUserCard(u) {
     '    <div class="text-truncate">',
     '      ' + dot + '<strong>' + escHtml(u.nickname) + '</strong>',
     '      <span class="text-muted-bb ms-2" style="font-size:0.78rem">' + escHtml(u.email) + '</span>',
-    '      <span class="badge bg-secondary ms-2" style="font-size:0.65rem">' + escHtml(u.tier) + '</span>',
+    '      <span class="badge bg-' + escHtml(_tierCls(u.tier)) + ' ms-2" style="font-size:0.65rem">' + escHtml(u.tier) + '</span>',
     '      ' + adminBadge,
     '    </div>',
     '    <i class="bi bi-chevron-down text-muted flex-shrink-0"></i>',
