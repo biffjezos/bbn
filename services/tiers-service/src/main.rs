@@ -117,7 +117,7 @@ fn static_tiers() -> HashMap<String, Tier> {
     HashMap::from([
         ("guest".into(),     Tier { name: "guest".into(),     label: "Guest".into(),     cls: "secondary".into(), rank: 0, nearby_radius_m: 500,        message_radius_m: None }),
         ("regular".into(),   Tier { name: "regular".into(),   label: "Regular".into(),   cls: "primary".into(),   rank: 1, nearby_radius_m: 1_000,      message_radius_m: Some(1000) }),
-        ("premium".into(),   Tier { name: "premium".into(),   label: "Premium".into(),   cls: "warning".into(),   rank: 2, nearby_radius_m: 23_000_000, message_radius_m: Some(23_000_000) }),
+        ("premium".into(),   Tier { name: "premium".into(),   label: "Premium".into(),   cls: "warning".into(),   rank: 2, nearby_radius_m: 23_000,     message_radius_m: Some(23_000) }),
         ("developer".into(), Tier { name: "developer".into(), label: "Developer".into(), cls: "warning".into(),   rank: 3, nearby_radius_m: 9_700_000,  message_radius_m: Some(9_700_000) })
     ])
 }
