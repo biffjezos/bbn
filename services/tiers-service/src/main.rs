@@ -109,7 +109,10 @@ struct Tier {
     label:            String,
     cls:              String,
     rank:             u32,
+    // Accept both camelCase (admin-API-created docs) and snake_case (migration-seeded docs).
+    #[serde(alias = "nearby_radius_m")]
     nearby_radius_m:  u32,
+    #[serde(alias = "message_radius_m")]
     message_radius_m: Option<u32>,
 }
 
@@ -370,7 +373,14 @@ async fn admin_list_tiers(
         }
         Ok(cursor) => {
             let docs: Vec<Tier> = cursor.try_collect().await.unwrap_or_default();
-            Json(json!({ "tiers": docs })).into_response()
+            if docs.is_empty() {
+                // Collection not seeded yet — return static tiers so the admin UI is usable.
+                let mut fallback: Vec<Tier> = static_tiers().into_values().collect();
+                fallback.sort_by_key(|t| t.rank);
+                Json(json!({ "tiers": fallback })).into_response()
+            } else {
+                Json(json!({ "tiers": docs })).into_response()
+            }
         }
     }
 }
