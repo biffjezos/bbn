@@ -85,6 +85,7 @@ const MIGRATIONS: &[&str] = &[
     "002_locations_2dsphere",
     "003_blocks_indexes",
     "004_tiers_seed",
+    "005_rename_developer_tier",
 ];
 
 async fn migration_001(db: &Database) -> Result<(), mongodb::error::Error> {
@@ -208,13 +209,23 @@ async fn migration_004(db: &Database) -> Result<(), mongodb::error::Error> {
     Ok(())
 }
 
+async fn migration_005(db: &Database) -> Result<(), mongodb::error::Error> {
+    db.collection::<Document>("users")
+        .update_many(
+            doc! { "tier": "developer" },
+            doc! { "$set": { "tier": "unrestricted" } },
+        ).await?;
+    Ok(())
+}
+
 async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Error> {
     match id {
-        "001_indexes"           => migration_001(db).await,
-        "002_locations_2dsphere"=> migration_002(db).await,
-        "003_blocks_indexes"    => migration_003(db).await,
-        "004_tiers_seed"        => migration_004(db).await,
-        _                       => Ok(()), // unknown migration — skip
+        "001_indexes"                => migration_001(db).await,
+        "002_locations_2dsphere"     => migration_002(db).await,
+        "003_blocks_indexes"         => migration_003(db).await,
+        "004_tiers_seed"             => migration_004(db).await,
+        "005_rename_developer_tier"  => migration_005(db).await,
+        _                            => Ok(()), // unknown migration — skip
     }
 }
 
