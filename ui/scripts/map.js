@@ -162,7 +162,7 @@
 
     // Translucent view-radius circle
     if (radius > 0) {
-      const clr = isVenue ? '#ffd200' : sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
+      const clr = isVenue ? 'rgba(255,255,255,0.45)' : sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
       if (selfCircle) {
         selfCircle.setLatLng([lat, lng]);
         selfCircle.setRadius(radius);
