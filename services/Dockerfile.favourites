@@ -12,6 +12,10 @@ COPY services/location-service/Cargo.toml ./location-service/Cargo.toml
 RUN mkdir -p ./location-service/src && echo 'fn main(){}' > ./location-service/src/main.rs
 COPY services/blocks-service/Cargo.toml ./blocks-service/Cargo.toml
 RUN mkdir -p ./blocks-service/src && echo 'fn main(){}' > ./blocks-service/src/main.rs
+COPY services/messages-service/Cargo.toml ./messages-service/Cargo.toml
+RUN mkdir -p ./messages-service/src && echo 'fn main(){}' > ./messages-service/src/main.rs
+COPY services/users-service/Cargo.toml ./users-service/Cargo.toml
+RUN mkdir -p ./users-service/src && echo 'fn main(){}' > ./users-service/src/main.rs
 # Build target
 COPY services/favourites-service ./favourites-service
 RUN cargo build --release -p favourites-service
