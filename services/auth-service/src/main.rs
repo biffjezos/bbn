@@ -7,13 +7,13 @@
 use std::env;
 
 use axum::{
-    extract::State,
+    extract::{FromRef, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
     Router,
 };
-use common::auth::{issue_guest_token, issue_user_token, UserTokenParams};
+use common::auth::{issue_guest_token, issue_user_token, ServiceSecret, ServiceToken, UserTokenParams};
 use common::mongo::safe_object_id;
 use mongodb::{
     bson::{doc, DateTime},
@@ -27,6 +27,7 @@ use serde_json::json;
 struct Config {
     port:                    u16,
     jwt_secret:              String,
+    service_secret:          String,
     mongo_uri:               String,
     db_name:                 String,
     admin_bootstrap_user_id: Option<String>,
@@ -34,7 +35,7 @@ struct Config {
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let missing: Vec<&str> = ["JWT_SECRET", "MONGO_URI"]
+        let missing: Vec<&str> = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI"]
             .into_iter()
             .filter(|k| env::var(k).is_err())
             .collect();
@@ -44,6 +45,7 @@ impl Config {
         Ok(Self {
             port:                    env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080),
             jwt_secret:              env::var("JWT_SECRET").unwrap(),
+            service_secret:          env::var("SERVICE_SECRET").unwrap(),
             mongo_uri:               env::var("MONGO_URI").unwrap(),
             db_name:                 env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
             admin_bootstrap_user_id: env::var("ADMIN_BOOTSTRAP_USER_ID").ok(),
@@ -74,8 +76,13 @@ fn sanitize_role(role: Option<&str>) -> &str {
 
 #[derive(Clone)]
 struct AppState {
-    db:         Database,
-    jwt_secret: String,
+    db:             Database,
+    jwt_secret:     String,
+    service_secret: String,
+}
+
+impl FromRef<AppState> for ServiceSecret {
+    fn from_ref(state: &AppState) -> Self { ServiceSecret(state.service_secret.clone()) }
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -143,6 +150,7 @@ struct GuestBody {
 const GUEST_TTL_MS: u64 = 15 * 60 * 1000;
 
 async fn auth_guest(
+    _: ServiceToken,
     State(state): State<AppState>,
     Json(body): Json<GuestBody>,
 ) -> impl IntoResponse {
@@ -190,6 +198,7 @@ struct RegisterBody {
 }
 
 async fn auth_register(
+    _: ServiceToken,
     State(state): State<AppState>,
     Json(body): Json<RegisterBody>,
 ) -> impl IntoResponse {
@@ -317,6 +326,7 @@ struct UserDoc {
 }
 
 async fn auth_login(
+    _: ServiceToken,
     State(state): State<AppState>,
     Json(body): Json<LoginBody>,
 ) -> impl IntoResponse {
@@ -414,7 +424,7 @@ async fn main() {
         bootstrap_admin(&db, uid).await;
     }
 
-    let state = AppState { db, jwt_secret: cfg.jwt_secret };
+    let state = AppState { db, jwt_secret: cfg.jwt_secret, service_secret: cfg.service_secret };
 
     let app = Router::new()
         .route("/health",         get(health))
