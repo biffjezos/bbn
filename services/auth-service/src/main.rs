@@ -317,7 +317,9 @@ struct UserDoc {
     id:            mongodb::bson::oid::ObjectId,
     email:         String,
     nickname:      String,
+    #[serde(default)]
     sex:           Option<String>,
+    #[serde(default)]
     age:           Option<i32>,
     tier:          Option<String>,
     role:          Option<String>,
