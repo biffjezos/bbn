@@ -510,9 +510,7 @@ async fn main() {
     let app = Router::new()
         .route("/health",             get(health))
         .route("/messages",           get(get_messages))
-        .route("/messages/{user_id}", get(get_thread))
-        .route("/messages/{user_id}", post(send_message))
-        .route("/messages/{id}",      delete(delete_message))
+        .route("/messages/{id}", get(get_thread).post(send_message).delete(delete_message))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
         .with_state(state);
 
