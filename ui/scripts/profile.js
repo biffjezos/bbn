@@ -89,38 +89,35 @@ async function renderMyProfile() {
     };
   }
 
-  const dangerBorderColor = current.sex === 'f'
-    ? 'var(--bbm-meet-pill-border)'
-    : current.sex === 'm'
-    ? 'var(--bbm-meet-pill-border-male)'
+  const isVenue = current.accountType === 'venue';
+
+  const dangerBorderColor = isVenue ? 'var(--bbm-danger-border)'
+    : current.sex === 'f' ? 'var(--bbm-meet-pill-border)'
+    : current.sex === 'm' ? 'var(--bbm-meet-pill-border-male)'
     : 'var(--bbm-danger-border)';
-  const dangerLabelColor = current.sex === 'f'
-    ? 'var(--bbm-pink-light)'
-    : current.sex === 'm'
-    ? 'var(--bbm-blue-light)'
+  const dangerLabelColor = isVenue ? 'var(--bbm-danger-text)'
+    : current.sex === 'f' ? 'var(--bbm-pink-light)'
+    : current.sex === 'm' ? 'var(--bbm-blue-light)'
     : 'var(--bbm-danger-text)';
 
-  wrap.innerHTML = `
-    <div class="bbm-profile-form">
-      <div id="profileAlert" class="d-none mb-4"></div>
-
-      <div class="mb-4 d-flex align-items-center gap-2">
-        <span class="text-muted-bb small">Account type</span>
-        <span id="tierBadge"
-          class="badge bg-${escHtml(tierCls)} d-inline-flex align-items-center gap-1"
-          style="cursor:pointer;font-size:0.8rem;user-select:none"
-          tabindex="0" role="button" aria-label="Show tier features">
-          ${escHtml(tierLabel)}&nbsp;<i class="bi bi-info-circle"></i>
-        </span>
+  const editableFields = isVenue ? `
+      <div class="mb-3">
+        <label class="form-label">Venue name</label>
+        <input type="text" class="form-control" id="editNickname"
+          value="${escHtml(current.venueName || current.nickname || '')}" minlength="2" maxlength="64" placeholder="Venue display name" />
+        <div class="mt-1" style="font-size:0.78rem;color:var(--bbm-text-faint)">Shown to nearby users on the map.</div>
       </div>
-
+      <div class="mb-4">
+        <label class="form-label">Address</label>
+        <div class="form-control-plaintext text-muted-bb small" style="padding-left:0">${escHtml(current.address || '—')}</div>
+        <div class="mt-1" style="font-size:0.78rem;color:var(--bbm-text-faint)">Location is fixed. Contact support to update.</div>
+      </div>` : `
       <div class="mb-3">
         <label class="form-label" for="editNickname">Nickname</label>
         <input type="text" class="form-control" id="editNickname"
           value="${escHtml(current.nickname || '')}" minlength="2" maxlength="32" placeholder="Display name" />
         <div class="mt-1" style="font-size:0.78rem;color:var(--bbm-text-faint)">Shown to nearby users. Not unique.</div>
       </div>
-
       <div class="row g-3 mb-4">
         <div class="col-6">
           <label class="form-label" for="editAge">Age</label>
@@ -134,7 +131,24 @@ async function renderMyProfile() {
             <option value="f" ${current.sex === 'f' ? 'selected' : ''}>Female</option>
           </select>
         </div>
+      </div>`;
+
+  wrap.innerHTML = `
+    <div class="bbm-profile-form">
+      <div id="profileAlert" class="d-none mb-4"></div>
+
+      <div class="mb-4 d-flex align-items-center gap-2 flex-wrap">
+        ${isVenue ? `<span class="badge bg-secondary d-inline-flex align-items-center gap-1" style="font-size:0.8rem"><i class="bi bi-house-fill"></i>&nbsp;Venue account</span>` : ''}
+        <span class="text-muted-bb small">${isVenue ? 'Plan:' : 'Account type'}</span>
+        <span id="tierBadge"
+          class="badge bg-${escHtml(tierCls)} d-inline-flex align-items-center gap-1"
+          style="cursor:pointer;font-size:0.8rem;user-select:none"
+          tabindex="0" role="button" aria-label="Show tier features">
+          ${escHtml(tierLabel)}&nbsp;<i class="bi bi-info-circle"></i>
+        </span>
       </div>
+
+      ${editableFields}
 
       <div class="d-flex gap-3 flex-wrap mb-4">
         <button class="btn btn-bbm-primary" id="saveProfileBtn">
@@ -177,12 +191,18 @@ async function renderMyProfile() {
   document.getElementById('saveProfileBtn').addEventListener('click', async () => {
     const alertEl  = document.getElementById('profileAlert');
     const nickname = document.getElementById('editNickname').value.trim();
-    const age      = parseInt(document.getElementById('editAge').value, 10);
-    const sex      = document.getElementById('editSex').value;
     alertEl.classList.add('d-none');
+    let payload;
+    if (isVenue) {
+      payload = { venueName: nickname };
+    } else {
+      const age = parseInt(document.getElementById('editAge').value, 10);
+      const sex = document.getElementById('editSex').value;
+      payload = { nickname, age, sex };
+    }
     try {
-      await window.Api.updateMe({ nickname, age, sex });
-      window.Auth.updateProfile?.({ nickname, sex });
+      await window.Api.updateMe(payload);
+      if (!isVenue) window.Auth.updateProfile?.({ nickname: payload.nickname, sex: payload.sex });
       alertEl.className = 'alert alert-success';
       alertEl.textContent = 'Profile saved.';
       alertEl.classList.remove('d-none');

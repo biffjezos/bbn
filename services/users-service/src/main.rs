@@ -222,6 +222,8 @@ async fn get_me(
 #[derive(Deserialize)]
 struct UpdateMeBody {
     nickname:              Option<String>,
+    #[serde(rename = "venueName")]
+    venue_name:            Option<String>,
     age:                   Option<serde_json::Value>,
     sex:                   Option<String>,
     email:                 Option<String>,
@@ -258,6 +260,16 @@ async fn put_me(
             return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Nickname must be 2–32 characters." }))).into_response();
         }
         update.insert("nickname", &nick);
+    }
+
+    if let Some(vname) = body.venue_name {
+        let vname = vname.trim().to_string();
+        if vname.len() < 2 || vname.len() > 64 {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Venue name must be 2–64 characters." }))).into_response();
+        }
+        update.insert("venueName", &vname);
+        // Keep nickname in sync so map/favourites display the venue name
+        update.insert("nickname", &vname);
     }
 
     if let Some(age_val) = body.age {
@@ -357,6 +369,7 @@ async fn put_me(
     let mut loc_update = doc! {};
     if let Some(sex) = update.get_str("sex").ok() { loc_update.insert("sex", sex); }
     if let Some(nick) = update.get_str("nickname").ok() { loc_update.insert("nickname", nick); }
+    if let Some(vname) = update.get_str("venueName").ok() { loc_update.insert("venueName", vname); }
     if !loc_update.is_empty() {
         let _ = state.db.collection::<Document>("locations")
             .update_one(doc! { "userId": &claims.sub }, doc! { "$set": loc_update })
