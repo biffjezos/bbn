@@ -15,12 +15,18 @@ Before any marketing or scaling push, the order of priority is:
 3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
 4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
 5. ~~**T-01**~~ — ✅ Done (2026-03-16)
-6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
-7. **T-02** — Analytics (low-risk, can slot in any time)
-8. **T-06** — Venue accounts (needs T-01 and T-03)
-9. **T-07** — Settings page + device notifications (UX polish)
-10. ~~**T-04c**~~ — ✅ Done (2026-03-17): Rust port complete — blocks, favourites, messages, users, gateway all live. migration-service stays Node.js.
-11. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c underway)
+6. ~~**T-10**~~ — ✅ Done (2026-03-17): migration-service.js restored.
+7. ~~**T-11**~~ — ✅ Done (2026-03-17): 144-char plaintext limit enforced on send.
+8. ~~**T-12**~~ — ✅ Done (2026-03-17): `bbm_meet` leftover removed.
+9. ~~**T-04c**~~ — ✅ Done (2026-03-17): Rust port complete — blocks, favourites, messages, users, gateway all live. migration-service stays Node.js.
+10. **AUDIT 1.2** — Rate limit at messages-service level (security fix, small)
+11. **T-07** — Settings page: blocks list (partial scope, self-contained, real user value)
+12. **T-13** — Admin action approval gates (formalises access_requests pattern; prerequisite for T-05b and AUDIT 1.4)
+13. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service
+14. **T-09** — Role CRUD with permissions UI (needs T-08)
+15. **T-05b** — Encrypted block note field (needs T-13 for approval gate + OPAQUE for key derivation)
+16. **T-02** — Analytics (low-risk, can slot in any time)
+17. **T-06** — Venue accounts (owner: postpone)
 
 ### Architectural Decision (2026-03-16)
 
@@ -684,3 +690,108 @@ None.
 feature that let a user pin a specific person to meet. The feature was removed
 (gone by commit `99df018`) but the `clearUserStorage()` cleanup call was left
 behind. Confirmed fully retired via git history. Removal is safe.
+
+---
+
+## T-13 — Admin Action Approval Gates
+
+**Status:** Not started. Supersedes the standalone fix in AUDIT.md 1.4.
+
+### Problem
+
+Admin actions currently have no tiered approval model. Any authenticated admin
+can perform any admin action — including modifying their own account — without
+a second check. As the app grows, some actions are sensitive enough to require
+oversight (e.g. reading a user's encrypted block note) while others are routine
+and can remain self-approved (e.g. changing a user's tier).
+
+### Existing foundation
+
+T-05 already defines the `access_requests` collection and the dual-control gate
+pattern for block note decryption:
+
+```json
+{
+  "requestedBy":  "admin_userId",
+  "resourceType": "block_note",
+  "resourceId":   "block_id",
+  "approvedBy":   "legal_userId",
+  "expiresAt":    "...",
+  "usedAt":       null
+}
+```
+
+T-13 generalises this pattern to cover all admin actions with a defined
+approval matrix. No new infrastructure is required — only new `resourceType`
+values and an approval-check middleware.
+
+### Action approval matrix
+
+| Action | Approval required | Notes |
+|---|---|---|
+| Change a user's tier | None (self-approved) | Routine admin task |
+| Change a user's role | Second admin or owner | Privilege escalation |
+| Change **own** tier or role | Second admin | Closes AUDIT.md 1.4 |
+| Read encrypted block note (T-05b) | `legal`-role approval | Sensitive user data |
+| Delete a user account | Second admin | Destructive, irreversible |
+| Access `access_requests` log | None (read-only audit) | Transparency |
+
+The matrix above is a starting point. Owner may expand or collapse it before
+implementation begins.
+
+### Architecture
+
+**`access_requests` collection** (already designed in T-05):
+
+A requesting admin creates an `access_request` document with `resourceType` and
+`resourceId`. An approver (role determined by `resourceType`) marks it approved.
+The sensitive endpoint checks for a valid, unused, non-expired approval before
+proceeding, then marks `usedAt`.
+
+**New `resourceType` values for this ticket:**
+
+- `role_change` — target user ID is `resourceId`
+- `self_modification` — the requesting admin's own user ID (closes AUDIT.md 1.4)
+- `account_delete` — target user ID is `resourceId`
+
+`block_note` (T-05b) is already defined in T-05 and slots in here automatically.
+
+**Approval roles per `resourceType`:**
+
+Stored as a small config in the `access_requests` logic or in the `roles`
+collection (T-09). For now, a static map is fine:
+
+```
+role_change       → approver role: admin   (any other admin)
+self_modification → approver role: admin   (any other admin)
+account_delete    → approver role: admin   (any other admin)
+block_note        → approver role: legal
+```
+
+**Admin UI additions (within T-01 scope):**
+
+- Pending approvals inbox for each role that can approve
+- One-click approve / reject with optional comment
+- Audit log view (all `access_requests`, read-only)
+
+### Relationship to other tickets
+
+| Ticket | Relationship |
+|---|---|
+| AUDIT.md 1.4 | Superseded. Self-modification check becomes a `self_modification` gate instead of a hard 403. |
+| T-05b | Blocked on T-13 for the approval gate; also blocked on OPAQUE for key derivation. |
+| T-08 | T-13 fits naturally inside the authority service; can be implemented in the gateway enforcement layer. |
+| T-09 | Approval role per `resourceType` can be driven by the roles collection once T-09 exists. |
+
+### Prerequisites
+
+- T-01 ✅ (admin UI foundation exists)
+- T-05 ✅ (`access_requests` collection already designed)
+- No new infrastructure required
+
+### Owner's Comments
+
+- 2026-03-17: Raised from AUDIT 1.4 discussion. The goal is a tiered approval
+  model: routine actions self-approved, sensitive actions require a second
+  instance (e.g. legal role). The `access_requests` pattern from T-05 is the
+  right foundation — generalise it rather than adding one-off guards.
