@@ -30,7 +30,7 @@
 
   // ── Helpers ──────────────────────────────────────────────────
 
-  function markerIcon(sex, accountType) { if (accountType === 'venue') return 'bi-house-fill'; return sex === 'f' ? 'bi-gender-female' : sex === 'm' ? 'bi-gender-male' : 'bi-person'; }
+  function markerIcon(sex, accountType) { if (accountType === 'venue') return null; return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
   function markerClass(sex, accountType) { if (accountType === 'venue') return 'venue'; return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest'; }
 
   function escHtml(str) {
@@ -104,7 +104,7 @@
     const size   = isSelf ? 46 : 38;
     const anchor = isSelf ? 23 : 19;
     return L.divIcon({
-      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}"><i class="bi ${markerIcon(sex, accountType)}"></i></div>`,
+      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}">${accountType === 'venue' ? '<i class="bi bi-house-fill"></i>' : markerIcon(sex, accountType)}</div>`,
       className: '',
       iconSize:  [size, size],
       iconAnchor:[anchor, anchor],
