@@ -144,6 +144,26 @@ async function runUserSearch() {
         }).catch(function () {});
       });
     });
+    out.querySelectorAll('[data-convert-venue]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var uid = btn.dataset.convertVenue;
+        var form = document.getElementById('venue-form-' + uid);
+        if (form) form.classList.toggle('d-none');
+      });
+    });
+    out.querySelectorAll('[data-cancel-venue]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var uid = btn.dataset.cancelVenue;
+        var form = document.getElementById('venue-form-' + uid);
+        if (form) form.classList.add('d-none');
+      });
+    });
+    out.querySelectorAll('[data-save-venue]').forEach(function (btn) {
+      btn.addEventListener('click', function () { saveVenueConversion(btn.dataset.saveVenue); });
+    });
+    out.querySelectorAll('[data-revert-venue]').forEach(function (btn) {
+      btn.addEventListener('click', function () { revertVenue(btn.dataset.revertVenue); });
+    });
   } catch (err) {
     out.innerHTML = '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
   }
@@ -206,9 +226,68 @@ function renderUserCard(u) {
     '      </button>',
     '      <span id="save-status-' + escHtml(u.userId) + '" style="font-size:0.8rem"></span>',
     '    </div>',
+    '    <div class="mt-3 pt-3" style="border-top:1px solid var(--bbm-border)">',
+    '      <div class="d-flex align-items-center gap-2 mb-2">',
+    '        <span class="small text-muted-bb">Account type:</span>',
+    u.accountType === 'venue'
+      ? '        <span class="badge bg-secondary"><i class="bi bi-house-fill me-1"></i>Venue</span>'
+      : '        <span class="badge bg-secondary">Regular</span>',
+    '      </div>',
+    u.accountType === 'venue'
+      ? '      <button class="btn btn-bbm-danger btn-sm" data-revert-venue="' + escHtml(u.userId) + '"><i class="bi bi-person me-1"></i>Revert to Regular</button>'
+        + '      <span id="venue-status-' + escHtml(u.userId) + '" class="ms-2" style="font-size:0.8rem"></span>'
+      : '      <button class="btn btn-bbm-ghost btn-sm" data-convert-venue="' + escHtml(u.userId) + '"><i class="bi bi-house me-1"></i>Convert to Venue</button>'
+        + '      <span id="venue-status-' + escHtml(u.userId) + '" class="ms-2" style="font-size:0.8rem"></span>'
+        + '      <div id="venue-form-' + escHtml(u.userId) + '" class="d-none mt-3">'
+        + '        <div class="row g-2">'
+        + '          <div class="col-12 col-md-6"><input type="text" class="form-control form-control-sm" id="vf-name-' + escHtml(u.userId) + '" placeholder="Venue name *" /></div>'
+        + '          <div class="col-12 col-md-6"><input type="text" class="form-control form-control-sm" id="vf-address-' + escHtml(u.userId) + '" placeholder="Address (display only)" /></div>'
+        + '          <div class="col-6 col-md-3"><input type="number" class="form-control form-control-sm" id="vf-lat-' + escHtml(u.userId) + '" placeholder="Latitude *" step="any" /></div>'
+        + '          <div class="col-6 col-md-3"><input type="number" class="form-control form-control-sm" id="vf-lon-' + escHtml(u.userId) + '" placeholder="Longitude *" step="any" /></div>'
+        + '        </div>'
+        + '        <div class="d-flex gap-2 mt-2">'
+        + '          <button class="btn btn-bbm-primary btn-sm" data-save-venue="' + escHtml(u.userId) + '"><i class="bi bi-house-check me-1"></i>Confirm Conversion</button>'
+        + '          <button class="btn btn-bbm-ghost btn-sm" data-cancel-venue="' + escHtml(u.userId) + '">Cancel</button>'
+        + '        </div>'
+        + '      </div>',
+    '    </div>',
     '  </div>',
     '</div>',
   ].join('');
+}
+
+async function saveVenueConversion(userId) {
+  var statusEl = document.getElementById('venue-status-' + userId);
+  var name     = (document.getElementById('vf-name-'    + userId) || {}).value || '';
+  var address  = (document.getElementById('vf-address-' + userId) || {}).value || '';
+  var lat      = parseFloat((document.getElementById('vf-lat-' + userId) || {}).value);
+  var lon      = parseFloat((document.getElementById('vf-lon-' + userId) || {}).value);
+
+  if (!name.trim())          { if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Venue name required.'; } return; }
+  if (isNaN(lat) || isNaN(lon)) { if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Valid lat/lon required.'; } return; }
+
+  if (statusEl) { statusEl.className = 'ms-2 text-muted-bb'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Saving…'; }
+  try {
+    await window.Api.adminSetAccountType(userId, { accountType: 'venue', venueName: name.trim(), address: address.trim(), fixedLat: lat, fixedLon: lon });
+    if (statusEl) { statusEl.className = 'ms-2 text-success'; statusEl.textContent = 'Converted. User session invalidated.'; }
+    // Refresh the card after a moment
+    setTimeout(runUserSearch, 1200);
+  } catch (err) {
+    if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.textContent = err.message; }
+  }
+}
+
+async function revertVenue(userId) {
+  if (!confirm('Revert this account to a regular account? Venue fields will be removed.')) return;
+  var statusEl = document.getElementById('venue-status-' + userId);
+  if (statusEl) { statusEl.className = 'ms-2 text-muted-bb'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Saving…'; }
+  try {
+    await window.Api.adminSetAccountType(userId, { accountType: null });
+    if (statusEl) { statusEl.className = 'ms-2 text-success'; statusEl.textContent = 'Reverted. User session invalidated.'; }
+    setTimeout(runUserSearch, 1200);
+  } catch (err) {
+    if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.textContent = err.message; }
+  }
 }
 
 function toggleUserCard(userId) {

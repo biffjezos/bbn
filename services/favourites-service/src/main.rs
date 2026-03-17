@@ -119,9 +119,11 @@ struct RangeSyncFavDoc {
 #[derive(Deserialize)]
 struct UserProfile {
     #[serde(rename = "_id")]
-    id:       mongodb::bson::oid::ObjectId,
-    nickname: Option<String>,
-    sex:      Option<String>,
+    id:           mongodb::bson::oid::ObjectId,
+    nickname:     Option<String>,
+    sex:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -137,6 +139,16 @@ struct LocationEntry {
     user_id: String,
     lat:     f64,
     lon:     f64,
+}
+
+#[derive(Deserialize)]
+struct VenuePosition {
+    #[serde(rename = "_id")]
+    id:        mongodb::bson::oid::ObjectId,
+    #[serde(rename = "fixedLat")]
+    fixed_lat: f64,
+    #[serde(rename = "fixedLon")]
+    fixed_lon: f64,
 }
 
 #[derive(Deserialize)]
@@ -227,7 +239,7 @@ async fn get_favourites(
     let users: Vec<UserProfile> = match state.db
         .collection::<UserProfile>("users")
         .find(doc! { "_id": { "$in": &oids } })
-        .projection(doc! { "_id": 1, "nickname": 1, "sex": 1 })
+        .projection(doc! { "_id": 1, "nickname": 1, "sex": 1, "accountType": 1 })
         .await
     {
         Ok(c)  => c.try_collect().await.unwrap_or_default(),
@@ -262,15 +274,20 @@ async fn get_favourites(
         .filter(|e| user_map.contains_key(&e.favourite_user_id))
         .map(|e| {
             let u = &user_map[&e.favourite_user_id];
-            json!({
-                "userId":        e.favourite_user_id,
-                "nickname":      u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
-                "sex":           u.sex.as_deref(),
-                "online":        online_set.contains(&e.favourite_user_id),
-                "addedAt":       e.added_at.map(|d| d.to_string()),
-                "withinRange":   e.within_range,
-                "withinRangeAt": e.within_range_at.map(|d| d.to_string()),
-            })
+            {
+                let is_venue = u.account_type.as_deref() == Some("venue");
+                json!({
+                    "userId":        e.favourite_user_id,
+                    "nickname":      u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
+                    "sex":           u.sex.as_deref(),
+                    "accountType":   u.account_type.as_deref(),
+                    // Venues are always online
+                    "online":        is_venue || online_set.contains(&e.favourite_user_id),
+                    "addedAt":       e.added_at.map(|d| d.to_string()),
+                    "withinRange":   e.within_range,
+                    "withinRangeAt": e.within_range_at.map(|d| d.to_string()),
+                })
+            }
         })
         .collect();
 
@@ -323,7 +340,7 @@ async fn post_favourite(
         let owner_oid = safe_object_id(&claims.sub).ok_or_else(|| anyhow::anyhow!("bad oid"))?;
         let owner = state.db.collection::<UserProfile>("users")
             .find_one(doc! { "_id": owner_oid })
-            .projection(doc! { "_id": 1, "nickname": 1, "sex": 1 })
+            .projection(doc! { "_id": 1, "nickname": 1, "sex": 1, "accountType": 1 })
             .await?
             .ok_or_else(|| anyhow::anyhow!("owner not found"))?;
         let from_sex = owner.sex.as_deref().map(Bson::from).unwrap_or(Bson::Null);
@@ -463,7 +480,7 @@ async fn post_range_sync(
     let cutoff = BsonDateTime::from_millis(
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64 - location_ttl_ms
     );
-    let other_locs: Vec<LocationEntry> = match state.db
+    let live_locs: Vec<LocationEntry> = match state.db
         .collection::<LocationEntry>("locations")
         .find(doc! { "userId": { "$in": &other_ids }, "updatedAt": { "$gt": cutoff } })
         .projection(doc! { "userId": 1, "lat": 1, "lon": 1 })
@@ -472,6 +489,31 @@ async fn post_range_sync(
         Ok(c)  => c.try_collect().await.unwrap_or_default(),
         Err(e) => { eprintln!("[range-sync] find locations: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
+
+    // Also include venue accounts (fixed location, not in live-locations collection).
+    let live_ids: std::collections::HashSet<&str> = live_locs.iter().map(|l| l.user_id.as_str()).collect();
+    let venue_oids: Vec<_> = other_ids.iter()
+        .filter(|id| !live_ids.contains(id.as_str()))
+        .filter_map(|id| safe_object_id(id))
+        .collect();
+    let venue_locs: Vec<LocationEntry> = if venue_oids.is_empty() {
+        vec![]
+    } else {
+        match state.db
+            .collection::<VenuePosition>("users")
+            .find(doc! { "_id": { "$in": &venue_oids }, "accountType": "venue", "fixedLat": { "$exists": true } })
+            .projection(doc! { "_id": 1, "fixedLat": 1, "fixedLon": 1 })
+            .await
+        {
+            Ok(c) => c.try_collect::<Vec<_>>().await.unwrap_or_default()
+                .into_iter()
+                .map(|v| LocationEntry { user_id: v.id.to_hex(), lat: v.fixed_lat, lon: v.fixed_lon })
+                .collect(),
+            Err(e) => { eprintln!("[range-sync] venue positions: {e}"); vec![] }
+        }
+    };
+
+    let other_locs: Vec<LocationEntry> = live_locs.into_iter().chain(venue_locs).collect();
 
     if other_locs.is_empty() {
         return Json(json!({ "ok": true, "updated": 0 })).into_response();

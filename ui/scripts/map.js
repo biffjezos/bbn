@@ -99,12 +99,16 @@
 
   // ── Marker icon ───────────────────────────────────────────────
 
-  function makeLeafIcon(sex, isSelf) {
-    const cls    = 'bbm-marker' + (isSelf ? ' self' : '') + ' ' + markerClass(sex);
-    const size   = isSelf ? 46 : 38;
-    const anchor = isSelf ? 23 : 19;
+  function makeLeafIcon(sex, isSelf, accountType) {
+    const isVenue = accountType === 'venue';
+    const cls     = 'bbm-marker' + (isSelf ? ' self' : '') + (isVenue ? ' venue' : ' ' + markerClass(sex));
+    const size    = isSelf ? 46 : 38;
+    const anchor  = isSelf ? 23 : 19;
+    const inner   = isVenue
+      ? `<i class="bi bi-house-fill"></i>`
+      : markerEmoji(sex);
     return L.divIcon({
-      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}">${markerEmoji(sex)}</div>`,
+      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}">${inner}</div>`,
       className: '',
       iconSize:  [size, size],
       iconAnchor:[anchor, anchor],
@@ -124,9 +128,18 @@
 
   // ── Self marker + radius circle ───────────────────────────────
 
+  function getSelfAccountType() {
+    try {
+      const t = window.Auth?.getToken?.();
+      return t ? JSON.parse(atob(t.split('.')[1])).account_type || null : null;
+    } catch { return null; }
+  }
+
   function placeSelfMarker(lat, lng) {
-    const sex    = window.Auth?.getSex?.() || null;
-    const radius = viewRadius;
+    const sex         = window.Auth?.getSex?.() || null;
+    const accountType = getSelfAccountType();
+    const isVenue     = accountType === 'venue';
+    const radius      = viewRadius;
 
     if (selfMarker) {
       selfMarker.setLatLng([lat, lng]);
@@ -135,20 +148,21 @@
       // Rebuilding on every position update would prevent the compass from stabilising.
       if (sex !== lastSex) {
         lastSex = sex;
-        selfMarker.setIcon(makeLeafIcon(sex, true));
+        selfMarker.setIcon(makeLeafIcon(sex, true, accountType));
         // Reapply cached bearing after DOM replacement.
         if (lastBearing !== null) setSelfBearing(lastBearing);
       }
     } else {
       lastSex = sex;
       selfMarker = L.marker([lat, lng], {
-        icon:        makeLeafIcon(sex, true),
+        icon:        makeLeafIcon(sex, true, accountType),
         zIndexOffset: -1000,   // render below all other markers so nearby pins stay clickable
       }).addTo(map);
     }
 
-    // Translucent view-radius circle
-    if (radius > 0) {
+    // Translucent view-radius circle — not drawn for venue accounts (fixed position,
+    // huge radii distort badly in Mercator projection at normal zoom levels).
+    if (radius > 0 && !isVenue) {
       const clr = sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
       if (selfCircle) {
         selfCircle.setLatLng([lat, lng]);
@@ -184,7 +198,7 @@
         markers[u.userId].setLatLng([ulat, ulng]);
         return;
       }
-      const m = L.marker([ulat, ulng], { icon: makeLeafIcon(u.sex, false) }).addTo(map);
+      const m = L.marker([ulat, ulng], { icon: makeLeafIcon(u.sex, false, u.accountType) }).addTo(map);
       m.on('click', () => window.openPinModal?.(u));
       markers[u.userId] = m;
     });
@@ -340,6 +354,7 @@
     lastNearbyUsers = [];
     favIds = new Set();
     viewRadius = 23_000;  // revert to guest radius immediately
+    setSelfBearing(null); // clear compass needle — not reset when icon rebuilds via lastBearing
   }
 
   function refreshSelf() {

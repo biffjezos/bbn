@@ -18,17 +18,17 @@ COPY services/messages-service/Cargo.toml ./messages-service/Cargo.toml
 RUN mkdir -p ./messages-service/src && echo 'fn main(){}' > ./messages-service/src/main.rs
 COPY services/users-service/Cargo.toml ./users-service/Cargo.toml
 RUN mkdir -p ./users-service/src && echo 'fn main(){}' > ./users-service/src/main.rs
-COPY services/migration-service/Cargo.toml ./migration-service/Cargo.toml
-RUN mkdir -p ./migration-service/src && echo 'fn main(){}' > ./migration-service/src/main.rs
+COPY services/gateway/Cargo.toml ./gateway/Cargo.toml
+RUN mkdir -p ./gateway/src && echo 'fn main(){}' > ./gateway/src/main.rs
 # Build target
-COPY services/gateway ./gateway
-RUN cargo build --release -p gateway
+COPY services/migration-service ./migration-service
+RUN cargo build --release -p migration-service
 
 # ── Runtime stage ─────────────────────────────────────────────
 FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /build/target/release/gateway /usr/local/bin/gateway
-EXPOSE 8080
-CMD ["/usr/local/bin/gateway"]
+COPY --from=builder /build/target/release/migration-service /usr/local/bin/migration-service
+EXPOSE 3099
+CMD ["/usr/local/bin/migration-service"]

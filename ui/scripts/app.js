@@ -260,13 +260,20 @@
       var targetIsReg = user.isRegistered;
       var accuracy    = user.accuracy;
 
+      var isVenuePin = user.accountType === 'venue';
       var avatarEl = $('pinAvatar');
-      if (avatarEl) avatarEl.className = 'pin-avatar ' + (sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
+      if (avatarEl) avatarEl.className = 'pin-avatar ' + (isVenuePin ? 'venue' : sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
       var iconEl = $('pinAvatarIcon');
-      if (iconEl) iconEl.textContent = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊';
+      if (iconEl) {
+        if (isVenuePin) {
+          iconEl.innerHTML = '<i class="bi bi-house-fill"></i>';
+        } else {
+          iconEl.textContent = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊';
+        }
+      }
       if ($('pinNickname')) $('pinNickname').textContent = nickname || 'Anonymous';
-      if ($('pinAge'))      $('pinAge').textContent      = age ? age + ' yrs' : '—';
-      if ($('pinSex'))      $('pinSex').textContent      = sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—';
+      if ($('pinAge'))      $('pinAge').textContent      = isVenuePin ? '—' : (age ? age + ' yrs' : '—');
+      if ($('pinSex'))      $('pinSex').textContent      = isVenuePin ? 'Venue' : (sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—');
 
       if (targetIsReg && userId && !age) {
         window.Api.getProfile(userId).then(function(profile) {
@@ -445,6 +452,7 @@
 
   async function pushLocation(lat, lng, accuracy) {
     if (!window.Auth?.getToken()) return;
+    if (isVenueAccount()) return; // venues have a fixed location — never push any position
     if (sendLocWS(lat, lng, accuracy)) {
       if (DEBUG) console.log('[Geo] WS → position sent:', lat, lng, accuracy);
       return;
@@ -565,17 +573,50 @@
 
   window.__authReady.then(function () {
     if (DEBUG) console.log('[Geo] Auth ready, starting geolocation');
+    if (isVenueAccount()) {
+      // Fetch the fixed location from the profile and initialise the map.
+      // Connect WS so the gateway's nearby-push timer fires (PUT /location
+      // will be rejected by the backend — that's fine and harmless).
+      window.Api.getMe().then(function (data) {
+        var lat = data.fixedLat;
+        var lng = data.fixedLon;
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          if (DEBUG) console.warn('[Geo] Venue has no fixedLat/fixedLon');
+          setStatus('location unavailable', 'off');
+          return;
+        }
+        window.GeoState.accuracy = 'fixed';
+        dispatchPosition(lat, lng);
+        setStatus('fixed location', 'live');
+        connectLocWS(); // receives geo:nearby pushes; onopen sends fixed pos to gateway
+      }).catch(function (e) {
+        if (DEBUG) console.warn('[Geo] Failed to load venue position:', e);
+        setStatus('location unavailable', 'off');
+      });
+      return;
+    }
     connectLocWS();
     startWatch();
   });
 
   // ── Auth hooks ────────────────────────────────────────────
 
+  function isVenueAccount() {
+    try {
+      var t = window.Auth?.getToken?.();
+      if (!t) return false;
+      return JSON.parse(atob(t.split('.')[1])).account_type === 'venue';
+    } catch (e) { return false; }
+  }
+
   var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
     // Reconnect WS with fresh user token (guest token no longer valid)
     closeLocWS();
+    // Venue accounts have a fixed location — do not push GPS position,
+    // but reconnect the WS so nearby pushes keep working.
+    if (isVenueAccount()) { connectLocWS(); return; }
     connectLocWS();
     var pos = window.GeoState.pos;
     if (pos) {

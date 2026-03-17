@@ -238,6 +238,13 @@ const Api = {
     });
   },
 
+  adminSetAccountType(userId, payload) {
+    return apiFetch(`/admin/users/${encodeURIComponent(userId)}/account-type`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
   adminListTiers() {
     return apiFetch('/admin/tiers');
   },

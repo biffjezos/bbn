@@ -93,6 +93,8 @@ struct UserForToken {
     age:           Option<i32>,
     role:          Option<String>,
     tier:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
 }
@@ -125,6 +127,8 @@ struct AdminUserDoc {
     sex:           Option<String>,
     tier:          Option<String>,
     role:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
     #[serde(rename = "createdAt")]
@@ -158,14 +162,15 @@ fn regex_escape(s: &str) -> String {
 fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
     issue_user_token(
         UserTokenParams {
-            sub:      &user.id.to_hex(),
-            email:    user.email.as_deref().unwrap_or(""),
-            nickname: user.nickname.as_deref().unwrap_or(""),
-            sex:      user.sex.as_deref().unwrap_or(""),
-            age:      user.age.map(|a| a.max(0) as u32),
-            role:     match user.role.as_deref() { Some("admin") => "admin", _ => "user" },
-            tier:     user.tier.as_deref().unwrap_or("regular"),
-            tv:       user.token_version.unwrap_or(0).max(0) as u32,
+            sub:          &user.id.to_hex(),
+            email:        user.email.as_deref().unwrap_or(""),
+            nickname:     user.nickname.as_deref().unwrap_or(""),
+            sex:          user.sex.as_deref().unwrap_or(""),
+            age:          user.age.map(|a| a.max(0) as u32),
+            role:         match user.role.as_deref() { Some("admin") => "admin", _ => "user" },
+            tier:         user.tier.as_deref().unwrap_or("regular"),
+            tv:           user.token_version.unwrap_or(0).max(0) as u32,
+            account_type: user.account_type.as_deref(),
         },
         secret,
     )
@@ -219,6 +224,8 @@ async fn get_me(
 #[derive(Deserialize)]
 struct UpdateMeBody {
     nickname:              Option<String>,
+    #[serde(rename = "venueName")]
+    venue_name:            Option<String>,
     age:                   Option<serde_json::Value>,
     sex:                   Option<String>,
     email:                 Option<String>,
@@ -255,6 +262,16 @@ async fn put_me(
             return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Nickname must be 2–32 characters." }))).into_response();
         }
         update.insert("nickname", &nick);
+    }
+
+    if let Some(vname) = body.venue_name {
+        let vname = vname.trim().to_string();
+        if vname.len() < 2 || vname.len() > 64 {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Venue name must be 2–64 characters." }))).into_response();
+        }
+        update.insert("venueName", &vname);
+        // Keep nickname in sync so map/favourites display the venue name
+        update.insert("nickname", &vname);
     }
 
     if let Some(age_val) = body.age {
@@ -354,6 +371,7 @@ async fn put_me(
     let mut loc_update = doc! {};
     if let Some(sex) = update.get_str("sex").ok() { loc_update.insert("sex", sex); }
     if let Some(nick) = update.get_str("nickname").ok() { loc_update.insert("nickname", nick); }
+    if let Some(vname) = update.get_str("venueName").ok() { loc_update.insert("venueName", vname); }
     if !loc_update.is_empty() {
         let _ = state.db.collection::<Document>("locations")
             .update_one(doc! { "userId": &claims.sub }, doc! { "$set": loc_update })
@@ -740,6 +758,7 @@ async fn admin_get_users(
             "tier":         u.tier.as_deref().unwrap_or("regular"),
             "role":         u.role.as_deref().unwrap_or("user"),
             "tokenVersion": u.token_version.unwrap_or(0),
+            "accountType":  u.account_type.as_deref(),
             "online":       is_online,
             "createdAt":    u.created_at.map(|d| d.to_string()),
         })
@@ -838,6 +857,102 @@ async fn admin_patch_role(
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
 }
 
+// ── PATCH /admin/users/:id/account-type ──────────────────────────────────────
+
+#[derive(Deserialize)]
+struct AccountTypeBody {
+    #[serde(rename = "accountType")]
+    account_type: Option<String>, // "venue" to convert; null/"" to revert to regular
+    #[serde(rename = "venueName")]
+    venue_name:   Option<String>,
+    address:      Option<String>,
+    #[serde(rename = "fixedLat")]
+    fixed_lat:    Option<f64>,
+    #[serde(rename = "fixedLon")]
+    fixed_lon:    Option<f64>,
+}
+
+async fn admin_patch_account_type(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<AccountTypeBody>,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+
+    let oid = match safe_object_id(&id) {
+        Some(o) => o,
+        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid userId." }))).into_response(),
+    };
+
+    let is_venue = body.account_type.as_deref() == Some("venue");
+
+    if is_venue {
+        let venue_name = match body.venue_name.as_ref().map(|s| s.trim().to_string()) {
+            Some(s) if s.len() >= 2 => s,
+            _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "venueName (min 2 chars) is required for venue accounts." }))).into_response(),
+        };
+        let address   = body.address.unwrap_or_default();
+        let fixed_lat = match body.fixed_lat {
+            Some(v) => v,
+            None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "fixedLat is required for venue accounts." }))).into_response(),
+        };
+        let fixed_lon = match body.fixed_lon {
+            Some(v) => v,
+            None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "fixedLon is required for venue accounts." }))).into_response(),
+        };
+
+        let result = match state.db.collection::<TvDoc>("users")
+            .find_one_and_update(
+                doc! { "_id": oid },
+                doc! {
+                    "$set": {
+                        "accountType": "venue",
+                        "venueName":   &venue_name,
+                        "nickname":    &venue_name,
+                        "address":     &address,
+                        "fixedLat":    fixed_lat,
+                        "fixedLon":    fixed_lon,
+                    },
+                    "$inc": { "tokenVersion": 1 }
+                },
+            )
+            .return_document(ReturnDocument::After)
+            .projection(doc! { "tokenVersion": 1 })
+            .await
+        {
+            Ok(Some(u)) => u,
+            Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
+            Err(e)      => { eprintln!("[admin/account-type PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+        };
+
+        Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
+    } else {
+        // Revert to regular account — remove venue fields
+        let result = match state.db.collection::<TvDoc>("users")
+            .find_one_and_update(
+                doc! { "_id": oid },
+                doc! {
+                    "$unset": { "accountType": "", "venueName": "", "address": "", "fixedLat": "", "fixedLon": "" },
+                    "$inc":   { "tokenVersion": 1 }
+                },
+            )
+            .return_document(ReturnDocument::After)
+            .projection(doc! { "tokenVersion": 1 })
+            .await
+        {
+            Ok(Some(u)) => u,
+            Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
+            Err(e)      => { eprintln!("[admin/account-type PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+        };
+
+        Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
+    }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -867,8 +982,9 @@ async fn main() {
         .route("/users/me/keys",             put(put_keys))
         .route("/users/me/keys",             get(get_keys))
         .route("/admin/users",               get(admin_get_users))
-        .route("/admin/users/{id}/tier",     patch(admin_patch_tier))
-        .route("/admin/users/{id}/role",     patch(admin_patch_role))
+        .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
+        .route("/admin/users/{id}/role",         patch(admin_patch_role))
+        .route("/admin/users/{id}/account-type", patch(admin_patch_account_type))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
         .with_state(state);
 

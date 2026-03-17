@@ -65,7 +65,7 @@ requires no new infrastructure.
 
 ### Notes
 
-- First use case: create a `developer` tier with expanded nearby and messaging radii.
+- First use case: create a `unrestricted` tier with expanded nearby and messaging radii.
 - Auth: a dedicated `admin` role added to JWT. **Not** created manually in DB — see bootstrap mechanism below.
 - The `/admin` route must be excluded from the Jekyll public build or served from a separate path with server-side auth checks.
 
@@ -93,7 +93,6 @@ This is the only path to the first admin. All subsequent admin promotions go thr
 
 ### Owner's Comments
 
-- I think there are a few things to clarify, what's a developer tier vs n admin role?
 - How do I create an elevated account? A change in the db ("regular" -> "admin") should not be permitted.
 - Maybe T-03 answers open questions.
 - Do not touch without explicit permission.
@@ -607,9 +606,9 @@ This does not require a `roles` collection and can be implemented at any time.
 
 ---
 
-## T-10 — Restore migration-service.js
+## T-10 — Restore migration-service
 
-**Status:** ✅ Done. Manually restored by Project Owner. migration-service.js now lives in `/services/migration-service/migration-service.js`
+**Status:** 🔲 Railway deployment unverified. A Rust port exists at `services/migration-service/src/main.rs`. Project owner reports service not working (2026-03-17).
 
 ### Problem
 

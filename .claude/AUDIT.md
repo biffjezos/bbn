@@ -88,30 +88,26 @@ forcing the user to re-login and receive a token with the updated claim.
 
 ## 2. Infrastructure
 
-### 2.1 migration-service.js accidentally deleted — migrations not running
+### 2.1 migration-service ported to Rust — Railway deployment needs verification
 
-**Date:** 2026-03-17
-**Files:** `services/migration-service.js` (deleted in commit `4a8f547`),
-`services/gateway/src/main.rs` (still calls `MIGRATION_SERVICE_URL` on boot)
+**Date:** 2026-03-17 (updated 2026-03-17)
+**Files:** `services/migration-service/src/main.rs` (Rust port),
+`services/gateway/src/main.rs` (calls `MIGRATION_SERVICE_URL` on boot)
 
-`migration-service.js` was accidentally removed along with the other Node.js
-services. T-04c explicitly noted "migration-service stays Node.js (intentional)".
-The gateway logs a connection error on every boot but continues to start, so
-the failure is silent in production.
+The original `migration-service.js` was removed and a Rust port was created at
+`services/migration-service/src/main.rs` (workspace member, compiles correctly).
+T-04c noted migration-service stays Node.js — the Rust port went ahead anyway.
+Project owner reports service "doesn't work". Likely cause: Railway service root
+directory for migration-service must be `services/` (workspace root, where
+`Cargo.toml` is), **not** `services/migration-service/`. Build command:
+`cargo build --release --bin migration-service`. Start command:
+`./target/release/migration-service`.
 
-**Consequences:**
-
-- **Privacy regression:** MongoDB TTL indexes for `messages` and `locations` are
-  not applied on new deployments. Documents are filtered in-query (belt-and-suspenders
-  fallback is in place), but expired data is not purged from the database at the
-  DB level. Data at rest outlives its intended retention window.
-- **Data integrity:** Migration `003_blocks_indexes` (unique constraint on
-  `{blockerUserId, blockedUserId}`) is not enforced — duplicate block entries
-  can be inserted (see 2.0 for related disk-space context).
-- **Feature fallback:** Migration `004_tiers_seed` is not applied — tiers-service
-  uses static fallback, which is harmless but prevents dynamic tier management.
-
-**Fix:** Restore `migration-service.js` from git history. Tracked as **T-10**.
+**Consequences if not running:**
+- MongoDB TTL indexes for `messages` and `locations` not applied — expired data
+  not auto-purged at DB level (privacy regression).
+- Migration `003_blocks_indexes` not enforced — duplicate block entries possible.
+- Migrations `004_tiers_seed` / `005_rename_developer_tier` not applied.
 
 **Priority:** HIGH — privacy regression in a privacy-by-design app.
 

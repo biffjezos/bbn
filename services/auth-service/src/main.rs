@@ -57,7 +57,7 @@ impl Config {
 
 /// Tiers that a user account may hold.
 /// Any unrecognised DB value falls back to "regular".
-const VALID_USER_TIERS: &[&str] = &["regular", "premium", "developer"];
+const VALID_USER_TIERS: &[&str] = &["regular", "premium", "unrestricted"];
 
 fn sanitize_tier(tier: Option<&str>) -> &str {
     tier.filter(|t| VALID_USER_TIERS.contains(t))
@@ -278,14 +278,15 @@ async fn auth_register(
 
     // ── Issue token ───────────────────────────────────────────────────────────
     let token = match issue_user_token(UserTokenParams {
-        sub:      &inserted_id,
-        email:    &email,
-        nickname: &nickname,
-        sex:      &sex,
-        age:      Some(age),
-        role:     "user",
-        tier:     "regular",
-        tv:       0,
+        sub:          &inserted_id,
+        email:        &email,
+        nickname:     &nickname,
+        sex:          &sex,
+        age:          Some(age),
+        role:         "user",
+        tier:         "regular",
+        tv:           0,
+        account_type: None, // new registrations are never venues
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/register] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
@@ -315,10 +316,12 @@ struct UserDoc {
     id:            mongodb::bson::oid::ObjectId,
     email:         String,
     nickname:      String,
-    sex:           String,
+    sex:           Option<String>,
     age:           Option<i32>,
     tier:          Option<String>,
     role:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
     #[serde(rename = "passwordHash")]
     password_hash: String,
     #[serde(rename = "tokenVersion")]
@@ -377,25 +380,27 @@ async fn auth_login(
 
     // ── Issue token ───────────────────────────────────────────────────────────
     let token = match issue_user_token(UserTokenParams {
-        sub:      &user.id.to_hex(),
-        email:    &user.email,
-        nickname: &user.nickname,
-        sex:      &user.sex,
-        age:      user.age.map(|a| a.max(0) as u32),
-        role:     &role,
-        tier:     &tier,
+        sub:          &user.id.to_hex(),
+        email:        &user.email,
+        nickname:     &user.nickname,
+        sex:          user.sex.as_deref().unwrap_or(""),
+        age:          user.age.map(|a| a.max(0) as u32),
+        role:         &role,
+        tier:         &tier,
         tv,
+        account_type: user.account_type.as_deref(),
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/login] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
     Json(json!({
-        "token":    token,
-        "nickname": user.nickname,
-        "sex":      user.sex,
-        "tier":     tier,
-        "role":     role,
+        "token":       token,
+        "nickname":    user.nickname,
+        "sex":         user.sex.as_deref().unwrap_or(""),
+        "tier":        tier,
+        "role":        role,
+        "accountType": user.account_type,
     })).into_response()
 }
 

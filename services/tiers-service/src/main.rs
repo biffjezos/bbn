@@ -61,15 +61,15 @@ fn tier_rank(tier: &str) -> u32 {
         "guest"     => 0,
         "regular"   => 1,
         "premium"   => 2,
-        "developer" => 3,
+        "unrestricted" => 3,
         _           => 0,
     }
 }
 
 /// Mirrors the static `TIERS` object in the JS version.
-/// developer is code-only until T-01 (admin UI).
+/// unrestricted is code-only until T-01 (admin UI).
 fn is_known_tier(tier: &str) -> bool {
-    matches!(tier, "guest" | "regular" | "premium" | "developer")
+    matches!(tier, "guest" | "regular" | "premium" | "unrestricted")
 }
 
 // ── Feature definitions ───────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ fn static_tiers() -> HashMap<String, Tier> {
         ("guest".into(),     Tier { name: "guest".into(),     label: "Guest".into(),     cls: "secondary".into(), rank: 0, nearby_radius_m: 500,       message_radius_m: None }),
         ("regular".into(),   Tier { name: "regular".into(),   label: "Regular".into(),   cls: "primary".into(),   rank: 1, nearby_radius_m: 1_000,     message_radius_m: Some(1000) }),
         ("premium".into(),   Tier { name: "premium".into(),   label: "Premium".into(),   cls: "warning".into(),   rank: 2, nearby_radius_m: 23_000,    message_radius_m: Some(23_000) }),
-        ("developer".into(), Tier { name: "developer".into(), label: "Developer".into(), cls: "warning".into(),   rank: 3, nearby_radius_m: 9_700_000, message_radius_m: Some(9_700_000) })
+        ("unrestricted".into(), Tier { name: "unrestricted".into(), label: "Unrestricted".into(), cls: "warning".into(), rank: 3, nearby_radius_m: 9_700_000, message_radius_m: Some(9_700_000) })
     ])
 }
 
@@ -550,7 +550,7 @@ async fn admin_delete_tier(
 
 // ── Startup seeder ────────────────────────────────────────────────────────────
 
-/// Upserts the three base tiers into MongoDB on startup.
+/// Upserts the four base tiers into MongoDB on startup.
 /// Uses $set for radius fields so corrections propagate to existing records,
 /// and $setOnInsert for immutable fields (name, label, cls, rank, createdAt).
 /// Does NOT create indexes (that remains migration 004's responsibility).
@@ -559,9 +559,10 @@ async fn seed_tiers(db: &Database) {
     let now = DateTime::now();
     // (name, label, cls, rank, nearbyRadiusM, messageRadiusM)
     let seeds: &[(&str, &str, &str, i32, i32, Option<i32>)] = &[
-        ("guest",   "Guest",   "secondary", 0, 500,   None),
-        ("regular", "Regular", "primary",   1, 1_000, Some(100)),
-        ("premium", "Premium", "warning",   2, 1_000, Some(1_000)),
+        ("guest",        "Guest",        "secondary", 0, 500,       None),
+        ("regular",      "Regular",      "primary",   1, 1_000,     Some(100)),
+        ("premium",      "Premium",      "warning",   2, 1_000,     Some(1_000)),
+        ("unrestricted", "Unrestricted", "warning",   3, 9_700_000, Some(9_700_000)),
     ];
     let mut seeded = 0u32;
     for &(name, label, cls, rank, nearby, msg) in seeds {
