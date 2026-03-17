@@ -18,6 +18,8 @@ RUN mkdir -p ./users-service/src && echo 'fn main(){}' > ./users-service/src/mai
 COPY services/blocks-service ./blocks-service
 COPY services/favourites-service/Cargo.toml ./favourites-service/Cargo.toml
 RUN mkdir -p ./favourites-service/src && echo 'fn main(){}' > ./favourites-service/src/main.rs
+COPY services/gateway/Cargo.toml ./gateway/Cargo.toml
+RUN mkdir -p ./gateway/src && echo 'fn main(){}' > ./gateway/src/main.rs
 RUN cargo build --release -p blocks-service
 
 # ── Runtime stage ─────────────────────────────────────────────

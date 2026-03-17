@@ -18,6 +18,8 @@ COPY services/messages-service/Cargo.toml ./messages-service/Cargo.toml
 RUN mkdir -p ./messages-service/src && echo 'fn main(){}' > ./messages-service/src/main.rs
 # Build target
 COPY services/users-service ./users-service
+COPY services/gateway/Cargo.toml ./gateway/Cargo.toml
+RUN mkdir -p ./gateway/src && echo 'fn main(){}' > ./gateway/src/main.rs
 RUN cargo build --release -p users-service
 
 # ── Runtime stage ─────────────────────────────────────────────
