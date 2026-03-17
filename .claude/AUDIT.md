@@ -111,9 +111,7 @@ the failure is silent in production.
 - **Feature fallback:** Migration `004_tiers_seed` is not applied — tiers-service
   uses static fallback, which is harmless but prevents dynamic tier management.
 
-**Fix:** Restore `migration-service.js` from git history. Tracked as **T-10**.
-
-**Priority:** HIGH — privacy regression in a privacy-by-design app.
+✅ **Resolved (2026-03-17, T-10):** `migration-service.js` restored from git history and redeployed.
 
 ---
 
@@ -334,7 +332,7 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 | 🔲 | 1.2 | Security | MEDIUM | Gateway send-rate bypassable at messages-service level |
 | ✅ | 1.3 | Security | LOW (future) | JWT tier claim stale after admin tier change — resolved T-01 |
 | 🔲 | 1.4 | Security | LOW | Admin self-promotion guard missing — can modify own tier/role via API |
-| 🔲 | 2.1 | Infrastructure | HIGH | migration-service.js deleted — migrations not running, TTL indexes absent, privacy regression |
+| ✅ | 2.1 | Infrastructure | HIGH | migration-service.js deleted — restored (T-10, 2026-03-17) |
 | 🔲 | 2.0 | Infrastructure | MEDIUM | MongoDB disk space — migration 003 not applied (dev-alpha: acceptable) |
 | 🔲 | 3.1 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
 | ✅ | 3.2 | Bug | LOW | Tier badge in /profile has hard-coded values — resolved T-03 |

@@ -650,7 +650,7 @@ privacy regression in a privacy-by-design app.
 
 ## T-11 — Enforce 144-character plaintext limit on message send
 
-**Status:** Not started.
+**Status:** ✅ Complete (2026-03-17).
 
 ### Problem
 
@@ -676,21 +676,11 @@ None.
 
 ## T-12 — Remove leftover `bbm_meet` localStorage key
 
-**Status:** Not started.
+**Status:** ✅ Complete (2026-03-17).
 
-### Problem
+### What it was
 
-`ui/scripts/auth.js` `clearUserStorage()` (line 44) removes a localStorage key
-`bbm_meet` that is not defined as a constant anywhere in the codebase. It
-appears to be a leftover from a removed feature. The key name is undocumented
-and may silently conflict with future features.
-
-### Fix
-
-Identify what `bbm_meet` was used for (git history), confirm it is fully
-retired, then remove the `localStorage.removeItem('bbm_meet')` line from
-`clearUserStorage()`.
-
-### Prerequisites
-
-None.
+`bbm_meet` stored `{ uid, nickname, sex }` of a "meet target" user — an early
+feature that let a user pin a specific person to meet. The feature was removed
+(gone by commit `99df018`) but the `clearUserStorage()` cleanup call was left
+behind. Confirmed fully retired via git history. Removal is safe.

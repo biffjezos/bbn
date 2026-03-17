@@ -41,7 +41,6 @@ const Auth = (() => {
     localStorage.removeItem(STORAGE_TOKEN_KEY);
     localStorage.removeItem(STORAGE_NICK_KEY);
     localStorage.removeItem(STORAGE_SEX_KEY);
-    localStorage.removeItem('bbm_meet');
     // Keep guest keys — guest session is independent of user account
   }
 

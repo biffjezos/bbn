@@ -263,6 +263,10 @@ function setupThreadUI(userId) {
     sendBtn.addEventListener('click', async () => {
       const text = input?.value.trim();
       if (!text) return;
+      if (text.length > 144) {
+        if (errEl) { errEl.textContent = 'Message is too long (max 144 characters).'; errEl.classList.remove('d-none'); }
+        return;
+      }
       errEl?.classList.add('d-none');
 
       if (!window.requireUnlocked?.()) { console.warn('[Send] blocked: crypto not unlocked'); return; }
