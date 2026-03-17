@@ -315,7 +315,7 @@ struct UserDoc {
     id:            mongodb::bson::oid::ObjectId,
     email:         String,
     nickname:      String,
-    sex:           String,
+    sex:           Option<String>,
     age:           Option<i32>,
     tier:          Option<String>,
     role:          Option<String>,
@@ -380,7 +380,7 @@ async fn auth_login(
         sub:      &user.id.to_hex(),
         email:    &user.email,
         nickname: &user.nickname,
-        sex:      &user.sex,
+        sex:      user.sex.as_deref().unwrap_or(""),
         age:      user.age.map(|a| a.max(0) as u32),
         role:     &role,
         tier:     &tier,
@@ -393,7 +393,7 @@ async fn auth_login(
     Json(json!({
         "token":    token,
         "nickname": user.nickname,
-        "sex":      user.sex,
+        "sex":      user.sex.as_deref().unwrap_or(""),
         "tier":     tier,
         "role":     role,
     })).into_response()
