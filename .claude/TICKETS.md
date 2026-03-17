@@ -346,7 +346,7 @@ Roles are currently hardcoded strings (`user`, `admin`) validated inline in each
 
 ## T-13 — Admin Action Approval Gates
 
-**Status:** Not started. Supersedes the standalone fix in AUDIT.md 1.4.
+**Status:** ✅ Done. Manually restored by Project Owner. migration-service.js now lives in `/services/migration-service/migration-service.js`
 
 ### Problem
 
