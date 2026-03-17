@@ -445,6 +445,7 @@
 
   async function pushLocation(lat, lng, accuracy) {
     if (!window.Auth?.getToken()) return;
+    if (isVenueAccount()) return; // venues have a fixed location — never push any position
     if (sendLocWS(lat, lng, accuracy)) {
       if (DEBUG) console.log('[Geo] WS → position sent:', lat, lng, accuracy);
       return;
@@ -565,6 +566,7 @@
 
   window.__authReady.then(function () {
     if (DEBUG) console.log('[Geo] Auth ready, starting geolocation');
+    if (isVenueAccount()) return; // venue accounts have fixed location — no GPS, no WS, no IP fallback
     connectLocWS();
     startWatch();
   });
