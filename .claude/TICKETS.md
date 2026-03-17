@@ -419,7 +419,7 @@ single-instance deployment.
   visible to users within range (uses the venue's `fixedLat/fixedLon`).
 - Map pin modal for venues shows name + description + link to venue profile page.
 - Messaging: standard two-sided favourites required. Venues can send messages to
-  users; users can message venues.
+  users; users can message venues. Future: Either auto-add-to-favourites if a user has added venue as favourite, or implicit-favourite: venue can send messages to all users that have added venue as favourites, without adding them as favourites
 - Venues can be blocked by regular users (T-05). Blocked venues see nothing
   about that user.
 - Admin flow: user registers normally → admin changes `accountType` to `venue`
