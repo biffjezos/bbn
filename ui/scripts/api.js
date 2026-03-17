@@ -11,7 +11,7 @@
 var DEBUG = true;
 // ─────────────────────────────────────────────────────────────
 
-const API_BASE = window.BOOMBOOM_API_URL || '';
+const API_BASE = window.BOOMBOOM_API_URL;
 
 async function apiFetch(path, options = {}, _retries = 1) {
   const token = window.Auth?.getToken?.();
