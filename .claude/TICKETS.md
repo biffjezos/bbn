@@ -647,6 +647,94 @@ privacy regression in a privacy-by-design app.
 
 ---
 
+## T-13 — Define and stabilise accountType / tier / role as a coherent system
+
+**Status:** Not started.
+
+### Problem
+
+The three orthogonal axes that govern user identity and access are currently
+ad-hoc, inconsistently applied, and underdocumented:
+
+- **`accountType`** — `null` for regular users, `"venue"` for venue accounts.
+  `null` is used as the implicit default, which means missing-field and
+  "normal user" are indistinguishable. No enum or validation exists.
+- **`tier`** — DB-backed (`guest`, `regular`, `premium`, `unrestricted`, …).
+  Controls feature access flags and radius limits. Added to JWT. Stored in
+  `users` collection. Managed via admin UI. Broadly correct but the `unrestricted`
+  tier was added manually and is not in the seed migrations yet. The interaction
+  between tier and accountType is undefined (e.g. does a venue get a tier?
+  what does `nearbyRadiusM` mean for a venue with a fixed location?).
+- **`role`** — `"user"` | `"admin"`. Controls admin actions. Added to JWT.
+  Currently only two values; hardcoded in every service's `verifyToken` copy.
+
+### Goal
+
+Produce a written spec (in this ticket) agreed by the owner, then implement
+it so every service, every JWT claim, and every UI check is consistent.
+
+### Proposed definitions
+
+| Axis | Values | Meaning | Who sets it | In JWT? |
+|---|---|---|---|---|
+| `accountType` | `"user"` (not `null`), `"venue"` | **What kind of entity** the account represents. Determines which profile fields exist, how location is handled, and which UI view renders. | Admin only (admin UI convert-to-venue / revert). New registrations always `"user"`. | Yes — `account_type` claim |
+| `tier` | `guest`, `regular`, `premium`, `unrestricted`, … | **What features and radii** the account is allowed. Fully DB-backed; admin-configurable. Venue accounts can have a tier (controls their message radius). | Admin only. New registrations default to `regular`. Guests always `guest`. | Yes — `tier` claim |
+| `role` | `"user"`, `"admin"` | **What system actions** the account may perform (read/write other users' data, call admin endpoints). Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent promotions. | Yes — `role` claim |
+
+### Concrete changes required
+
+1. **Rename `accountType: null` → `accountType: "user"`** everywhere:
+   - `auth-service`: set `account_type: "user"` on every new registration.
+   - `users-service`: migration that sets `accountType: "user"` on all
+     existing documents where the field is absent or null.
+   - All services that read `account_type` from JWT or DB: treat absent/null
+     as `"user"` as a backwards-compat fallback (belt-and-suspenders only).
+   - Frontend `isVenueAccount()` check: remains `=== "venue"`, no change needed.
+
+2. **Add migration `006_default_account_type`** in migration-service:
+   ```
+   db.users.updateMany({ accountType: { $in: [null, undefined] } },
+                       { $set: { accountType: "user" } })
+   ```
+
+3. **JWT `issue_user_token`** in `common/src/auth.rs`: always emit
+   `account_type` (never omit it). For non-venue accounts emit `"user"`.
+
+4. **Tiers and venues**: document and enforce that a venue account MUST have
+   a tier assigned. The tier's `messageRadiusM` is the distance within which
+   a user must be to message the venue (and vice versa). The tier's
+   `nearbyRadiusM` is irrelevant for venues (venues don't broadcast GPS;
+   they are always visible to users within the *user's* own nearby radius).
+   Document this in the tiers-service and in the admin UI tooltip.
+
+5. **Role enum validation**: `users-service` `PATCH /admin/users/:id/role`
+   currently accepts any string. Restrict to `["user", "admin"]` (or the
+   DB-backed roles list if T-09 is implemented first).
+
+6. **Admin UI**: show `accountType` field as a read-only badge on every user
+   row in the search results (alongside tier and role). Make it clear which
+   axis is being changed when the admin clicks "Convert to Venue" vs
+   "Change Tier" vs "Change Role".
+
+7. **TICKETS.md / AUDIT.md**: once implemented, record the final definitions
+   here so they can be referenced in future sessions without re-deriving them.
+
+### Prerequisites
+
+- T-08 (authority service) would centralise these checks, but this ticket can
+  be implemented independently service-by-service.
+- Migration-service must be running to apply migration 006.
+
+### Owner's note to self
+
+Before implementing: agree on whether `unrestricted` stays a tier or becomes
+a role (or a special accountType for internal/developer accounts). Currently
+it is a tier with unlimited radii, which leaks into the tier UI. A cleaner
+split might be: `role: "developer"` with a bypass in the radius check, leaving
+tiers exclusively for user-facing feature control.
+
+---
+
 ## T-11 — Enforce 144-character plaintext limit on message send
 
 **Status:** Not started.
