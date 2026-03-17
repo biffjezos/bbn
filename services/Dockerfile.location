@@ -9,6 +9,8 @@ COPY services/tiers-service/Cargo.toml ./tiers-service/Cargo.toml
 RUN mkdir -p ./tiers-service/src && echo 'fn main(){}' > ./tiers-service/src/main.rs
 COPY services/auth-service/Cargo.toml ./auth-service/Cargo.toml
 RUN mkdir -p ./auth-service/src && echo 'fn main(){}' > ./auth-service/src/main.rs
+COPY services/blocks-service/Cargo.toml ./blocks-service/Cargo.toml
+RUN mkdir -p ./blocks-service/src && echo 'fn main(){}' > ./blocks-service/src/main.rs
 # Build target
 COPY services/location-service ./location-service
 RUN cargo build --release -p location-service

@@ -246,6 +246,35 @@ pub fn issue_user_token(
     )
 }
 
+// ── RequireRegistered extractor ───────────────────────────────────────────────
+
+/// Wraps [`AuthToken`] and additionally rejects guest tokens.
+/// Use on routes that require a registered account (`role` == `"user"` or `"admin"`).
+pub struct RequireRegistered(pub UserClaims);
+
+impl<S> FromRequestParts<S> for RequireRegistered
+where
+    JwtSecret: FromRef<S>,
+    mongodb::Database: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthToken(claims) = AuthToken::from_request_parts(parts, state).await?;
+        if !matches!(claims.role.as_str(), "user" | "admin") {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "Registered account required.",
+                    "code":  "REGISTERED_REQUIRED"
+                })),
+            ));
+        }
+        Ok(RequireRegistered(claims))
+    }
+}
+
 // ── AuthToken extractor (any role) ───────────────────────────────────────────
 
 /// Axum extractor that accepts any valid JWT: guest, user, or admin.
