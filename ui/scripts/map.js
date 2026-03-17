@@ -30,7 +30,7 @@
 
   // ── Helpers ──────────────────────────────────────────────────
 
-  function markerEmoji(sex, accountType) { if (accountType === 'venue') return '<i class="bi bi-house-fill"></i>'; ...
+  function markerEmoji(sex, accountType) { if (accountType === 'venue') return '<i class="bi bi-house-fill"></i>'; }
   function markerClass(sex, accountType) { if (accountType === 'venue') return 'venue'; return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest'; }
 
   function escHtml(str) {
