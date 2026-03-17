@@ -614,9 +614,21 @@
     if (_origOnLogin) _origOnLogin(data);
     // Reconnect WS with fresh user token (guest token no longer valid)
     closeLocWS();
-    // Venue accounts have a fixed location — do not push GPS position,
-    // but reconnect the WS so nearby pushes keep working.
-    if (isVenueAccount()) { connectLocWS(); return; }
+    // Venue accounts have a fixed location — fetch fixedLat/fixedLon first so
+    // GeoState.pos is correct before the WS opens and sends the first position.
+    if (isVenueAccount()) {
+      window.Api.getMe().then(function (meData) {
+        var lat = meData.fixedLat;
+        var lng = meData.fixedLon;
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          window.GeoState.accuracy = 'fixed';
+          dispatchPosition(lat, lng);
+          setStatus('fixed location', 'live');
+        }
+        connectLocWS();
+      }).catch(function () { connectLocWS(); });
+      return;
+    }
     connectLocWS();
     var pos = window.GeoState.pos;
     if (pos) {
