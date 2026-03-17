@@ -9,14 +9,14 @@ Privacy-by-design location-based instant messaging.
 - **End-to-end encrypted messaging** — messages are encrypted client-side (ECDH P-256 + AES-GCM) before reaching the server. The server stores ciphertext only and cannot read any message content.
 - **Zero-knowledge key storage** — the user's ECDH private key is encrypted with a key derived from their password (PBKDF2, 200 000 iterations, SHA-256) before being stored on the server. The server holds the encrypted blob; decryption requires the user's password and never happens server-side.
 - **Hashed passwords** — bcrypt with per-user salt. Plain passwords are never stored or logged.
-- **Session lock** — the private key lives only in browser memory. It is wiped after 30 minutes of inactivity or 3 minutes of the tab being hidden. Re-entering the password re-derives the key without a full re-login.
-- **Short-lived data** — messages auto-delete after 4 hours; location data expires after 10 minutes of inactivity. Both are enforced by MongoDB TTL indexes, not application logic.
+- **Session lock** — the private key lives only in browser memory. It is wiped after 3 minutes of inactivity or 30 seconds of the tab being hidden. Re-entering the password re-derives the key without a full re-login.
+- **Short-lived data** — messages auto-delete after 4 hours; location data expires after 10 minutes of inactivity. Expiry is enforced in application queries as a primary safety net; MongoDB TTL indexes (applied by the migration service on boot) provide background cleanup at the database level once migrations have been fully applied.
 - **Guest sessions** — any visitor gets an anonymous 15-minute JWT (UUID-identified, no account required) that allows seeing the map and nearby users.
 - **Registered sessions** — 7-day JWT. Email and password required. Unlocks messaging, favourites, and blocking.
 - **Tier-based access control** — `guest`, `regular`, `premium`, `developer`. Tiers define nearby and messaging radii. Tier definitions are stored in the database and manageable through the admin UI without redeployment.
 - **Block and report** — any user can block any other user with a mandatory reason (`spam`, `harassment`, `inappropriate_content`, `fake_profile`, `other`). Blocked users are filtered from nearby results, cannot send messages, and cannot view the blocker's profile.
-- **Favourites with range sync** — one-directional. The service tracks whether a favourited user is within messaging range and fires a notification when they come online.
-- **In-app notifications** — new-favourite and range events delivered via a `notifications` collection polled by the frontend.
+- **Favourites with range sync** — one-directional. The service tracks whether a favourited user is within messaging range and stores a `withinRange` flag on the favourite document; this flag is checked before messages can be sent. *(Planned: in-range notification when a favourite enters range — not yet implemented.)*
+- **In-app notifications** — new-favourite events delivered via a `notifications` collection polled by the frontend every 2 minutes.
 - **Admin UI** — user search, tier and role changes, tier CRUD. Accessible to `admin`-role accounts only.
 - **Admin bootstrap** — first admin account is promoted via a one-time `ADMIN_BOOTSTRAP_USER_ID` environment variable set at boot. Subsequent promotions go through the admin UI. Raw database edits to role or tier fields have no effect without a `tokenVersion` bump.
 - **Separate inter-service secret** — user JWTs and inter-service tokens are signed with independent secrets (`JWT_SECRET` and `SERVICE_SECRET`). A compromised user secret cannot be used to forge service requests.
@@ -43,12 +43,9 @@ When a user changes their password, the frontend re-encrypts the private key blo
 
 ### Messages
 
-Every message is encrypted twice on the client before being sent:
+Every message is encrypted on the client using the ECDH-derived shared secret before being sent. The sender derives the shared AES-GCM key from their private key and the recipient's public key; the recipient derives the same key from their private key and the sender's public key — a symmetric property of Diffie-Hellman. Both parties can therefore decrypt the same single ciphertext independently without a second copy being stored.
 
-- Once for the recipient (their public key + sender's private key → shared AES key)
-- Once for the sender (sender's own public key + sender's private key → AES key for self-read)
-
-The server receives and stores the dual ciphertext `{ forRecipient, forSender }` as a JSON string. It cannot reconstruct the shared secret because it never holds any private key. Messages are deleted automatically by MongoDB TTL index 4 hours after they are sent.
+The server receives and stores the ciphertext envelope `{ cipher, recipientId }` as a JSON string. It cannot reconstruct the shared secret because it never holds any private key. Messages are deleted automatically by MongoDB TTL index 4 hours after they are sent.
 
 ### Authentication
 
