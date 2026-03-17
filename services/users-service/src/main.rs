@@ -93,6 +93,8 @@ struct UserForToken {
     age:           Option<i32>,
     role:          Option<String>,
     tier:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
 }
@@ -108,11 +110,21 @@ struct SearchUserDoc {
 
 #[derive(Deserialize)]
 struct ProfileDoc {
-    nickname:              Option<String>,
-    age:                   Option<i32>,
-    sex:                   Option<String>,
+    nickname:      Option<String>,
+    age:           Option<i32>,
+    sex:           Option<String>,
     #[serde(rename = "publicKey")]
-    public_key:            Option<String>,
+    public_key:    Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
+    #[serde(rename = "venueName")]
+    venue_name:    Option<String>,
+    address:       Option<String>,
+    description:   Option<String>,
+    #[serde(rename = "openingHours")]
+    opening_hours: Option<String>,
+    #[serde(rename = "specialOffers")]
+    special_offers: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -125,6 +137,11 @@ struct AdminUserDoc {
     sex:           Option<String>,
     tier:          Option<String>,
     role:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
+    #[serde(rename = "venueName")]
+    venue_name:    Option<String>,
+    address:       Option<String>,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
     #[serde(rename = "createdAt")]
@@ -158,14 +175,15 @@ fn regex_escape(s: &str) -> String {
 fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
     issue_user_token(
         UserTokenParams {
-            sub:      &user.id.to_hex(),
-            email:    user.email.as_deref().unwrap_or(""),
-            nickname: user.nickname.as_deref().unwrap_or(""),
-            sex:      user.sex.as_deref().unwrap_or(""),
-            age:      user.age.map(|a| a.max(0) as u32),
-            role:     match user.role.as_deref() { Some("admin") => "admin", _ => "user" },
-            tier:     user.tier.as_deref().unwrap_or("regular"),
-            tv:       user.token_version.unwrap_or(0).max(0) as u32,
+            sub:          &user.id.to_hex(),
+            email:        user.email.as_deref().unwrap_or(""),
+            nickname:     user.nickname.as_deref().unwrap_or(""),
+            sex:          user.sex.as_deref().unwrap_or(""),
+            age:          user.age.map(|a| a.max(0) as u32),
+            role:         match user.role.as_deref() { Some("admin") => "admin", _ => "user" },
+            tier:         user.tier.as_deref().unwrap_or("regular"),
+            tv:           user.token_version.unwrap_or(0).max(0) as u32,
+            account_type: match user.account_type.as_deref() { Some("venue") => "venue", _ => "user" },
         },
         secret,
     )
@@ -230,6 +248,12 @@ struct UpdateMeBody {
     public_key:            Option<String>,
     #[serde(rename = "encryptedPrivateKey")]
     encrypted_private_key: Option<serde_json::Value>,
+    // Venue-owner-editable fields
+    description:            Option<String>,
+    #[serde(rename = "openingHours")]
+    opening_hours:          Option<String>,
+    #[serde(rename = "specialOffers")]
+    special_offers:         Option<String>,
 }
 
 async fn put_me(
@@ -240,6 +264,13 @@ async fn put_me(
 ) -> impl IntoResponse {
     if body.tier.is_some() {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "tier cannot be modified." }))).into_response();
+    }
+
+    let is_venue = claims.account_type.as_deref() == Some("venue");
+
+    // Venue accounts: block user-only fields
+    if is_venue && (body.nickname.is_some() || body.age.is_some() || body.sex.is_some()) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Venue accounts cannot modify nickname, age, or sex." }))).into_response();
     }
 
     let oid = match safe_object_id(&claims.sub) {
@@ -330,6 +361,28 @@ async fn put_me(
                 update.insert("publicKey", pk);
                 update.insert("encryptedPrivateKey", epk_bson);
             }
+        }
+    }
+
+    // Venue-editable fields
+    if is_venue {
+        if let Some(desc) = body.description {
+            if desc.len() > 1000 {
+                return (StatusCode::BAD_REQUEST, Json(json!({ "error": "description too long (max 1000)." }))).into_response();
+            }
+            update.insert("description", desc.trim().to_string());
+        }
+        if let Some(hours) = body.opening_hours {
+            if hours.len() > 256 {
+                return (StatusCode::BAD_REQUEST, Json(json!({ "error": "openingHours too long (max 256)." }))).into_response();
+            }
+            update.insert("openingHours", hours.trim().to_string());
+        }
+        if let Some(offers) = body.special_offers {
+            if offers.len() > 512 {
+                return (StatusCode::BAD_REQUEST, Json(json!({ "error": "specialOffers too long (max 512)." }))).into_response();
+            }
+            update.insert("specialOffers", offers.trim().to_string());
         }
     }
 
@@ -552,7 +605,7 @@ async fn get_profile(
             // Viewer blocked the target — return profile with flag
             let user = match state.db.collection::<ProfileDoc>("users")
                 .find_one(doc! { "_id": oid })
-                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "_id": 0 })
+                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "address": 1, "description": 1, "openingHours": 1, "specialOffers": 1, "_id": 0 })
                 .await
             {
                 Ok(Some(u)) => u,
@@ -564,6 +617,12 @@ async fn get_profile(
                 "age":             user.age,
                 "sex":             user.sex.as_deref(),
                 "publicKey":       user.public_key.as_deref(),
+                "accountType":     user.account_type.as_deref().unwrap_or("user"),
+                "venueName":       user.venue_name.as_deref(),
+                "address":         user.address.as_deref(),
+                "description":     user.description.as_deref(),
+                "openingHours":    user.opening_hours.as_deref(),
+                "specialOffers":   user.special_offers.as_deref(),
                 "blockedByViewer": true,
             })).into_response();
         }
@@ -571,7 +630,7 @@ async fn get_profile(
 
     let user = match state.db.collection::<ProfileDoc>("users")
         .find_one(doc! { "_id": oid })
-        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "_id": 0 })
+        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "address": 1, "description": 1, "openingHours": 1, "specialOffers": 1, "_id": 0 })
         .await
     {
         Ok(Some(u)) => u,
@@ -580,10 +639,16 @@ async fn get_profile(
     };
 
     Json(json!({
-        "nickname":  user.nickname.as_deref(),
-        "age":       user.age,
-        "sex":       user.sex.as_deref(),
-        "publicKey": user.public_key.as_deref(),
+        "nickname":      user.nickname.as_deref(),
+        "age":           user.age,
+        "sex":           user.sex.as_deref(),
+        "publicKey":     user.public_key.as_deref(),
+        "accountType":   user.account_type.as_deref().unwrap_or("user"),
+        "venueName":     user.venue_name.as_deref(),
+        "address":       user.address.as_deref(),
+        "description":   user.description.as_deref(),
+        "openingHours":  user.opening_hours.as_deref(),
+        "specialOffers": user.special_offers.as_deref(),
     })).into_response()
 }
 
@@ -739,6 +804,9 @@ async fn admin_get_users(
             "sex":          u.sex.as_deref(),
             "tier":         u.tier.as_deref().unwrap_or("regular"),
             "role":         u.role.as_deref().unwrap_or("user"),
+            "accountType":  u.account_type.as_deref().unwrap_or("user"),
+            "venueName":    u.venue_name.as_deref(),
+            "address":      u.address.as_deref(),
             "tokenVersion": u.token_version.unwrap_or(0),
             "online":       is_online,
             "createdAt":    u.created_at.map(|d| d.to_string()),
@@ -838,6 +906,111 @@ async fn admin_patch_role(
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
 }
 
+// ── PATCH /admin/users/:id/account-type ──────────────────────────────────────
+
+#[derive(Deserialize)]
+struct VenueConversionBody {
+    #[serde(rename = "venueName")]
+    venue_name: Option<String>,
+    address:    Option<String>,
+    #[serde(rename = "fixedLat")]
+    fixed_lat:  Option<f64>,
+    #[serde(rename = "fixedLon")]
+    fixed_lon:  Option<f64>,
+}
+
+async fn admin_patch_account_type(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<VenueConversionBody>,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+
+    let oid = match safe_object_id(&id) {
+        Some(o) => o,
+        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid userId." }))).into_response(),
+    };
+
+    let (venue_name, address, fixed_lat, fixed_lon) = match (body.venue_name, body.address, body.fixed_lat, body.fixed_lon) {
+        (Some(n), Some(a), Some(lat), Some(lon)) => (n, a, lat, lon),
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "venueName, address, fixedLat, fixedLon required." }))).into_response(),
+    };
+
+    let venue_name = venue_name.trim().to_string();
+    let address    = address.trim().to_string();
+
+    if venue_name.is_empty() || venue_name.len() > 128 {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "venueName must be 1–128 characters." }))).into_response();
+    }
+    if address.is_empty() || address.len() > 256 {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "address must be 1–256 characters." }))).into_response();
+    }
+    if !(-90.0..=90.0).contains(&fixed_lat) || !(-180.0..=180.0).contains(&fixed_lon) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Valid fixedLat and fixedLon required." }))).into_response();
+    }
+
+    // Update user document
+    match state.db.collection::<TvDoc>("users")
+        .find_one_and_update(
+            doc! { "_id": oid },
+            doc! {
+                "$set": {
+                    "accountType": "venue",
+                    "venueName":   &venue_name,
+                    "nickname":    &venue_name,    // nickname = venueName for public display
+                    "address":     &address,
+                    "fixedLat":    fixed_lat,
+                    "fixedLon":    fixed_lon,
+                },
+                "$unset": { "age": "", "sex": "" },
+                "$inc": { "tokenVersion": 1_i32 },
+            },
+        )
+        .return_document(ReturnDocument::After)
+        .projection(doc! { "tokenVersion": 1 })
+        .await
+    {
+        Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
+        Ok(_)       => {},
+        Err(e)      => { eprintln!("[admin/account-type PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    }
+
+    // Upsert permanent location document
+    if let Err(e) = state.db.collection::<Document>("locations")
+        .update_one(
+            doc! { "userId": &id },
+            doc! { "$set": {
+                "userId":       &id,
+                "lat":          fixed_lat,
+                "lon":          fixed_lon,
+                "location": {
+                    "type":        "Point",
+                    "coordinates": [fixed_lon, fixed_lat],
+                },
+                "isRegistered": true,
+                "nickname":     &venue_name,
+                "accountType":  "venue",
+                "address":      &address,
+                "permanent":    true,
+                "sex":          mongodb::bson::Bson::Null,
+                "age":          mongodb::bson::Bson::Null,
+                "updatedAt":    BsonDateTime::now(),
+            }},
+        )
+        .upsert(true)
+        .await
+    {
+        eprintln!("[admin/account-type PATCH] location upsert: {e}");
+        // Non-fatal: user doc was updated; location will appear on next admin re-conversion.
+    }
+
+    Json(json!({ "ok": true })).into_response()
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -866,9 +1039,10 @@ async fn main() {
         .route("/users/{user_id}/profile",   get(get_profile))
         .route("/users/me/keys",             put(put_keys))
         .route("/users/me/keys",             get(get_keys))
-        .route("/admin/users",               get(admin_get_users))
-        .route("/admin/users/{id}/tier",     patch(admin_patch_tier))
-        .route("/admin/users/{id}/role",     patch(admin_patch_role))
+        .route("/admin/users",                        get(admin_get_users))
+        .route("/admin/users/{id}/tier",              patch(admin_patch_tier))
+        .route("/admin/users/{id}/role",              patch(admin_patch_role))
+        .route("/admin/users/{id}/account-type",      patch(admin_patch_account_type))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
         .with_state(state);
 

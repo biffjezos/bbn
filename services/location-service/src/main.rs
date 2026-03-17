@@ -143,6 +143,11 @@ struct LocationDoc {
     nickname:     Option<String>,
     age:          Option<i32>,
     accuracy:     Option<String>,
+    #[serde(default)]
+    permanent:    bool,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
+    address:      Option<String>,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -319,6 +324,11 @@ async fn put_location(
     State(state): State<AppState>,
     Json(body): Json<PutLocationBody>,
 ) -> impl IntoResponse {
+    // Venue location is static — set by admin conversion, never by GPS push.
+    if claims.account_type.as_deref() == Some("venue") {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Venue location is fixed by admin." }))).into_response();
+    }
+
     let (Some(lat), Some(lon)) = (body.lat, body.lon) else {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Valid lat and lon required." }))).into_response();
     };
@@ -388,6 +398,10 @@ async fn delete_location(
     AuthToken(claims): AuthToken,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
+    // Venue permanent location docs are managed by admin — never deleted on logout.
+    if claims.account_type.as_deref() == Some("venue") {
+        return Json(json!({ "ok": true, "skipped": true })).into_response();
+    }
     match state.db
         .collection::<Document>("locations")
         .delete_one(doc! { "userId": &claims.sub })
@@ -426,7 +440,10 @@ async fn get_nearby(
         let cutoff = BsonDateTime::from_millis(now_ms() - LOCATION_TTL.as_millis() as i64);
         match state.db
             .collection::<LocationDoc>("locations")
-            .find(doc! { "updatedAt": { "$gt": cutoff } })
+            .find(doc! { "$or": [
+                { "updatedAt": { "$gt": cutoff } },
+                { "permanent": true },
+            ]})
             .await
         {
             Ok(cursor) => match cursor.try_collect::<Vec<_>>().await {
@@ -473,6 +490,8 @@ async fn get_nearby(
                     "age":          u.age,
                     "accuracy":     u.accuracy.as_deref().unwrap_or("gps"),
                     "distanceM":    dist.round() as i64,
+                    "accountType":  u.account_type.as_deref().unwrap_or("user"),
+                    "address":      u.address.as_deref(),
                 }))
             } else {
                 None
@@ -507,7 +526,10 @@ async fn post_online_batch(
     let cutoff = BsonDateTime::from_millis(now_ms() - LOCATION_TTL.as_millis() as i64);
     match state.db
         .collection::<Document>("locations")
-        .find(doc! { "userId": { "$in": &body.user_ids }, "updatedAt": { "$gt": cutoff } })
+        .find(doc! { "userId": { "$in": &body.user_ids }, "$or": [
+            { "updatedAt": { "$gt": cutoff } },
+            { "permanent": true },
+        ]})
         .projection(doc! { "userId": 1 })
         .await
     {

@@ -231,6 +231,13 @@ const Api = {
     });
   },
 
+  adminSetAccountType(userId, venueData) {
+    return apiFetch(`/admin/users/${encodeURIComponent(userId)}/account-type`, {
+      method: 'PATCH',
+      body: JSON.stringify(venueData),
+    });
+  },
+
   adminSetRole(userId, role) {
     return apiFetch(`/admin/users/${encodeURIComponent(userId)}/role`, {
       method: 'PATCH',

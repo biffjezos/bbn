@@ -167,6 +167,8 @@ pub struct UserClaims {
     pub nickname: Option<String>,
     pub age:      Option<u32>,
     pub sex:      Option<String>,
+    #[serde(rename = "accountType")]
+    pub account_type: Option<String>, // "user" | "venue"
 }
 
 /// Decode and validate (signature + expiry) a user/guest JWT.
@@ -198,6 +200,8 @@ struct IssuedUserClaims {
     role:     String,
     tier:     String,
     tv:       u32,
+    #[serde(rename = "accountType")]
+    account_type: String,
     exp:      u64,
     iat:      u64,
 }
@@ -219,14 +223,15 @@ fn now_unix() -> u64 {
 }
 
 pub struct UserTokenParams<'a> {
-    pub sub:      &'a str,
-    pub email:    &'a str,
-    pub nickname: &'a str,
-    pub sex:      &'a str,
-    pub age:      Option<u32>,
-    pub role:     &'a str,
-    pub tier:     &'a str,
-    pub tv:       u32,
+    pub sub:          &'a str,
+    pub email:        &'a str,
+    pub nickname:     &'a str,
+    pub sex:          &'a str,
+    pub age:          Option<u32>,
+    pub role:         &'a str,
+    pub tier:         &'a str,
+    pub tv:           u32,
+    pub account_type: &'a str, // "user" | "venue"
 }
 
 /// Sign a user JWT. `role` is typically `"user"` or `"admin"`.
@@ -238,16 +243,17 @@ pub fn issue_user_token(
     encode(
         &Header::new(Algorithm::HS256),
         &IssuedUserClaims {
-            sub:      p.sub.to_string(),
-            email:    p.email.to_string(),
-            nickname: p.nickname.to_string(),
-            sex:      p.sex.to_string(),
-            age:      p.age,
-            role:     p.role.to_string(),
-            tier:     p.tier.to_string(),
-            tv:       p.tv,
-            exp:      now + USER_TOKEN_EXPIRY_SECS,
-            iat:      now,
+            sub:          p.sub.to_string(),
+            email:        p.email.to_string(),
+            nickname:     p.nickname.to_string(),
+            sex:          p.sex.to_string(),
+            age:          p.age,
+            role:         p.role.to_string(),
+            tier:         p.tier.to_string(),
+            tv:           p.tv,
+            account_type: p.account_type.to_string(),
+            exp:          now + USER_TOKEN_EXPIRY_SECS,
+            iat:          now,
         },
         &EncodingKey::from_secret(secret.as_bytes()),
     )

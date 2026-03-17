@@ -245,6 +245,7 @@ async fn auth_register(
             "sex":          &sex,
             "tier":         "regular",
             "role":         "user",
+            "accountType":  "user",
             "tokenVersion": 0_i32,
             "createdAt":    DateTime::now(),
         })
@@ -278,14 +279,15 @@ async fn auth_register(
 
     // ── Issue token ───────────────────────────────────────────────────────────
     let token = match issue_user_token(UserTokenParams {
-        sub:      &inserted_id,
-        email:    &email,
-        nickname: &nickname,
-        sex:      &sex,
-        age:      Some(age),
-        role:     "user",
-        tier:     "regular",
-        tv:       0,
+        sub:          &inserted_id,
+        email:        &email,
+        nickname:     &nickname,
+        sex:          &sex,
+        age:          Some(age),
+        role:         "user",
+        tier:         "regular",
+        tv:           0,
+        account_type: "user",
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/register] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
@@ -319,10 +321,16 @@ struct UserDoc {
     age:           Option<i32>,
     tier:          Option<String>,
     role:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
     #[serde(rename = "passwordHash")]
     password_hash: String,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
+}
+
+fn sanitize_account_type(v: Option<&str>) -> &str {
+    match v { Some("venue") => "venue", _ => "user" }
 }
 
 async fn auth_login(
@@ -358,10 +366,11 @@ async fn auth_login(
         return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid credentials." }))).into_response();
     }
 
-    // ── Sanitize tier and role from DB ────────────────────────────────────────
-    let tier = sanitize_tier(user.tier.as_deref()).to_string();
-    let role = sanitize_role(user.role.as_deref()).to_string();
-    let tv   = user.token_version.unwrap_or(0).max(0) as u32;
+    // ── Sanitize tier, role and accountType from DB ───────────────────────────
+    let tier         = sanitize_tier(user.tier.as_deref()).to_string();
+    let role         = sanitize_role(user.role.as_deref()).to_string();
+    let account_type = sanitize_account_type(user.account_type.as_deref()).to_string();
+    let tv           = user.token_version.unwrap_or(0).max(0) as u32;
 
     // ── Cleanup guest session (best-effort) ───────────────────────────────────
     if let Some(ref guest_id) = body.guest_id {
@@ -377,14 +386,15 @@ async fn auth_login(
 
     // ── Issue token ───────────────────────────────────────────────────────────
     let token = match issue_user_token(UserTokenParams {
-        sub:      &user.id.to_hex(),
-        email:    &user.email,
-        nickname: &user.nickname,
-        sex:      &user.sex,
-        age:      user.age.map(|a| a.max(0) as u32),
-        role:     &role,
-        tier:     &tier,
+        sub:          &user.id.to_hex(),
+        email:        &user.email,
+        nickname:     &user.nickname,
+        sex:          &user.sex,
+        age:          user.age.map(|a| a.max(0) as u32),
+        role:         &role,
+        tier:         &tier,
         tv,
+        account_type: &account_type,
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/login] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }

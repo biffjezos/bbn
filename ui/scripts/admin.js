@@ -144,27 +144,43 @@ async function runUserSearch() {
         }).catch(function () {});
       });
     });
+    out.querySelectorAll('[data-convert-venue]').forEach(function (btn) {
+      btn.addEventListener('click', function () { showVenueConvertForm(btn.dataset.convertVenue); });
+    });
   } catch (err) {
     out.innerHTML = '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
   }
 }
 
 function renderUserCard(u) {
+  var isVenue = u.accountType === 'venue';
   var dot = u.online
     ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00e5a0;margin-right:6px;vertical-align:middle"></span>'
     : '';
   var adminBadge = u.role === 'admin'
     ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem">admin</span>'
     : '';
+  var venueBadge = isVenue
+    ? '<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem"><i class="bi bi-building me-1"></i>venue</span>'
+    : '';
+  var metaRow = isVenue
+    ? '<div class="col-12 col-sm-6 col-md-4"><div class="small text-muted-bb mb-1">Venue Name</div><div>' + escHtml(u.venueName || '—') + '</div></div>'
+      + '<div class="col-12 col-sm-6 col-md-4"><div class="small text-muted-bb mb-1">Address</div><div>' + escHtml(u.address || '—') + '</div></div>'
+    : '<div class="col-6 col-md-2"><div class="small text-muted-bb mb-1">Age / Sex</div><div>' + escHtml(u.age != null ? String(u.age) : '—') + ' / ' + escHtml(u.sex || '—') + '</div></div>';
+  var convertBtn = isVenue ? '' : [
+    '<button class="btn btn-bbm-ghost btn-sm" data-convert-venue="' + escHtml(u.userId) + '">',
+    '  <i class="bi bi-building me-1"></i>Convert to Venue',
+    '</button>',
+  ].join('');
   return [
     '<div class="bbm-section mb-3" id="ucard-' + escHtml(u.userId) + '">',
     '  <div class="d-flex align-items-center justify-content-between gap-3"',
     '       style="cursor:pointer" data-toggle-card="' + escHtml(u.userId) + '">',
     '    <div class="text-truncate">',
-    '      ' + dot + '<strong>' + escHtml(u.nickname) + '</strong>',
+    '      ' + dot + '<strong>' + escHtml(isVenue ? (u.venueName || u.nickname) : u.nickname) + '</strong>',
     '      <span class="text-muted-bb ms-2" style="font-size:0.78rem">' + escHtml(u.email) + '</span>',
     '      <span class="badge bg-' + escHtml(_tierCls(u.tier)) + ' ms-2" style="font-size:0.65rem">' + escHtml(u.tier) + '</span>',
-    '      ' + adminBadge,
+    '      ' + adminBadge + venueBadge,
     '    </div>',
     '    <i class="bi bi-chevron-down text-muted flex-shrink-0"></i>',
     '  </div>',
@@ -180,10 +196,7 @@ function renderUserCard(u) {
     '          </button>',
     '        </div>',
     '      </div>',
-    '      <div class="col-6 col-md-2">',
-    '        <div class="small text-muted-bb mb-1">Age / Sex</div>',
-    '        <div>' + escHtml(u.age != null ? String(u.age) : '—') + ' / ' + escHtml(u.sex || '—') + '</div>',
-    '      </div>',
+    metaRow,
     '      <div class="col-6 col-md-2">',
     '        <div class="small text-muted-bb mb-1">Token version</div>',
     '        <div>' + escHtml(String(u.tokenVersion)) + '</div>',
@@ -200,12 +213,14 @@ function renderUserCard(u) {
     '        </select>',
     '      </div>',
     '    </div>',
-    '    <div class="d-flex align-items-center gap-3">',
+    '    <div class="d-flex align-items-center gap-3 flex-wrap">',
     '      <button class="btn btn-bbm-primary btn-sm" data-save-user="' + escHtml(u.userId) + '">',
     '        <i class="bi bi-check2 me-1"></i>Save Changes',
     '      </button>',
+    '      ' + convertBtn,
     '      <span id="save-status-' + escHtml(u.userId) + '" style="font-size:0.8rem"></span>',
     '    </div>',
+    '    <div id="venue-form-' + escHtml(u.userId) + '" class="d-none mt-3 pt-3" style="border-top:1px solid var(--bbm-border)"></div>',
     '  </div>',
     '</div>',
   ].join('');
@@ -251,6 +266,98 @@ async function saveUserChanges(userId) {
     statusEl.textContent = 'Saved. User token invalidated — they will re-login on next request.';
   } catch (err) {
     statusEl.className = 'text-danger';
+    statusEl.textContent = err.message;
+  }
+}
+
+function showVenueConvertForm(userId) {
+  var wrap = document.getElementById('venue-form-' + userId);
+  if (!wrap) return;
+  if (!wrap.classList.contains('d-none')) { wrap.classList.add('d-none'); wrap.innerHTML = ''; return; }
+  wrap.innerHTML = [
+    '<div class="row g-2">',
+    '  <div class="col-12 col-sm-6">',
+    '    <label class="small text-muted-bb mb-1" for="vf-name-' + escHtml(userId) + '">Venue Name</label>',
+    '    <input id="vf-name-' + escHtml(userId) + '" class="form-control form-control-sm bbm-input" maxlength="128" placeholder="e.g. Club Ozone">',
+    '  </div>',
+    '  <div class="col-12 col-sm-6">',
+    '    <label class="small text-muted-bb mb-1" for="vf-addr-' + escHtml(userId) + '">Address</label>',
+    '    <input id="vf-addr-' + escHtml(userId) + '" class="form-control form-control-sm bbm-input" maxlength="256" placeholder="123 Main St, City">',
+    '  </div>',
+    '  <div class="col-6 col-sm-3">',
+    '    <label class="small text-muted-bb mb-1" for="vf-lat-' + escHtml(userId) + '">Latitude</label>',
+    '    <input id="vf-lat-' + escHtml(userId) + '" class="form-control form-control-sm bbm-input" type="number" step="any" placeholder="51.5074">',
+    '  </div>',
+    '  <div class="col-6 col-sm-3">',
+    '    <label class="small text-muted-bb mb-1" for="vf-lon-' + escHtml(userId) + '">Longitude</label>',
+    '    <input id="vf-lon-' + escHtml(userId) + '" class="form-control form-control-sm bbm-input" type="number" step="any" placeholder="-0.1278">',
+    '  </div>',
+    '  <div class="col-12 d-flex align-items-center gap-3 mt-1">',
+    '    <button class="btn btn-bbm-primary btn-sm" id="vf-submit-' + escHtml(userId) + '">',
+    '      <i class="bi bi-check2 me-1"></i>Confirm Conversion',
+    '    </button>',
+    '    <span id="vf-status-' + escHtml(userId) + '" class="small"></span>',
+    '  </div>',
+    '</div>',
+  ].join('');
+  wrap.classList.remove('d-none');
+  wrap.querySelector('#vf-submit-' + userId).addEventListener('click', function () {
+    submitVenueConvert(userId);
+  });
+}
+
+async function submitVenueConvert(userId) {
+  var nameEl   = document.getElementById('vf-name-' + userId);
+  var addrEl   = document.getElementById('vf-addr-' + userId);
+  var latEl    = document.getElementById('vf-lat-'  + userId);
+  var lonEl    = document.getElementById('vf-lon-'  + userId);
+  var statusEl = document.getElementById('vf-status-' + userId);
+  if (!nameEl || !addrEl || !latEl || !lonEl || !statusEl) return;
+
+  var venueName = nameEl.value.trim();
+  var address   = addrEl.value.trim();
+  var fixedLat  = parseFloat(latEl.value);
+  var fixedLon  = parseFloat(lonEl.value);
+
+  if (!venueName) { statusEl.className = 'text-danger small'; statusEl.textContent = 'Venue name required.'; return; }
+  if (!address)   { statusEl.className = 'text-danger small'; statusEl.textContent = 'Address required.'; return; }
+  if (isNaN(fixedLat) || isNaN(fixedLon)) { statusEl.className = 'text-danger small'; statusEl.textContent = 'Valid lat/lon required.'; return; }
+
+  statusEl.className = 'text-muted-bb small';
+  statusEl.textContent = 'Converting…';
+
+  try {
+    await window.Api.adminSetAccountType(userId, { venueName: venueName, address: address, fixedLat: fixedLat, fixedLon: fixedLon });
+    statusEl.className = 'text-success small';
+    statusEl.textContent = 'Converted. Token invalidated — user will re-login on next request.';
+    // Refresh the card
+    var res  = await window.Api.adminSearchUsers({ q: userId, by: 'id' });
+    var user = res.users && res.users[0];
+    if (user) {
+      var card = document.getElementById('ucard-' + userId);
+      if (card) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = renderUserCard(user);
+        var newCard = tmp.firstElementChild;
+        card.replaceWith(newCard);
+        newCard.querySelectorAll('[data-toggle-card]').forEach(function (el) {
+          el.addEventListener('click', function () { toggleUserCard(el.dataset.toggleCard); });
+        });
+        newCard.querySelectorAll('[data-save-user]').forEach(function (btn) {
+          btn.addEventListener('click', function () { saveUserChanges(btn.dataset.saveUser); });
+        });
+        newCard.querySelectorAll('[data-copy-id]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            navigator.clipboard.writeText(btn.dataset.copyId).then(function () {
+              var icon = btn.querySelector('i');
+              if (icon) { icon.className = 'bi bi-clipboard-check'; setTimeout(function () { icon.className = 'bi bi-clipboard'; }, 2000); }
+            }).catch(function () {});
+          });
+        });
+      }
+    }
+  } catch (err) {
+    statusEl.className = 'text-danger small';
     statusEl.textContent = err.message;
   }
 }

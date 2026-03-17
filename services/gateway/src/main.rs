@@ -506,6 +506,11 @@ async fn admin_patch_role(State(s): State<AppState>, headers: HeaderMap, axum::e
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::PATCH, format!("{}/admin/users/{}/role", s.user_url, id), auth_hdr(&headers), Some(body)).await
 }
+async fn admin_patch_account_type(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
+    proxy(&s, Method::PATCH, format!("{}/admin/users/{}/account-type", s.user_url, id), auth_hdr(&headers), Some(body)).await
+}
 async fn admin_tiers_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
@@ -1003,8 +1008,9 @@ async fn main() {
         .route("/api/notifications/{id}", delete(notif_delete))
         // Admin
         .route("/api/admin/users",              get(admin_users))
-        .route("/api/admin/users/{id}/tier",    patch(admin_patch_tier))
-        .route("/api/admin/users/{id}/role",    patch(admin_patch_role))
+        .route("/api/admin/users/{id}/tier",         patch(admin_patch_tier))
+        .route("/api/admin/users/{id}/role",         patch(admin_patch_role))
+        .route("/api/admin/users/{id}/account-type", patch(admin_patch_account_type))
         .route("/api/admin/tiers",              get(admin_tiers_list).post(admin_tiers_post))
         .route("/api/admin/tiers/{name}",       put(admin_tiers_put).delete(admin_tiers_delete))
         // WebSocket
