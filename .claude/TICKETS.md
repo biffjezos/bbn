@@ -703,7 +703,21 @@ Admin actions currently have no tiered approval model. Any authenticated admin
 can perform any admin action — including modifying their own account — without
 a second check. As the app grows, some actions are sensitive enough to require
 oversight (e.g. reading a user's encrypted block note) while others are routine
-and can remain self-approved (e.g. changing a user's tier).
+and can remain self-approved.
+
+### Confirmed design decisions (2026-03-17)
+
+| Decision | Resolved |
+|---|---|
+| Approval rules stored in DB, not code | ✅ Yes (DB-stored matrix, configurable via UI) |
+| Auto-execute on approval | ✅ Yes (requesting admin sees "approved & executed", not "re-trigger") |
+| No hardcoded roles | ✅ Yes (all roles are DB documents — depends on T-09) |
+| Multiple roles per account | ✅ Yes (`roles: ["admin", "legal"]` on user document) |
+| Per-action approval config | ✅ Yes (each action type: self-approval OR approval-by-{ROLE}) |
+| First approver via env var bootstrap | ✅ Yes (same pattern as `ADMIN_BOOTSTRAP_USER_ID`) |
+| `legal` is an example, not a hardcoded role | ✅ Yes |
+
+---
 
 ### Existing foundation
 
@@ -715,83 +729,201 @@ pattern for block note decryption:
   "requestedBy":  "admin_userId",
   "resourceType": "block_note",
   "resourceId":   "block_id",
-  "approvedBy":   "legal_userId",
+  "approvedBy":   null,
+  "approvedAt":   null,
   "expiresAt":    "...",
-  "usedAt":       null
+  "status":       "pending",
+  "actionPayload": { ... },
+  "executedAt":   null,
+  "rejectedAt":   null,
+  "rejectComment": null
 }
 ```
 
-T-13 generalises this pattern to cover all admin actions with a defined
-approval matrix. No new infrastructure is required — only new `resourceType`
-values and an approval-check middleware.
+T-13 generalises this pattern to cover all admin actions with a configurable,
+DB-stored approval matrix. `legal` in T-05 is illustrative — the actual approver
+role for each action type is determined by the matrix, which the owner configures
+via the admin UI.
 
-### Action approval matrix
+---
 
-| Action | Approval required | Notes |
+### Full request lifecycle (auto-execute model)
+
+```
+1. Admin triggers a gated action (e.g. role change on another user)
+   → gateway detects action requires approval (reads action_gates collection)
+   → access_request created: { resourceType, resourceId, requestedBy,
+       actionPayload (full request: method + endpoint + body), status: pending }
+   → 202 returned to admin — UI shows "Awaiting approval"
+
+2. Approver logs into admin UI
+   → Approval inbox lists pending requests visible to their role(s)
+   → Approver clicks Approve (or Reject + optional comment)
+   → access_request: { approvedBy, approvedAt, status: approved }
+   → System immediately executes the stored actionPayload internally
+   → access_request: { executedAt, status: executed }
+
+3. Requesting admin checks status (poll or notification)
+   → Sees "Approved and executed" / "Rejected: {comment}"
+   → No manual re-trigger required
+```
+
+**Technical implication of auto-execute:** The `access_requests` document must
+store the full intended action (`actionPayload`), not just metadata. On approval,
+the authority service (T-08) or gateway re-dispatches the stored request
+internally, authenticated as the original requester. The downstream service sees
+a normal request — no special execution path needed.
+
+---
+
+### Collection: `action_gates` (new — the configurable matrix)
+
+Each document defines the approval rule for one action type:
+
+```json
+{
+  "_id": "...",
+  "resourceType": "role_change",
+  "label": "Change a user's role",
+  "approvalMode": "role",
+  "approverRole": "owner",
+  "selfApprovalAllowed": false,
+  "expiryHours": 48,
+  "updatedAt": "...",
+  "updatedBy": "userId"
+}
+```
+
+`approvalMode` values:
+- `"self"` — no second approval required; action executes immediately (i.e., the gate is a no-op, but still logged)
+- `"role"` — approval required from any account holding `approverRole`
+
+Changes to `action_gates` are themselves a gated action (see open questions below).
+
+---
+
+### Collection: `access_requests` (extended from T-05)
+
+```json
+{
+  "_id": "...",
+  "resourceType": "role_change",
+  "resourceId":   "target_userId",
+  "requestedBy":  "admin_userId",
+  "requestedAt":  "...",
+  "actionPayload": {
+    "method": "PATCH",
+    "endpoint": "/admin/users/:id/role",
+    "body": { "role": "admin" }
+  },
+  "status":        "pending | approved | executed | rejected | expired",
+  "approvedBy":    null,
+  "approvedAt":    null,
+  "executedAt":    null,
+  "rejectedBy":    null,
+  "rejectedAt":    null,
+  "rejectComment": null,
+  "expiresAt":     "..."
+}
+```
+
+---
+
+### Role model (depends on T-09)
+
+Roles are DB documents. Any role can be assigned as an approver for any action
+type. An account may hold multiple roles simultaneously (e.g., both `admin` and
+`owner`). The approval inbox in the UI shows requests approvable by any of the
+logged-in user's roles.
+
+**The `owner` role** is the role with authority to:
+- Create, edit, and delete other roles (via T-09)
+- Configure the `action_gates` matrix (which actions need which approver)
+- Approve any action that no other role can yet approve
+
+The owner role is not special in code — it is just a DB role whose name is
+configured to be the approver for the most sensitive action types.
+
+**Bootstrap:** The first account elevated to the `owner` role is promoted via an
+env var on auth-service/gateway boot:
+
+```
+OWNER_BOOTSTRAP_USER_ID=<userId>
+```
+
+Same pattern as `ADMIN_BOOTSTRAP_USER_ID`. Safe to leave set (no-op if an owner
+already exists). Should be removed after first use. Only one `owner`-role
+bootstrap is needed — subsequent assignments go through the admin UI, gated by
+the `owner` role itself.
+
+---
+
+### Action types (examples — not exhaustive, owner configures the matrix)
+
+| resourceType | Default approvalMode | Default approverRole | Notes |
+|---|---|---|---|
+| `role_change` | `role` | `owner` | Privilege escalation |
+| `self_modification` | `role` | `owner` | Closes AUDIT.md 1.4 |
+| `account_delete` | `role` | `admin` | Destructive |
+| `block_note` | `role` | `legal` (example role) | Sensitive user data (T-05b) |
+| `tier_change` | `self` | — | Routine admin task |
+| `action_gate_edit` | `role` | `owner` | Editing the matrix itself |
+
+The "default" values above are seeded at first boot. Owner can change them at
+any time via the admin UI. A newly registered action type (e.g. from a future
+feature) must be added to `action_gates` before the gate middleware will enforce
+it — unknown action types are rejected by the gateway to prevent bypass by
+omission.
+
+---
+
+### Admin UI additions (within T-01 scope)
+
+- **Approval inbox** — visible to any role listed as approver in `action_gates`; shows pending requests with requestedBy, action type, resource, timestamp
+- **Approve / Reject** — one click, optional reject comment
+- **Audit log** — all `access_requests`, read-only, filterable by status/type/user
+- **Action Gates config** — `owner`-role only; table of `action_gates` documents; toggle self/role, assign approver role per action type
+
+---
+
+### Open design questions
+
+| # | Question | Options / Notes |
 |---|---|---|
-| Change a user's tier | None (self-approved) | Routine admin task |
-| Change a user's role | Second admin or owner | Privilege escalation |
-| Change **own** tier or role | Second admin | Closes AUDIT.md 1.4 |
-| Read encrypted block note (T-05b) | `legal`-role approval | Sensitive user data |
-| Delete a user account | Second admin | Destructive, irreversible |
-| Access `access_requests` log | None (read-only audit) | Transparency |
+| OQ-1 | What is the expiry behaviour? | (a) expired request is re-requestable; (b) original admin is notified and must re-request; (c) auto-re-request on next login |
+| OQ-2 | Can approval be revoked after grant but before execution? | Moot under auto-execute (execution is immediate on approval). But what if execution fails? |
+| OQ-3 | Must ALL members of a role approve, or any one? | Currently: any one member suffices. Require unanimous? For most cases, any-one is correct. |
+| OQ-4 | Can an action require approval from MULTIPLE roles? | Not in current schema. Would need `approverRoles: []` and a quorum field. Defer unless needed. |
+| OQ-5 | What if the `actionPayload` becomes stale? | e.g. target user is deleted before approval executes. Execution must validate preconditions before applying; return error status if invalid. |
+| OQ-6 | How are new action types registered? | Unknown types should be blocked by default (fail-closed). The `action_gates` collection is the authoritative registry. Adding a new feature = adding a row. |
+| OQ-7 | How does the `owner` bootstrap interact with `ADMIN_BOOTSTRAP_USER_ID`? | Both can be set simultaneously (one account gets both roles). Or: owner bootstrap implies admin. Needs decision. |
+| OQ-8 | Who approves edits to `action_gates` itself? | Seeded as `role: owner`. But what if there is no owner yet? During initial bootstrap, the first owner can edit the matrix freely. After that, the gate applies. |
 
-The matrix above is a starting point. Owner may expand or collapse it before
-implementation begins.
-
-### Architecture
-
-**`access_requests` collection** (already designed in T-05):
-
-A requesting admin creates an `access_request` document with `resourceType` and
-`resourceId`. An approver (role determined by `resourceType`) marks it approved.
-The sensitive endpoint checks for a valid, unused, non-expired approval before
-proceeding, then marks `usedAt`.
-
-**New `resourceType` values for this ticket:**
-
-- `role_change` — target user ID is `resourceId`
-- `self_modification` — the requesting admin's own user ID (closes AUDIT.md 1.4)
-- `account_delete` — target user ID is `resourceId`
-
-`block_note` (T-05b) is already defined in T-05 and slots in here automatically.
-
-**Approval roles per `resourceType`:**
-
-Stored as a small config in the `access_requests` logic or in the `roles`
-collection (T-09). For now, a static map is fine:
-
-```
-role_change       → approver role: admin   (any other admin)
-self_modification → approver role: admin   (any other admin)
-account_delete    → approver role: admin   (any other admin)
-block_note        → approver role: legal
-```
-
-**Admin UI additions (within T-01 scope):**
-
-- Pending approvals inbox for each role that can approve
-- One-click approve / reject with optional comment
-- Audit log view (all `access_requests`, read-only)
+---
 
 ### Relationship to other tickets
 
 | Ticket | Relationship |
 |---|---|
-| AUDIT.md 1.4 | Superseded. Self-modification check becomes a `self_modification` gate instead of a hard 403. |
+| AUDIT.md 1.4 | Superseded. Self-modification becomes a `self_modification` gate, not a hard 403. |
 | T-05b | Blocked on T-13 for the approval gate; also blocked on OPAQUE for key derivation. |
-| T-08 | T-13 fits naturally inside the authority service; can be implemented in the gateway enforcement layer. |
-| T-09 | Approval role per `resourceType` can be driven by the roles collection once T-09 exists. |
+| T-08 | Auto-execute dispatch naturally lives in the authority service / gateway enforcement layer. |
+| T-09 | T-13 depends on T-09 for DB-stored roles. `action_gates.approverRole` references a role document by name. |
 
 ### Prerequisites
 
-- T-01 ✅ (admin UI foundation exists)
-- T-05 ✅ (`access_requests` collection already designed)
-- No new infrastructure required
+- T-01 ✅ (admin UI foundation)
+- T-05 ✅ (`access_requests` collection and pattern)
+- **T-08** — auto-execute dispatch belongs in the authority service / gateway
+- **T-09** — DB-stored roles required for `approverRole` references and multi-role accounts
 
 ### Owner's Comments
 
-- 2026-03-17: Raised from AUDIT 1.4 discussion. The goal is a tiered approval
-  model: routine actions self-approved, sensitive actions require a second
-  instance (e.g. legal role). The `access_requests` pattern from T-05 is the
-  right foundation — generalise it rather than adding one-off guards.
+- 2026-03-17: Raised from AUDIT 1.4 discussion. Goal: tiered approval model;
+  routine actions self-approved, sensitive actions require a second account.
+  `access_requests` pattern from T-05 is the right foundation.
+- 2026-03-17: Confirmed DB-stored rules (not static config). Auto-execute on
+  approval (no re-trigger). No hardcoded roles. Multiple roles per account.
+  `legal` is an example role name, not a system constant. First `owner`-role
+  account bootstrapped via env var, same pattern as admin bootstrap.
+  All open design questions captured above — answer before implementation begins.
