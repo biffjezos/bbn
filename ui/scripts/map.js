@@ -160,10 +160,9 @@
       }).addTo(map);
     }
 
-    // Translucent view-radius circle — not drawn for venue accounts (fixed position,
-    // huge radii distort badly in Mercator projection at normal zoom levels).
-    if (radius > 0 && !isVenue) {
-      const clr = sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
+    // Translucent view-radius circle
+    if (radius > 0) {
+      const clr = isVenue ? 'rgba(255,255,255,0.45)' : sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
       if (selfCircle) {
         selfCircle.setLatLng([lat, lng]);
         selfCircle.setRadius(radius);
