@@ -32,7 +32,7 @@
   var WARM_TTL = 5 * 60 * 1000; // 5 min — re-warm if tab is idle for a long time
   var last = parseInt(sessionStorage.getItem(WARM_KEY) || '0', 10);
   if (Date.now() - last < WARM_TTL) return;
-  fetch((window.BOOMBOOM_API_URL || '') + '/health')
+  fetch((window.BOOMBOOM_API_URL) + '/health')
     .then(function (r) {
       console.log('[warm-up] ' + r.status + (r.status === 503 ? ' (cold-start)' : ' — ready'));
       sessionStorage.setItem(WARM_KEY, Date.now());
@@ -52,7 +52,7 @@
   function $(id) { return document.getElementById(id); }
 
   // ── Desktop nav links ─────────────────────────────────────
-  var BASE = (window.BOOMBOOM_BASE || '');
+  var BASE = (window.BOOMBOOM_BASE);
   function getRole() {
     try {
       var t = Auth.getToken();
@@ -387,7 +387,7 @@
   var _locWsTimer = null;
 
   function locWsUrl() {
-    var api  = window.BOOMBOOM_API_URL || '';
+    var api  = window.BOOMBOOM_API_URL;
     var base = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
     return base + '/ws/location';
   }
@@ -837,7 +837,7 @@
       return '<div class="alert alert-info alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0" role="alert" data-notif-id="' + esc(n.id) + '" style="border-left:none;border-right:none;border-top:none">' +
         '<i class="bi bi-star-fill flex-shrink-0"></i>' +
         '<span><strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites. ' +
-        '<a href="' + esc((window.BOOMBOOM_BASE || '') + '/favourites/') + '" class="alert-link">Add them back</a> to start chatting!</span>' +
+        '<a href="' + esc((window.BOOMBOOM_BASE) + '/favourites/') + '" class="alert-link">Add them back</a> to start chatting!</span>' +
         '<button type="button" class="btn-close ms-auto flex-shrink-0" aria-label="Dismiss"></button>' +
         '</div>';
     }).join('');
