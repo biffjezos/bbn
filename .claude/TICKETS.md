@@ -11,23 +11,14 @@ Completed tickets live in `TICKETS_DONE.md`.
 
 Before any marketing or scaling push, the order of priority is:
 
-1. ~~**T-05**~~ — ✅ Done (2026-03-16)
-2. ~~**T-03**~~ — ✅ Done (2026-03-16)
-3. ~~**T-04a**~~ — ✅ Done (2026-03-16)
-4. ~~**T-04b**~~ — ✅ Done (2026-03-16)
-5. ~~**T-01**~~ — ✅ Done (2026-03-16)
-6. ~~**T-10**~~ — ✅ Done (2026-03-17)
-7. ~~**T-11**~~ — ✅ Done (2026-03-17)
-8. ~~**T-12**~~ — ✅ Done (2026-03-17)
-9. ~~**T-04c**~~ — ✅ Done (2026-03-17)
-10. **AUDIT 1.2** — Rate limit at messages-service level (security fix, small)
-11. **T-07** — Settings page: blocks list (partial scope, self-contained, real user value)
-12. **T-13** — Admin action approval gates (formalises access_requests pattern; prerequisite for T-05b and AUDIT 1.4)
-13. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service
-14. **T-09** — Role CRUD with permissions UI (needs T-08)
-15. **T-05b** — Encrypted block note field (needs T-13 for approval gate + OPAQUE for key derivation)
-16. **T-02** — Analytics (low-risk, can slot in any time)
-17. **T-06** — Venue accounts (owner: postpone)
+1. **AUDIT 1.2** — Rate limit at messages-service level (security fix, small)
+2. **T-07** — Settings page: blocks list (partial scope, self-contained, real user value)
+3. **T-13** — Admin action approval gates (formalises access_requests pattern; prerequisite for T-05b and AUDIT 1.4)
+4. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service
+5. **T-09** — Role CRUD with permissions UI (needs T-08)
+6. **T-05b** — Encrypted block note field (needs T-13 for approval gate + OPAQUE for key derivation)
+7. **T-02** — Analytics (low-risk, can slot in any time)
+8. **T-06** — Venue accounts
 
 ### Architectural Decision (2026-03-16)
 
@@ -99,30 +90,113 @@ own key) or by an admin with an active, approved `access_request` (T-13 gate).
 
 ## T-06 — Venue Accounts
 
-**Status:** Not started. Requires T-01 (admin UI) and T-03 (DB tiers). Postponed by owner.
+**Status:** Not started. T-01 ✅ and T-03 ✅ prerequisites met. Feasible now.
 
-### Requirements
+### Conversion workflow (confirmed 2026-03-17)
 
-- Account type `venue`. Cannot be self-registered — admin converts a regular
-  account to `venue` type via the admin UI.
-- Venue profile fields replace `sex` and `age` with:
-  - `venueName` (string)
-  - `description` (text)
-  - `address` (string, display only)
-  - `fixedLat`, `fixedLon` (stored location — does not move with GPS)
-- On map: venue appears as a house icon (`bi-house-fill` or similar), always
-  visible to users within range (uses the venue's `fixedLat/fixedLon`).
-- Map pin modal for venues shows name + description + link to venue profile page.
-- Messaging: standard two-sided favourites required.
-- Venues can be blocked by regular users (T-05).
-- Admin flow: user registers normally → admin changes `accountType` to `venue`
-  in admin UI → admin fills venue-specific fields → token is re-issued.
-- Venue login: same email/password, same JWT flow. Frontend detects
-  `accountType: 'venue'` from the token and renders the venue profile view.
+```
+1. Venue owner registers a normal account (regular or premium tier) via the app.
+2. Venue owner contacts admin out-of-band (email or any channel) to request conversion.
+3. Admin opens admin UI → finds user → clicks "Convert to Venue".
+4. Admin fills in fixed venue fields: venueName, address, fixedLat, fixedLon,
+   public contact email (can differ from login email).
+5. Backend: $unset { age, sex } on the user document; $set { accountType: 'venue',
+   venueName, address, fixedLat, fixedLon, venueEmail }; $inc { tokenVersion: 1 }.
+   Preserved: email (login), passwordHash, publicKey, encryptedPrivateKey, createdAt.
+6. Backend writes (or upserts) a permanent location doc: { userId, lat: fixedLat,
+   lon: fixedLon, permanent: true, updatedAt: now }.
+7. Venue owner logs out and back in → receives new JWT with accountType: 'venue'.
+8. Frontend detects accountType === 'venue' and renders venue profile / edit form.
+9. Venue owner fills in owner-editable fields: description, openingHours,
+   specialOffers (free text), website URL. Saved via PUT /users/me.
+```
+
+### DB document additions
+
+**User document (venue):**
+```json
+{
+  "accountType": "venue",
+  "venueName":    "The Rusty Anchor",
+  "address":      "12 Harbour St",
+  "fixedLat":     51.5074,
+  "fixedLon":     -0.1278,
+  "venueEmail":   "info@rustyanchor.example",
+  "description":  "...",
+  "openingHours": "Mon–Sun 12:00–23:00",
+  "specialOffers":"Happy hour 17:00–19:00"
+}
+```
+`age` and `sex` are removed (`$unset`) on conversion.
+`email`, `passwordHash`, `publicKey`, `encryptedPrivateKey`, `createdAt` are untouched.
+
+**Location document (venue):**
+```json
+{ "userId": "...", "lat": 51.5074, "lon": -0.1278, "permanent": true, "updatedAt": "..." }
+```
+`permanent: true` means location-service never expires this entry from the nearby list.
+
+### What needs to change
+
+**`services/common/src/auth.rs`** (shared crate — ripples to all token issuers):
+- Add `accountType: &str` to `UserTokenParams` and `IssuedUserClaims` / `UserClaims`.
+- Default: `"user"` for all existing accounts.
+- auth-service: read from DB on login; set `"user"` on register.
+- users-service: pass through when re-issuing tokens.
+
+**`services/users-service/src/main.rs`**:
+- New `PATCH /admin/users/:id/account-type` endpoint (admin only): accepts venue fields, $unsets user fields, $sets venue fields, bumps tokenVersion, upserts permanent location doc.
+- `UserForToken` + `make_token`: include `accountType`.
+- `ProfileDoc`: include venue fields so `/users/:id/profile` returns them.
+- `PUT /users/me`: allow venue-editable fields (`description`, `openingHours`, `specialOffers`, `website`); block modification of fixed fields (`venueName`, `address`, `fixedLat`, `fixedLon`) by non-admin.
+- `GET /users/search`: exclude `accountType: 'venue'` from results (venues are found via map, not search).
+
+**`services/auth-service/src/main.rs`**:
+- Read `accountType` from DB and pass to `issue_user_token` on login and register.
+
+**`services/location-service/src/main.rs`**:
+- `GET /location/nearby`: include venues whose location doc has `permanent: true`
+  within range, regardless of `updatedAt`. Simple: add `{ permanent: true }` as a
+  second `$or` arm in the nearby query, bypassing the TTL check.
+- Venues do not push GPS; their location is static after conversion.
+
+**`services/gateway/src/main.rs`**:
+- Add proxy route for `PATCH /api/admin/users/:id/account-type`.
+
+**Frontend:**
+
+| File | Change |
+|---|---|
+| `ui/scripts/api.js` | `adminSetAccountType(userId, venueData)` |
+| `ui/scripts/admin.js` | "Convert to Venue" button in user row; form with fixed fields |
+| `ui/scripts/profile.js` | Branch on `jwt.accountType === 'venue'`; render venue view; editable section for owner-fillable fields |
+| `ui/scripts/app.js` | Map pin: `bi-house-fill` icon for venues; pin modal shows venueName + address + link to profile |
+| `ui/_layouts/default.html` or `profile.html` | Venue profile section (no age/sex; add venue fields) |
+
+### Open questions
+
+| # | Question |
+|---|---|
+| OQ-1 | Can venues message users first, or only reply? (Favourites model implies mutual — confirm.) |
+| OQ-2 | Should venues appear in the favourites search/list? (Probably yes — "follow a venue".) |
+| OQ-3 | Can a venue be converted back to a regular user account? (Admin: $set accountType: 'user', restore age/sex fields?) |
+| OQ-4 | Tier semantics for venues: does `regular` vs `premium` mean anything? Or is `venue` its own implicit tier? |
+| OQ-5 | `venueEmail` on the profile — displayed publicly? Or only to users who have messaged the venue? |
+
+### Complexity estimate
+
+Moderate. The `accountType` addition to `common/auth.rs` is the most careful
+change (touches all token-issuing paths). Everything else is additive. No new
+infrastructure or new services. Realistically 1–2 sessions.
+
+**Prerequisites:** T-01 ✅, T-03 ✅, T-04c ✅ (all Rust services in place).
 
 ### Owner's Comments
 
-- Not a high priority. Postponed until the rest is done. Remind me.
+- 2026-03-17: Workflow confirmed: normal registration → out-of-band email request
+  → admin converts. Fixed fields set by admin; variable fields (opening hours,
+  special offers, description) set by venue owner on first login.
+  Feasible to implement now — all prerequisites done.
 
 ---
 
