@@ -30,8 +30,8 @@
 
   // ── Helpers ──────────────────────────────────────────────────
 
-  function markerEmoji(sex) { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
-  function markerClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest'; }
+  function markerEmoji(sex, accountType) { if (accountType === 'venue') return '🏠'; return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
+  function markerClass(sex, accountType) { if (accountType === 'venue') return 'venue'; return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest'; }
 
   function escHtml(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -99,12 +99,12 @@
 
   // ── Marker icon ───────────────────────────────────────────────
 
-  function makeLeafIcon(sex, isSelf) {
-    const cls    = 'bbm-marker' + (isSelf ? ' self' : '') + ' ' + markerClass(sex);
+  function makeLeafIcon(sex, isSelf, accountType) {
+    const cls    = 'bbm-marker' + (isSelf ? ' self' : '') + ' ' + markerClass(sex, accountType);
     const size   = isSelf ? 46 : 38;
     const anchor = isSelf ? 23 : 19;
     return L.divIcon({
-      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}">${markerEmoji(sex)}</div>`,
+      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}">${markerEmoji(sex, accountType)}</div>`,
       className: '',
       iconSize:  [size, size],
       iconAnchor:[anchor, anchor],
@@ -184,7 +184,7 @@
         markers[u.userId].setLatLng([ulat, ulng]);
         return;
       }
-      const m = L.marker([ulat, ulng], { icon: makeLeafIcon(u.sex, false) }).addTo(map);
+      const m = L.marker([ulat, ulng], { icon: makeLeafIcon(u.sex, false, u.accountType) }).addTo(map);
       m.on('click', () => window.openPinModal?.(u));
       markers[u.userId] = m;
     });
