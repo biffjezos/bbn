@@ -7,7 +7,7 @@
 - Read `.claude/AUDIT.md` first. Do not start reading the entire codebase. Greet me, present the last audit, and ask me what to do.
 - Also check `.claude/TICKETS.md` for any pending tickets relevant to the current session.
 
-## The Two Persistent Files
+## The Three Persistent Files
 
 ### `.claude/AUDIT.md` — Claude's technical log
 Contains: security bugs, performance issues, architectural debt, deferred decisions, known risks.
@@ -18,6 +18,14 @@ Do not put feature requests or roadmap items here.
 Contains: planned features, postponed work, architectural proposals, implementation strategies.
 You maintain it. The project owner may also add items directly.
 Do not remove tickets unless the owner explicitly says to.
+When a ticket is completed, move it to `TICKETS_DONE.md` — do not delete it.
+
+### `.claude/TICKETS_DONE.md` — Completed ticket archive
+Contains: completed tickets with full implementation details.
+**Do not read on session start.** Read only when a completed ticket's
+implementation decisions are directly relevant to an active task (e.g. you need
+to understand how a prior feature was built before extending it). When in doubt,
+read the relevant section rather than the whole file.
 
 ## Things You Must Never Do
 

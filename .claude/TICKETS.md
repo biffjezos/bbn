@@ -3,6 +3,7 @@
 **This file is for Claude and the owner.** It contains planned features,
 postponed items, architectural decisions, and scaling strategies.
 Technical debt and security findings live in `AUDIT.md`.
+Completed tickets live in `TICKETS_DONE.md`.
 
 ---
 
@@ -12,13 +13,13 @@ Before any marketing or scaling push, the order of priority is:
 
 1. ~~**T-05**~~ — ✅ Done (2026-03-16)
 2. ~~**T-03**~~ — ✅ Done (2026-03-16)
-3. ~~**T-04a**~~ — ✅ Done (2026-03-16): Rust tiers-service live on Railway. Static fallback active; migration 004 still blocked on disk space (AUDIT.md 2.0).
-4. ~~**T-04b**~~ — ✅ Done (2026-03-16): Rust auth-service live. `role` in JWT, bootstrap mechanism. OPAQUE deferred (see T-04b note below).
+3. ~~**T-04a**~~ — ✅ Done (2026-03-16)
+4. ~~**T-04b**~~ — ✅ Done (2026-03-16)
 5. ~~**T-01**~~ — ✅ Done (2026-03-16)
-6. ~~**T-10**~~ — ✅ Done (2026-03-17): migration-service.js restored.
-7. ~~**T-11**~~ — ✅ Done (2026-03-17): 144-char plaintext limit enforced on send.
-8. ~~**T-12**~~ — ✅ Done (2026-03-17): `bbm_meet` leftover removed.
-9. ~~**T-04c**~~ — ✅ Done (2026-03-17): Rust port complete — blocks, favourites, messages, users, gateway all live. migration-service stays Node.js.
+6. ~~**T-10**~~ — ✅ Done (2026-03-17)
+7. ~~**T-11**~~ — ✅ Done (2026-03-17)
+8. ~~**T-12**~~ — ✅ Done (2026-03-17)
+9. ~~**T-04c**~~ — ✅ Done (2026-03-17)
 10. **AUDIT 1.2** — Rate limit at messages-service level (security fix, small)
 11. **T-07** — Settings page: blocks list (partial scope, self-contained, real user value)
 12. **T-13** — Admin action approval gates (formalises access_requests pattern; prerequisite for T-05b and AUDIT 1.4)
@@ -41,69 +42,8 @@ requires no new infrastructure.
 ### Owner's Comments
 
 - Generally agreed on the implementation order. T-05, T-03 approved for implementation, but need clarification. See my comments in the tickets and clarify open questions in the upcoming meeting.
-- I wonder if T-04 should have a higher priority. Probably less code to port, we could make use of common libraries earlier.
+- I wonder if T-04 should have a higher priority. Probably less code to port, we could use common libraries earlier.
 - **2026-03-16:** Agreed. Enhanced RBAC + access_requests. No encryption of the optional note for now. Tiers-service Rust port moves up after T-05 and T-03. Then the rest.
----
-
-## T-01 — Admin UI (`/admin`)
-
-**Status:** ✅ Complete (2026-03-16).
-
-### Implemented (2026-03-16)
-
-- `services/location-service.js` — replaced hardcoded inline radius table with cached fetch to tiers-service (5 min TTL, static fallback). New env var: `TIERS_SERVICE_URL`.
-- `services/users-service.js` — fixed tokenVersion check to include `admin` role. Added `requireAdmin` middleware. Added `GET /admin/users`, `PATCH /admin/users/:id/tier`, `PATCH /admin/users/:id/role`.
-- `services/tiers-service/src/main.rs` — admin tier CRUD: `GET/POST /admin/tiers`, `PUT/DELETE /admin/tiers/:name`. Each handler verifies adminUser JWT + tokenVersion from DB. Cache invalidated on every write.
-- `services/common/src/auth.rs` — added `AdminUser` Axum extractor (signature + role check).
-- `services/server.js` — added `requireAdmin` middleware, PATCH to CORS, admin proxy routes.
-- `ui/_layouts/default.html` — extended layout guard: `/admin/*` requires `role === 'admin'`.
-- `ui/_includes/offcanvas-menu.html` — admin nav link (hidden by default, shown by app.js for admin role).
-- `ui/scripts/app.js` — `syncOffcanvas` and `buildDesktopNav` show admin link when `role === 'admin'`.
-- `ui/scripts/api.js` — admin API methods: `adminSearchUsers`, `adminSetTier`, `adminSetRole`, `adminListTiers`, `adminCreateTier`, `adminUpdateTier`, `adminDeleteTier`.
-- `ui/admin/admin-index.html` + `ui/scripts/admin.js` — admin UI: user search/expand/tier+role change; tier CRUD.
-
-### Tiers CRUD polish (2026-03-16 — follow-up session)
-
-- `tiers-service/src/main.rs` — `admin_list_tiers`: auto-seeds static tiers into the DB on first admin access (using `count_documents` guard, not deserialization result) so edit/delete immediately target real documents. Fetches the list as raw BSON `Document` to avoid silent `try_collect` failures causing spurious re-seeding.
-- `tiers-service/src/main.rs` — `admin_create_tier`: shifts all existing tiers with `rank >= new rank` up by 1 before inserting, keeping ranks contiguous.
-- `ui/scripts/admin.js` — edit form now expands inline below the clicked tier row instead of at the bottom of the list; heading removed; nearby/message radius fields on a dedicated second row; clicking a different row closes the previous form.
-- `ui/scripts/admin.js` — "New Tier" rank field is a select (0 → maxRank+1) labelled with the occupant tier at each position; defaults to "append".
-
-### Notes
-
-- First use case: create a `developer` tier with expanded nearby and messaging radii.
-- Auth: a dedicated `admin` role added to JWT. **Not** created manually in DB — see bootstrap mechanism below.
-- The `/admin` route must be excluded from the Jekyll public build or served from a separate path with server-side auth checks.
-
-### On `admin` role vs tiers
-
-`admin` is a **role**, not a tier. A tier controls feature access (see_map, message_online, etc.). A role controls what actions the user can perform on other users and system data. A user can be `tier: premium, role: admin`. They are orthogonal. The JWT must carry both.
-
-Currently only `tier` is in the JWT. `role` needs to be added when T-01 is built. A plain DB edit to the `tier` field does not grant admin access — roles are separate and enforced separately.
-
-### Bootstrap mechanism (prerequisite for T-01)
-
-**Problem:** You need an admin to create an admin. Manual DB edits must not be the answer — they bypass auth and are not portable.
-
-**Solution: `ADMIN_BOOTSTRAP_USER_ID` env var on auth-service (or gateway)**
-
-1. Developer registers a normal account via the app.
-2. Sets `ADMIN_BOOTSTRAP_USER_ID=<userId>` as an env var on Railway.
-3. On next service boot: if no admin exists yet, the service promotes that userId to `role: admin`, bumps their `tokenVersion`.
-4. Developer re-logs in → receives a JWT with `role: admin`.
-5. Env var is removed from Railway (the service is a no-op if an admin already exists, but it should be removed as hygiene).
-
-This is the only path to the first admin. All subsequent admin promotions go through the admin UI with an authenticated admin JWT. Raw DB edits to role/tier fields have no effect without a `tokenVersion` bump, which only the service can perform.
-
-**Implementation note:** Must be part of T-04b (auth-service Rust port) or implemented in the current `auth-service.js` as a startup hook. Cannot be done before `role` is added to the JWT.
-
-### Owner's Comments
-
-- I think there are a few things to clarify, what's a developer tier vs n admin role?
-- How do I create an elevated account? A change in the db ("regular" -> "admin") should not be permitted.
-- Maybe T-03 answers open questions.
-- Do not touch without explicit permission.
-- **2026-03-16:** Confirmed: admin is a role, not a tier. Bootstrap via env var is the right approach. Raw DB edits must not grant access.
 
 ---
 
@@ -133,290 +73,38 @@ This is the only path to the first admin. All subsequent admin promotions go thr
 
 ---
 
-## T-03 — DB-stored Tiers + Configurable RBAC
+## T-05b — Encrypted Block Note Field
 
-**Status:** ✅ Complete (2026-03-16). Prerequisite for T-01 — now unblocked.
+**Status:** Not started. Blocked on T-13 (approval gate) and T-04b/OPAQUE (key derivation).
 
-### Current state
+### What this is
 
-Tiers are defined as static JSON in `services/tiers-service.js`. Adding or
-editing a tier requires a code change and redeployment.
+Phase 2 of T-05 (see `TICKETS_DONE.md`). Adds an optional encrypted free-text
+note to a block record. The note is written by the blocking user at block time,
+encrypted client-side, and is only decryptable by the blocking user (via their
+own key) or by an admin with an active, approved `access_request` (T-13 gate).
 
-### Goal
+### Prerequisites
 
-Move tier definitions to a `tiers` MongoDB collection. The admin UI (T-01) can
-then add, edit, and delete tiers without code changes.
-
-### Tier document schema (proposed)
-
-```json
-{
-  "name": "premium",
-  "label": "Premium",
-  "features": ["see_nearby", "message_online", "manage_favourites"],
-  "radii": {
-    "nearby_m": 5000,
-    "message_m": 2000
-  },
-  "createdAt": "...",
-  "updatedAt": "..."
-}
-```
-
-### ABAC vs RBAC analysis
-
-**The question:** Should we implement ABAC (Attribute-Based Access Control) or
-stick with enhanced RBAC (Role-Based Access Control)?
-
-**Current model:** RBAC — user has a tier, tier has feature flags and radii.
-`checkTier` in `server.js` checks if the user's tier allows a feature.
-
-**ABAC** would allow policies like: *"user may send message IF tier=premium AND
-distance < 500m AND recipient has not blocked sender."* More expressive but
-significantly more complex: requires a policy engine, policy storage, and
-context evaluation at request time.
-
-**Recommendation: Enhanced RBAC, not ABAC.**
-
-The use cases described (different radii per tier, features on/off per tier,
-block system) are fully covered by RBAC with these additions:
-1. Tiers stored in DB (this ticket).
-2. A separate `blocks` collection checked at the message/location layer (T-05).
-3. Configurable named radii stored in the tier document.
-
-ABAC adds "context-aware" policy evaluation (time of day, device type, session
-state). None of the described features require this. The complexity cost
-outweighs the benefit at this stage.
-
-### On decoupling distances
-
-The proposed named distances (`hyper_close: 50m`, `very_close: 500m`, etc.) are
-a cosmetic improvement over direct values in the tier document. They add an
-extra lookup (distance name → metres) with no functional gain for the described
-use cases. **Recommendation:** Store radius values directly in the tier document
-as integers in metres. If a future admin UI needs a human-friendly name, add an
-optional `label` field to the radius value — no separate collection needed.
-
-### Migration path
-
-1. Write a migration that reads the current static tier definitions from
-   `tiers-service.js` and inserts them as documents into the `tiers` collection.
-2. `tiers-service.js` switches from static JSON to DB reads (with a short cache,
-   e.g. 60 s TTL, to avoid a DB hit on every `checkTier` call).
-3. Admin UI endpoints for CRUD on tier documents.
-
-### Implemented (2026-03-16)
-
-- `services/migration-service.js` — migration `004_tiers_seed`: seeds guest/regular/premium into `tiers` collection (`$setOnInsert`, idempotent). Pending disk space (AUDIT.md 2.0) — static fallback active until applied.
-- `services/tiers-service.js` — full rewrite: MongoDB connection, 60s TTL cache (`loadTiers()`), `STATIC_TIERS` fallback if collection empty, new `GET /tiers/:name/info` endpoint, async radius lookups
-- `services/server.js` — added `GET /api/tiers/:tier/info` proxy route
-- `services/location-service.js` — fixed inline radius table (guest was 23,000 m → correct 500 m)
-- `ui/scripts/api.js` — added `getTierInfo(tier)` method
-- `ui/scripts/profile.js` — replaced hardcoded `TIER_DISPLAY` / `tierFeatureHtml` with API-driven version using `getTierInfo()` (fixes AUDIT.md 3.2)
-
-**New env vars for tiers-service:** `MONGO_URI`, `DB_NAME` (same values as other services).
+- T-13 ✅ (approval gate — admin access to block note requires `legal`-role approval)
+- OPAQUE / T-04b key derivation (client-side encryption key derived from password, never transmitted)
 
 ### Owner's Comments
 
-- Agreed to be of high priority, but needs clarification. Please elaborate in the upcoming meeting.
-- **2026-03-16:** Approved for implementation.
-
----
-
-## T-04 — Port Services to Rust
-
-**Status:** T-04a ✅ Complete (2026-03-16). T-04b ✅ Complete (2026-03-16). T-04c ✅ Complete (2026-03-17). All services + gateway now in Rust. migration-service remains Node.js (intentional). T-01 now unblocked. Sequenced as T-04a/b/c — see Implementation Order.
-
-### T-04c — What was implemented (2026-03-17)
-
-- `services/blocks-service/` — Rust port (axum 0.8, mongodb 3)
-- `services/favourites-service/` — Rust port; fixed E0716 (tokio::join! temporaries), E0728 (await in non-async closure)
-- `services/messages-service/` — Rust port; E2EE ciphertext validation, route conflict fix (`/messages/{id}` combined)
-- `services/users-service/` — Rust port; bcrypt via spawn_blocking, regex_escape helper, find_one_and_update with ReturnDocument::After
-- `services/gateway/` — Full Axum port of server.js: 28 HTTP proxy routes, fixed-window per-IP rate limiting, CORS via tower-http, WS location + WS messages handlers (mpsc channel pattern, auth timeout, push timers), 30s health cache, migration-on-boot call
-- `services/Dockerfile.*` — per-service multi-stage Docker builds with workspace stubs
-- `services/Cargo.toml` — workspace updated with all new members and tower-http dep
-- **Deferred (see T-08):** signed internal auth context (X-Auth-* headers); requires updating all 7 downstream services + gateway simultaneously
-
-**New env vars for gateway:** `JWT_SECRET`, `SERVICE_SECRET`, `AUTH_SERVICE_URL`, `USERS_SERVICE_URL`, `LOCATION_SERVICE_URL`, `MESSAGES_SERVICE_URL`, `FAVOURITES_SERVICE_URL`, `TIERS_SERVICE_URL`, `BLOCKS_SERVICE_URL`, `MIGRATION_SERVICE_URL`, `ALLOWED_ORIGINS` (optional, default: `https://biffjezos.github.io`), `PORT` (optional, default: 8080). **`JWT_SECRET` and `SERVICE_SECRET` are separate** — `JWT_SECRET` signs user/guest tokens; `SERVICE_SECRET` signs inter-service `X-Service-Token` JWTs. Separating them means a leaked user secret cannot be used to forge service requests, and vice versa. All eight Rust services require both.
-
-### T-04b — What was implemented (2026-03-16)
-
-- `services/auth-service/` — full Rust port (axum 0.8, bcrypt, mongodb 3)
-- `common/src/auth.rs` — added `email` to `UserClaims`, added `issue_user_token` / `issue_guest_token` (reusable for future service ports)
-- `role` field added to JWT (`user` | `admin`). Read from DB on login; new users get `role: user` on register.
-- Bootstrap mechanism: `ADMIN_BOOTSTRAP_USER_ID` env var. On boot, if set and no admin exists, promotes that user and bumps `tokenVersion`. Safe to leave set (no-op after first run, but should be removed).
-- `services/Dockerfile.auth` for Railway deployment.
-- Identical HTTP contract to `auth-service.js` — gateway unchanged.
-
-**New env vars for auth-service:** `MONGO_URI`, `DB_NAME`, `JWT_SECRET` (same values as other services), `ADMIN_BOOTSTRAP_USER_ID` (one-time, remove after use).
-
-### T-04b — OPAQUE/PAKE (deferred)
-
-OPAQUE requires client-side protocol participation (JS changes to login/register forms). The Rust infrastructure is now in place. This is a separate workstream — see AUDIT.md 1.1.
-
-### Rationale
-
-The microservice architecture allows porting one service at a time.
-Each service is isolated behind the gateway (`server.js`). As long as the
-HTTP API contract (routes, request/response JSON shape) is preserved, the
-gateway does not change when a service is ported.
-
-### Recommended porting order (least risky first)
-
-1. **tiers-service** — read-only at runtime, smallest codebase, stateless.
-2. **location-service** — straightforward read/write, haversine already
-   implemented in Rust's geo crates.
-3. **favourites-service** — slightly more complex (range-sync, notifications),
-   but self-contained.
-4. **messages-service** — E2EE envelope pass-through; complex validation logic.
-5. **users-service** — touches many fields; port last of the "regular" services.
-6. **auth-service** — highest risk; port only after all others are stable.
-7. **server.js (gateway)** — can be replaced with Axum or Actix as the final
-   step, or left as Node (it's not CPU-bound).
-
-### Directory strategy
-
-- Keep `/services` as the current Node.js codebase.
-- Create `/services-rs` for Rust services as they are developed.
-- Each Rust service lives in its own subdirectory: `/services-rs/tiers/`.
-- **Railway deployment:** Each Railway service has a "Root Directory" setting
-  in the service dashboard (Settings → Source → Root Directory). When a Rust
-  service is ready, change that one service's root directory from
-  `/services/tiers-service` to `/services-rs/tiers`. No other services are
-  affected. This is the correct way to do this — no folder renaming needed.
-- Build command for Rust on Railway: `cargo build --release`
-  Start command: `./target/release/tiers-service`
-
-### Note on shared code
-
-The utilities duplicated across Node services (AUDIT.md 6.1) become a Rust
-shared crate. In a Cargo workspace at `/services-rs/Cargo.toml`, a `common`
-crate can hold JWT verification, ObjectId helpers, etc. This is the monorepo
-tooling situation Node currently lacks.
-
-### Owner's Comments
-
-- I wonder, if the port to rust should get a higher priority. If we port sooner, we could use common libs earlier and have less code to port.
-- Tell me what you think in the upcoming meeting.
-- **2026-03-16:** Priority elevated. Tiers-service first (T-04a), then auth-service + OPAQUE (T-04b) which unblocks T-05 block-note encryption. Remaining services (T-04c) follow incrementally.
-
-> **Reminder (2026-03-16):** Once T-04 (full Rust port) is complete, upgrade the
-> Railway MongoDB plan to free up disk space. This will unblock migration
-> `003_blocks_indexes` (see AUDIT.md 2.0) and should be done before any growth
-> push. Dev-alpha state is acceptable until then.
-
----
-
-## T-05 — Blocking & Reporting
-
-**Status:** ✅ Phase 1 complete (2026-03-16). Deployed. Blocked on T-04b for phase 2.
-
-### Phase split
-
-- **T-05 (done):** Block mechanism + reason enum. Deployed 2026-03-16.
-- **T-05b (after T-04b):** Add optional encrypted note field once OPAQUE-based key derivation is in place.
-
-### Requirements
-
-- Any user can block any other user.
-- When A blocks B:
-  - B no longer sees A in nearby results (location-service must check the block list).
-  - B cannot send messages to A (messages-service must check).
-  - B cannot see A's profile (users-service must check `/profile` endpoint).
-  - Any existing favourite entry between them remains (for audit), but the mutual
-    requirement fails, so messaging is already prevented.
-- Block requires a reason. Options: `spam`, `harassment`, `inappropriate_content`,
-  `fake_profile`, `other` + optional free-text (max 500 chars).
-- The block + reason is stored as a report for future moderation review.
-- Blocks are visible in the user's settings page (T-07) and can be removed.
-- Blocked user receives no notification that they have been blocked.
-
-### Architecture
-
-New `blocks` collection (T-05, phase 1 — no note field yet):
-```json
-{
-  "blockerUserId": "...",
-  "blockedUserId": "...",
-  "reason": "spam",
-  "createdAt": "..."
-}
-```
-
-Note field (`note: "..."`) is deferred to T-05b. Storing free-text without
-proper client-side encryption (pending T-04b + OPAQUE) would be a privacy
-regression. Reason enum is not sensitive.
-
-New `access_requests` collection (dual-control gate for future admin access to block data):
-```json
-{
-  "requestedBy": "admin_userId",
-  "resourceType": "block_note",
-  "resourceId": "block_id",
-  "approvedBy": "legal_userId",
-  "expiresAt": "...",
-  "usedAt": null
-}
-```
-
-Admin can request access to a block record. A `legal`-role account approves
-the request (time-limited). The decryption endpoint checks: `role === admin AND
-active approval EXISTS for (admin_id, block_id)`. This is the access gate
-pattern — no ABAC policy engine required. New resource types follow the same
-pattern.
-
-New endpoints on a new `blocks-service`:
-- `POST /blocks/:userId` — block a user with reason
-- `DELETE /blocks/:userId` — unblock
-- `GET /blocks` — list my blocked users (for settings page)
-
-The `location-service`, `messages-service`, and `users-service` check the
-`blocks` collection directly (same MongoDB instance).
-
-### Implemented (2026-03-16)
-
-- `services/blocks-service.js` — new service, deployed on Railway
-- `services/server.js` — proxy routes + health aggregator entry
-- `services/location-service.js` — block filter on nearby results (30 s cache)
-- `services/messages-service.js` — block check before message delivery
-- `services/users-service.js` — directional block check on `/profile`:
-  blockee gets 404; blocker sees profile with `blockedByViewer: true`
-- `services/migration-service.js` — migration `003_blocks_indexes`
-  (pending disk space — see AUDIT.md 2.0)
-- `ui/scripts/blocks.js` — `BlockModule` global, reason select modal
-- `ui/scripts/api.js` — `blockUser`, `unblockUser`, `getBlocks`
-- `ui/_layouts/default.html` — loads `blocks.js` on every page
-- `ui/_includes/modal-pin.html` — Report/Block in map pin modal
-- `ui/scripts/app.js` — wired pin block button
-- `ui/scripts/profile.js` — Block/Unblock button, Blocked badge, re-renders in-place
-- `ui/scripts/favourites.js` — blocked badge + disabled message btn in list/search
-
-### Rate limiting improvement (related — AUDIT.md 1.2)
-
-While building the blocking feature: add per-userId rate limiting at the
-messages-service level (not just the gateway WebSocket). A simple in-process
-`Map<userId, { count, resetAt }>` in messages-service is sufficient for
-single-instance deployment.
-
-### Owner's Comments
-
-- Relates to T-05. 
-- Since the blocking information may contain personal information about the blocked user, I think the db entry or parts of it should be encrypted. 
-- Only the blocking user (through the UI) and an elevated account (admin / dev) should be able to  decrypt and read the blocking information. 
-- I could also think of a two-dimensional access system, in which a higher tier user (legal) must permit acccess (decryption in the admin ui) before the content can be decrypted. I want to avoid unrestricted access to the information. So, just because a user is an admin, access should not be granted, admins may access the information, but only if necessary and that is determined by a second account (ie a "legal"-role).
-- Short: Protected content can only be accessed by certain account types, but only if really necessary. Necessity must be approved by another account (or account type)
+- Since blocking information may contain personal data, the note must be encrypted.
+- Only the blocking user (through the UI) and an elevated account should be able to decrypt it.
+- A two-dimensional access system: a higher-tier account (e.g. `legal` role) must permit access before content can be decrypted. Admin role alone is insufficient.
 
 ---
 
 ## T-06 — Venue Accounts
 
-**Status:** Not started. Requires T-01 (admin UI) and T-03 (DB tiers).
+**Status:** Not started. Requires T-01 (admin UI) and T-03 (DB tiers). Postponed by owner.
 
 ### Requirements
 
 - Account type `venue`. Cannot be self-registered — admin converts a regular
-  account to `venue` type via the admin UI (T-01).
+  account to `venue` type via the admin UI.
 - Venue profile fields replace `sex` and `age` with:
   - `venueName` (string)
   - `description` (text)
@@ -425,13 +113,10 @@ single-instance deployment.
 - On map: venue appears as a house icon (`bi-house-fill` or similar), always
   visible to users within range (uses the venue's `fixedLat/fixedLon`).
 - Map pin modal for venues shows name + description + link to venue profile page.
-- Messaging: standard two-sided favourites required. Venues can send messages to
-  users; users can message venues.
-- Venues can be blocked by regular users (T-05). Blocked venues see nothing
-  about that user.
+- Messaging: standard two-sided favourites required.
+- Venues can be blocked by regular users (T-05).
 - Admin flow: user registers normally → admin changes `accountType` to `venue`
-  in admin UI → admin fills venue-specific fields → token is re-issued (see T-01
-  + AUDIT.md 1.2).
+  in admin UI → admin fills venue-specific fields → token is re-issued.
 - Venue login: same email/password, same JWT flow. Frontend detects
   `accountType: 'venue'` from the token and renders the venue profile view.
 
@@ -481,7 +166,6 @@ Notification events (priority order):
 
 The existing `notifications` collection (added 2026-03-16) already supports
 arbitrary `type` values. New event types are additive — no schema change needed.
-
 
 ### Owner's Comments
 
@@ -533,54 +217,34 @@ On success, injects trusted headers into the proxied request:
 - `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV`
 - `X-Auth-Features` (JSON array), `X-Auth-Radii` (JSON object)
 
-Gateway's `checkTier()` becomes a header read — no separate tiers-service call.
-
 **Step 3 — Services drop `verifyToken` copy-paste:**
 
 Each service reads `X-Auth-*` headers instead of re-verifying the JWT.
 `X-Service-Token` still protects services from external callers.
-tokenVersion DB check moves entirely to the gateway step.
 
-**Step 4 — Retire tiers-service:**
-
-Remove from Railway once authority-service is live and all services have been migrated to header-based auth.
+**Step 4 — Retire tiers-service.**
 
 ### Security properties
 
-- Role and tier changes take effect immediately — gateway re-verifies on every request, not just at login.
-- Stale JWT carrying a downgraded role is rejected at the gateway as soon as `tokenVersion` is bumped.
+- Role and tier changes take effect immediately — gateway re-verifies on every request.
+- Stale JWT is rejected at the gateway as soon as `tokenVersion` is bumped.
 - New roles or features require changes in exactly **one place** (authority-service).
-- `X-Auth-*` headers are only trusted because they are injected by the gateway; services are unreachable from the outside without `X-Service-Token`.
 
 ### Prerequisites
 
-- T-01 complete (admin CRUD for tiers is established and tested before the service is merged)
-- T-04c in progress (JS services being ported to Rust; authority header pattern is adopted as services are ported)
+- T-01 ✅ (admin CRUD for tiers established and tested)
+- T-04c ✅ (all services in Rust; authority header pattern adopted as services are ported)
 - No new infrastructure required
-
-### What this is NOT
-
-- Not a policy engine (no ABAC). The `authority/verify` response is a flat permission set, not a policy tree.
-- Not a reverse proxy. The gateway remains the routing layer. Authority is a verification call only.
-- Does not replace `X-Service-Token` inter-service authentication.
-
-### Implementation order (within this ticket)
-
-1. Extend auth-service to absorb tiers-service routes (internally, same binary, same DB).
-2. Add `POST /authority/verify` endpoint.
-3. Update gateway to call authority and inject headers (replaces `checkTier` + `verifyToken`).
-4. Update each JS service to read headers (one service at a time, backwards-compatible).
-5. When all services are updated, retire tiers-service on Railway.
 
 ### Owner's Comments
 
-- 2026-03-16: Proposed by Claude based on the admin-role cascade bug post-mortem (AUDIT.md 6.3). Makes auth-service the true single authority for all rights and limits. Feasible once T-01 is done and T-04c is underway. tiers-service to be retired after merge.
+- 2026-03-16: Proposed by Claude based on the admin-role cascade bug post-mortem (AUDIT.md 6.3). Makes auth-service the true single authority for all rights and limits. tiers-service to be retired after merge.
 
 ---
 
 ## T-09 — Role CRUD with Permissions UI
 
-**Status:** Not started. Requires backend changes.
+**Status:** Not started. Requires T-08.
 
 ### Problem
 
@@ -593,103 +257,16 @@ Roles are currently hardcoded strings (`user`, `admin`) validated inline in each
 
 ### Standalone guard (can be done without T-09)
 
-**Admin self-modification block** (AUDIT.md 1.4): prevent admins from changing their own tier or role via the API. One-line fix per handler in `users-service.js`:
-
-```
-if (targetId === req.auth.sub)
-  return res.status(403).json({ error: 'Cannot modify your own tier or role.', code: 'SELF_MODIFICATION_FORBIDDEN' })
-```
-
-This does not require a `roles` collection and can be implemented at any time.
+**Admin self-modification block** (AUDIT.md 1.4): prevent admins from changing their own tier or role via the API. Deferred to T-13 (approval gates) which handles it more correctly.
 
 ### Prerequisites
 
-- T-08 (Authority service) is the natural home for role-to-permissions resolution. Without T-08, the change touches 5+ services (same anti-pattern as AUDIT.md 6.3).
+- T-08 (Authority service) is the natural home for role-to-permissions resolution. Without T-08, the change touches 5+ services.
 - T-09 full implementation should follow T-08.
 
 ### Owner's Comments
 
-- 2026-03-16: Raised by owner — need ability to add/edit/remove roles with permissions. Custom roles and permissions require backend work; tracked here. Standalone self-modification guard (AUDIT 1.4) can be patched sooner.
-
----
-
-## T-10 — Restore migration-service.js
-
-**Status:** Not started. Regression introduced 2026-03-17.
-
-### Problem
-
-`services/migration-service.js` was accidentally deleted in commit `4a8f547`
-("chore: retire Node.js services") along with the other Node.js services.
-TICKETS.md T-04c explicitly states "migration-service stays Node.js (intentional)".
-
-The gateway (`services/gateway/src/main.rs`) still calls
-`POST {MIGRATION_SERVICE_URL}/migrate/run` on every boot and logs an error if
-the service is unreachable. Without a running migration-service:
-
-- MongoDB TTL indexes for `messages` and `locations` are not applied on new
-  deployments (data is filtered in-query as a fallback, but not auto-purged at
-  the DB level — privacy regression for data at rest).
-- Migration `003_blocks_indexes` (unique index on `blocks`, index on
-  `blockedUserId`) is not applied — duplicate block documents can be inserted
-  (see also AUDIT.md 2.0 and 3.1-related context).
-- Migration `004_tiers_seed` is not applied — tiers-service falls back to
-  static tiers.
-
-### Fix
-
-Restore `services/migration-service.js` from git history (last known good:
-commit `09f266b` or earlier) and redeploy to Railway. The file is ~179 lines of
-Node.js. The Railway service for migration-service was not removed, so
-redeployment should be straightforward once the file is back in the repo.
-
-### Prerequisites
-
-None — this is a pure restoration. The gateway already expects it.
-
-### Priority
-
-**HIGH** — data at rest is not being auto-purged from MongoDB; this is a
-privacy regression in a privacy-by-design app.
-
----
-
-## T-11 — Enforce 144-character plaintext limit on message send
-
-**Status:** ✅ Complete (2026-03-17).
-
-### Problem
-
-The UI input counter in `ui/scripts/messages.js` (line 254) correctly counts
-down from 144 characters, but there is no enforcement on send. A user can type
-more than 144 characters and the message will be submitted without error. The
-messages-service validates only the *encrypted* text length (`MESSAGE_MAX_CHARS
-= 4096`), which is the ciphertext length, not the plaintext.
-
-The 144-character limit is intentional product behaviour. It must be enforced
-before encryption, on the client side.
-
-### Fix
-
-In `messages.js`, before calling `encryptFor()`, check `text.length > 144` and
-show an inline error instead of proceeding. No backend change required.
-
-### Prerequisites
-
-None.
-
----
-
-## T-12 — Remove leftover `bbm_meet` localStorage key
-
-**Status:** ✅ Complete (2026-03-17).
-
-### What it was
-
-`bbm_meet` stored `{ uid, nickname, sex }` of a "meet target" user — an early
-feature that let a user pin a specific person to meet. The feature was removed
-(gone by commit `99df018`) but the `clearUserStorage()` cleanup call was left
-behind. Confirmed fully retired via git history. Removal is safe.
+- 2026-03-16: Raised by owner — need ability to add/edit/remove roles with permissions. Custom roles and permissions require backend work; tracked here.
 
 ---
 
@@ -721,29 +298,9 @@ and can remain self-approved.
 
 ### Existing foundation
 
-T-05 already defines the `access_requests` collection and the dual-control gate
-pattern for block note decryption:
-
-```json
-{
-  "requestedBy":  "admin_userId",
-  "resourceType": "block_note",
-  "resourceId":   "block_id",
-  "approvedBy":   null,
-  "approvedAt":   null,
-  "expiresAt":    "...",
-  "status":       "pending",
-  "actionPayload": { ... },
-  "executedAt":   null,
-  "rejectedAt":   null,
-  "rejectComment": null
-}
-```
-
-T-13 generalises this pattern to cover all admin actions with a configurable,
-DB-stored approval matrix. `legal` in T-05 is illustrative — the actual approver
-role for each action type is determined by the matrix, which the owner configures
-via the admin UI.
+T-05 (see `TICKETS_DONE.md`) already defines the `access_requests` collection
+and the dual-control gate pattern. T-13 generalises this to a configurable,
+DB-stored approval matrix covering all admin actions.
 
 ---
 
@@ -769,10 +326,9 @@ via the admin UI.
 ```
 
 **Technical implication of auto-execute:** The `access_requests` document must
-store the full intended action (`actionPayload`), not just metadata. On approval,
-the authority service (T-08) or gateway re-dispatches the stored request
-internally, authenticated as the original requester. The downstream service sees
-a normal request — no special execution path needed.
+store the full intended action (`actionPayload`). On approval, the authority
+service (T-08) or gateway re-dispatches the stored request internally,
+authenticated as the original requester.
 
 ---
 
@@ -795,10 +351,10 @@ Each document defines the approval rule for one action type:
 ```
 
 `approvalMode` values:
-- `"self"` — no second approval required; action executes immediately (i.e., the gate is a no-op, but still logged)
+- `"self"` — no second approval required; action executes immediately (gate is a no-op, but still logged)
 - `"role"` — approval required from any account holding `approverRole`
 
-Changes to `action_gates` are themselves a gated action (see open questions below).
+Changes to `action_gates` are themselves a gated action.
 
 ---
 
@@ -831,34 +387,30 @@ Changes to `action_gates` are themselves a gated action (see open questions belo
 
 ### Role model (depends on T-09)
 
-Roles are DB documents. Any role can be assigned as an approver for any action
-type. An account may hold multiple roles simultaneously (e.g., both `admin` and
-`owner`). The approval inbox in the UI shows requests approvable by any of the
-logged-in user's roles.
+Roles are DB documents. Any role can be assigned as approver for any action type.
+An account may hold multiple roles (`roles: ["admin", "owner"]`). The approval
+inbox shows requests approvable by any of the logged-in user's roles.
 
-**The `owner` role** is the role with authority to:
+**The `owner` role** has authority to:
 - Create, edit, and delete other roles (via T-09)
-- Configure the `action_gates` matrix (which actions need which approver)
-- Approve any action that no other role can yet approve
+- Configure the `action_gates` matrix
+- Approve any action configured to require `owner` approval
 
-The owner role is not special in code — it is just a DB role whose name is
-configured to be the approver for the most sensitive action types.
+The owner role is not special in code — it is a DB role whose name is configured
+to be the approver for the most sensitive action types.
 
-**Bootstrap:** The first account elevated to the `owner` role is promoted via an
-env var on auth-service/gateway boot:
+**Bootstrap:** The first `owner`-role account is promoted via env var on boot:
 
 ```
 OWNER_BOOTSTRAP_USER_ID=<userId>
 ```
 
 Same pattern as `ADMIN_BOOTSTRAP_USER_ID`. Safe to leave set (no-op if an owner
-already exists). Should be removed after first use. Only one `owner`-role
-bootstrap is needed — subsequent assignments go through the admin UI, gated by
-the `owner` role itself.
+already exists). Should be removed after first use.
 
 ---
 
-### Action types (examples — not exhaustive, owner configures the matrix)
+### Action types (examples — owner configures the matrix)
 
 | resourceType | Default approvalMode | Default approverRole | Notes |
 |---|---|---|---|
@@ -869,17 +421,14 @@ the `owner` role itself.
 | `tier_change` | `self` | — | Routine admin task |
 | `action_gate_edit` | `role` | `owner` | Editing the matrix itself |
 
-The "default" values above are seeded at first boot. Owner can change them at
-any time via the admin UI. A newly registered action type (e.g. from a future
-feature) must be added to `action_gates` before the gate middleware will enforce
-it — unknown action types are rejected by the gateway to prevent bypass by
-omission.
+The defaults above are seeded at first boot. Unknown action types are blocked by
+default (fail-closed) — new features must register a row in `action_gates`.
 
 ---
 
 ### Admin UI additions (within T-01 scope)
 
-- **Approval inbox** — visible to any role listed as approver in `action_gates`; shows pending requests with requestedBy, action type, resource, timestamp
+- **Approval inbox** — visible to any role listed as approver; shows pending requests with requestedBy, action type, resource, timestamp
 - **Approve / Reject** — one click, optional reject comment
 - **Audit log** — all `access_requests`, read-only, filterable by status/type/user
 - **Action Gates config** — `owner`-role only; table of `action_gates` documents; toggle self/role, assign approver role per action type
@@ -891,13 +440,12 @@ omission.
 | # | Question | Options / Notes |
 |---|---|---|
 | OQ-1 | What is the expiry behaviour? | (a) expired request is re-requestable; (b) original admin is notified and must re-request; (c) auto-re-request on next login |
-| OQ-2 | Can approval be revoked after grant but before execution? | Moot under auto-execute (execution is immediate on approval). But what if execution fails? |
-| OQ-3 | Must ALL members of a role approve, or any one? | Currently: any one member suffices. Require unanimous? For most cases, any-one is correct. |
-| OQ-4 | Can an action require approval from MULTIPLE roles? | Not in current schema. Would need `approverRoles: []` and a quorum field. Defer unless needed. |
-| OQ-5 | What if the `actionPayload` becomes stale? | e.g. target user is deleted before approval executes. Execution must validate preconditions before applying; return error status if invalid. |
-| OQ-6 | How are new action types registered? | Unknown types should be blocked by default (fail-closed). The `action_gates` collection is the authoritative registry. Adding a new feature = adding a row. |
-| OQ-7 | How does the `owner` bootstrap interact with `ADMIN_BOOTSTRAP_USER_ID`? | Both can be set simultaneously (one account gets both roles). Or: owner bootstrap implies admin. Needs decision. |
-| OQ-8 | Who approves edits to `action_gates` itself? | Seeded as `role: owner`. But what if there is no owner yet? During initial bootstrap, the first owner can edit the matrix freely. After that, the gate applies. |
+| OQ-2 | What if auto-execution fails? | e.g. target user deleted before approval. Execution must validate preconditions; return error status if invalid. |
+| OQ-3 | Must ALL members of a role approve, or any one? | Currently: any one member suffices. Unanimous quorum deferred unless needed. |
+| OQ-4 | Can an action require approval from MULTIPLE roles? | Not in current schema. Would need `approverRoles: []` + quorum field. Defer unless needed. |
+| OQ-5 | How are new action types registered? | Unknown types blocked by default (fail-closed). `action_gates` is the authoritative registry. |
+| OQ-6 | How does `OWNER_BOOTSTRAP_USER_ID` interact with `ADMIN_BOOTSTRAP_USER_ID`? | Both can be set simultaneously (one account gets both roles). Or: owner bootstrap implies admin. Needs decision. |
+| OQ-7 | Who approves edits to `action_gates` during initial bootstrap? | First owner can edit the matrix freely before a second owner exists. Gate applies once ≥2 owners exist, or immediately if configured to require owner approval. |
 
 ---
 
@@ -922,8 +470,7 @@ omission.
 - 2026-03-17: Raised from AUDIT 1.4 discussion. Goal: tiered approval model;
   routine actions self-approved, sensitive actions require a second account.
   `access_requests` pattern from T-05 is the right foundation.
-- 2026-03-17: Confirmed DB-stored rules (not static config). Auto-execute on
-  approval (no re-trigger). No hardcoded roles. Multiple roles per account.
-  `legal` is an example role name, not a system constant. First `owner`-role
-  account bootstrapped via env var, same pattern as admin bootstrap.
-  All open design questions captured above — answer before implementation begins.
+- 2026-03-17: Confirmed DB-stored rules, auto-execute, no hardcoded roles,
+  multiple roles per account, `legal` is an example. First `owner`-role account
+  bootstrapped via env var. All open design questions captured above — answer
+  before implementation begins.
