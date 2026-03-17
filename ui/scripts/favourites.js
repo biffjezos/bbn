@@ -151,8 +151,14 @@ function favItemHtml(f, isFav, unreadIds = new Set(), blockedIds = new Set()) {
          <i class="bi bi-star"></i></button>
        ${msgBtnHtml}`;
 
-  return `<div class="fav-item ${sexClass(f.sex)}" data-userid="${escHtml(f.userId)}">
-    <a href="${profileHref}" class="fav-avatar ${sexClass(f.sex)}" style="text-decoration:none">${sexEmoji(f.sex)}</a>
+  const isVenue   = f.accountType === 'venue';
+  const avatarCls = isVenue ? 'venue' : sexClass(f.sex);
+  const avatarInner = isVenue
+    ? '<i class="bi bi-house-fill"></i>'
+    : sexEmoji(f.sex);
+
+  return `<div class="fav-item ${isVenue ? 'venue' : sexClass(f.sex)}" data-userid="${escHtml(f.userId)}">
+    <a href="${profileHref}" class="fav-avatar ${avatarCls}" style="text-decoration:none">${avatarInner}</a>
     <div class="flex-grow-1 min-w-0">
       <div class="d-flex align-items-baseline gap-1 flex-wrap">
         <a href="${profileHref}" class="fav-name text-decoration-none text-white">${escHtml(f.nickname)}</a>${ageBadge}

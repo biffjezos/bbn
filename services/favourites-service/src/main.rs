@@ -119,9 +119,11 @@ struct RangeSyncFavDoc {
 #[derive(Deserialize)]
 struct UserProfile {
     #[serde(rename = "_id")]
-    id:       mongodb::bson::oid::ObjectId,
-    nickname: Option<String>,
-    sex:      Option<String>,
+    id:           mongodb::bson::oid::ObjectId,
+    nickname:     Option<String>,
+    sex:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -227,7 +229,7 @@ async fn get_favourites(
     let users: Vec<UserProfile> = match state.db
         .collection::<UserProfile>("users")
         .find(doc! { "_id": { "$in": &oids } })
-        .projection(doc! { "_id": 1, "nickname": 1, "sex": 1 })
+        .projection(doc! { "_id": 1, "nickname": 1, "sex": 1, "accountType": 1 })
         .await
     {
         Ok(c)  => c.try_collect().await.unwrap_or_default(),
@@ -262,15 +264,20 @@ async fn get_favourites(
         .filter(|e| user_map.contains_key(&e.favourite_user_id))
         .map(|e| {
             let u = &user_map[&e.favourite_user_id];
-            json!({
-                "userId":        e.favourite_user_id,
-                "nickname":      u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
-                "sex":           u.sex.as_deref(),
-                "online":        online_set.contains(&e.favourite_user_id),
-                "addedAt":       e.added_at.map(|d| d.to_string()),
-                "withinRange":   e.within_range,
-                "withinRangeAt": e.within_range_at.map(|d| d.to_string()),
-            })
+            {
+                let is_venue = u.account_type.as_deref() == Some("venue");
+                json!({
+                    "userId":        e.favourite_user_id,
+                    "nickname":      u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
+                    "sex":           u.sex.as_deref(),
+                    "accountType":   u.account_type.as_deref(),
+                    // Venues are always online
+                    "online":        is_venue || online_set.contains(&e.favourite_user_id),
+                    "addedAt":       e.added_at.map(|d| d.to_string()),
+                    "withinRange":   e.within_range,
+                    "withinRangeAt": e.within_range_at.map(|d| d.to_string()),
+                })
+            }
         })
         .collect();
 
@@ -323,7 +330,7 @@ async fn post_favourite(
         let owner_oid = safe_object_id(&claims.sub).ok_or_else(|| anyhow::anyhow!("bad oid"))?;
         let owner = state.db.collection::<UserProfile>("users")
             .find_one(doc! { "_id": owner_oid })
-            .projection(doc! { "_id": 1, "nickname": 1, "sex": 1 })
+            .projection(doc! { "_id": 1, "nickname": 1, "sex": 1, "accountType": 1 })
             .await?
             .ok_or_else(|| anyhow::anyhow!("owner not found"))?;
         let from_sex = owner.sex.as_deref().map(Bson::from).unwrap_or(Bson::Null);

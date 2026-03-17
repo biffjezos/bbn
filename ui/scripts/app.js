@@ -571,11 +571,21 @@
 
   // ── Auth hooks ────────────────────────────────────────────
 
+  function isVenueAccount() {
+    try {
+      var t = window.Auth?.getToken?.();
+      if (!t) return false;
+      return JSON.parse(atob(t.split('.')[1])).account_type === 'venue';
+    } catch (e) { return false; }
+  }
+
   var _origOnLogin = Auth.onLogin;
   Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
     // Reconnect WS with fresh user token (guest token no longer valid)
     closeLocWS();
+    // Venue accounts have a fixed location — do not push GPS position.
+    if (isVenueAccount()) return;
     connectLocWS();
     var pos = window.GeoState.pos;
     if (pos) {

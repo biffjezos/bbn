@@ -93,6 +93,8 @@ struct UserForToken {
     age:           Option<i32>,
     role:          Option<String>,
     tier:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:  Option<String>,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
 }
@@ -158,14 +160,15 @@ fn regex_escape(s: &str) -> String {
 fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
     issue_user_token(
         UserTokenParams {
-            sub:      &user.id.to_hex(),
-            email:    user.email.as_deref().unwrap_or(""),
-            nickname: user.nickname.as_deref().unwrap_or(""),
-            sex:      user.sex.as_deref().unwrap_or(""),
-            age:      user.age.map(|a| a.max(0) as u32),
-            role:     match user.role.as_deref() { Some("admin") => "admin", _ => "user" },
-            tier:     user.tier.as_deref().unwrap_or("regular"),
-            tv:       user.token_version.unwrap_or(0).max(0) as u32,
+            sub:          &user.id.to_hex(),
+            email:        user.email.as_deref().unwrap_or(""),
+            nickname:     user.nickname.as_deref().unwrap_or(""),
+            sex:          user.sex.as_deref().unwrap_or(""),
+            age:          user.age.map(|a| a.max(0) as u32),
+            role:         match user.role.as_deref() { Some("admin") => "admin", _ => "user" },
+            tier:         user.tier.as_deref().unwrap_or("regular"),
+            tv:           user.token_version.unwrap_or(0).max(0) as u32,
+            account_type: user.account_type.as_deref(),
         },
         secret,
     )

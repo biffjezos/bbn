@@ -99,12 +99,16 @@
 
   // ── Marker icon ───────────────────────────────────────────────
 
-  function makeLeafIcon(sex, isSelf) {
-    const cls    = 'bbm-marker' + (isSelf ? ' self' : '') + ' ' + markerClass(sex);
-    const size   = isSelf ? 46 : 38;
-    const anchor = isSelf ? 23 : 19;
+  function makeLeafIcon(sex, isSelf, accountType) {
+    const isVenue = accountType === 'venue';
+    const cls     = 'bbm-marker' + (isSelf ? ' self' : '') + (isVenue ? ' venue' : ' ' + markerClass(sex));
+    const size    = isSelf ? 46 : 38;
+    const anchor  = isSelf ? 23 : 19;
+    const inner   = isVenue
+      ? `<i class="bi bi-house-fill"></i>`
+      : markerEmoji(sex);
     return L.divIcon({
-      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}">${markerEmoji(sex)}</div>`,
+      html:      `<div class="${cls}" title="${isSelf ? 'You' : ''}">${inner}</div>`,
       className: '',
       iconSize:  [size, size],
       iconAnchor:[anchor, anchor],
@@ -184,7 +188,7 @@
         markers[u.userId].setLatLng([ulat, ulng]);
         return;
       }
-      const m = L.marker([ulat, ulng], { icon: makeLeafIcon(u.sex, false) }).addTo(map);
+      const m = L.marker([ulat, ulng], { icon: makeLeafIcon(u.sex, false, u.accountType) }).addTo(map);
       m.on('click', () => window.openPinModal?.(u));
       markers[u.userId] = m;
     });
@@ -340,6 +344,7 @@
     lastNearbyUsers = [];
     favIds = new Set();
     viewRadius = 23_000;  // revert to guest radius immediately
+    setSelfBearing(null); // clear compass needle — not reset when icon rebuilds via lastBearing
   }
 
   function refreshSelf() {

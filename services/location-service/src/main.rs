@@ -145,6 +145,18 @@ struct LocationDoc {
     accuracy:     Option<String>,
 }
 
+/// Venue document — queried from the `users` collection for nearby results.
+#[derive(Deserialize, Clone)]
+struct VenueDoc {
+    #[serde(rename = "_id")]
+    id:       mongodb::bson::oid::ObjectId,
+    nickname: Option<String>,
+    #[serde(rename = "fixedLat")]
+    fixed_lat: f64,
+    #[serde(rename = "fixedLon")]
+    fixed_lon: f64,
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Returns the set of user IDs that have a block relationship with `caller_id`
@@ -326,6 +338,11 @@ async fn put_location(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Valid lat and lon required." }))).into_response();
     }
 
+    // Venue accounts have a fixed location — GPS pushes are not accepted.
+    if claims.account_type.as_deref() == Some("venue") {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Venue accounts have a fixed location." }))).into_response();
+    }
+
     let user_id  = &claims.sub;
     let is_user  = matches!(claims.role.as_str(), "user" | "admin");
     let accuracy = if body.accuracy.as_deref() == Some("ip") { "ip" } else { "gps" };
@@ -458,7 +475,7 @@ async fn get_nearby(
     let tier     = claims.tier.as_deref().unwrap_or("guest");
     let radius_m = get_nearby_radius_m(&state, tier).await;
 
-    let users: Vec<_> = nearby
+    let mut users: Vec<_> = nearby
         .into_iter()
         .filter_map(|u| {
             let dist = haversine_distance(lat, lon, u.lat, u.lon);
@@ -479,6 +496,41 @@ async fn get_nearby(
             }
         })
         .collect();
+
+    // Include venue accounts (fixed location, always visible within range).
+    let venues: Vec<VenueDoc> = match state.db
+        .collection::<VenueDoc>("users")
+        .find(doc! { "accountType": "venue", "fixedLat": { "$exists": true }, "fixedLon": { "$exists": true } })
+        .projection(doc! { "_id": 1, "nickname": 1, "fixedLat": 1, "fixedLon": 1 })
+        .await
+    {
+        Ok(cursor) => cursor.try_collect().await.unwrap_or_default(),
+        Err(e) => { eprintln!("[location/nearby] venues: {e}"); vec![] }
+    };
+
+    for v in venues {
+        let venue_id = v.id.to_hex();
+        if venue_id == claims.sub { continue; } // don't show yourself
+        if matches!(claims.role.as_str(), "user" | "admin") {
+            let blocked = get_blocked_ids(&state.db, &state.block_cache, &claims.sub).await;
+            if blocked.contains(&venue_id) { continue; }
+        }
+        let dist = haversine_distance(lat, lon, v.fixed_lat, v.fixed_lon);
+        if dist <= radius_m {
+            users.push(json!({
+                "userId":       venue_id,
+                "lat":          v.fixed_lat,
+                "lon":          v.fixed_lon,
+                "isRegistered": true,
+                "sex":          null,
+                "nickname":     v.nickname,
+                "age":          null,
+                "accuracy":     "fixed",
+                "accountType":  "venue",
+                "distanceM":    dist.round() as i64,
+            }));
+        }
+    }
 
     Json(json!({ "users": users })).into_response()
 }
@@ -504,6 +556,25 @@ async fn post_online_batch(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "userIds must be a non-empty array of strings." }))).into_response();
     }
 
+    // Venues are always online — query users collection for venue accounts in the list.
+    let venue_ids: HashSet<String> = match state.db
+        .collection::<Document>("users")
+        .find(doc! { "_id": { "$in": body.user_ids.iter().filter_map(|id| {
+            mongodb::bson::oid::ObjectId::parse_str(id).ok()
+        }).collect::<Vec<_>>() }, "accountType": "venue" })
+        .projection(doc! { "_id": 1 })
+        .await
+    {
+        Ok(cursor) => cursor
+            .try_collect::<Vec<Document>>()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|d| d.get_object_id("_id").ok().map(|oid| oid.to_hex()))
+            .collect(),
+        Err(e) => { eprintln!("[location/online-batch] venue lookup: {e}"); HashSet::new() }
+    };
+
     let cutoff = BsonDateTime::from_millis(now_ms() - LOCATION_TTL.as_millis() as i64);
     match state.db
         .collection::<Document>("locations")
@@ -513,9 +584,13 @@ async fn post_online_batch(
     {
         Ok(cursor) => {
             let docs: Vec<Document> = cursor.try_collect().await.unwrap_or_default();
-            let online: Vec<_> = docs.iter()
+            let mut online: Vec<String> = docs.iter()
                 .filter_map(|d| d.get_str("userId").ok().map(|s| s.to_string()))
                 .collect();
+            // Merge venue IDs — venues are always online.
+            for vid in venue_ids {
+                if !online.contains(&vid) { online.push(vid); }
+            }
             Json(json!({ "online": online })).into_response()
         }
         Err(e) => { eprintln!("[location/online-batch] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }

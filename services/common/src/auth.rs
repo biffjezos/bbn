@@ -159,14 +159,15 @@ where
 /// All fields beyond `sub` and `role` are optional — guest tokens only set sub/role.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserClaims {
-    pub sub:      String,
-    pub role:     String, // "user" | "admin" | "guest"
-    pub tier:     Option<String>,
-    pub tv:       Option<u32>,   // tokenVersion
-    pub email:    Option<String>,
-    pub nickname: Option<String>,
-    pub age:      Option<u32>,
-    pub sex:      Option<String>,
+    pub sub:          String,
+    pub role:         String, // "user" | "admin" | "guest"
+    pub tier:         Option<String>,
+    pub tv:           Option<u32>,   // tokenVersion
+    pub email:        Option<String>,
+    pub nickname:     Option<String>,
+    pub age:          Option<u32>,
+    pub sex:          Option<String>,
+    pub account_type: Option<String>, // "venue" for venue accounts; absent for regular users
 }
 
 /// Decode and validate (signature + expiry) a user/guest JWT.
@@ -190,16 +191,18 @@ const GUEST_TOKEN_EXPIRY_SECS: u64 = 15 * 60;        // 15 minutes
 
 #[derive(Serialize)]
 struct IssuedUserClaims {
-    sub:      String,
-    email:    String,
-    nickname: String,
-    sex:      String,
-    age:      Option<u32>,
-    role:     String,
-    tier:     String,
-    tv:       u32,
-    exp:      u64,
-    iat:      u64,
+    sub:          String,
+    email:        String,
+    nickname:     String,
+    sex:          String,
+    age:          Option<u32>,
+    role:         String,
+    tier:         String,
+    tv:           u32,
+    exp:          u64,
+    iat:          u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    account_type: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -219,14 +222,15 @@ fn now_unix() -> u64 {
 }
 
 pub struct UserTokenParams<'a> {
-    pub sub:      &'a str,
-    pub email:    &'a str,
-    pub nickname: &'a str,
-    pub sex:      &'a str,
-    pub age:      Option<u32>,
-    pub role:     &'a str,
-    pub tier:     &'a str,
-    pub tv:       u32,
+    pub sub:          &'a str,
+    pub email:        &'a str,
+    pub nickname:     &'a str,
+    pub sex:          &'a str,
+    pub age:          Option<u32>,
+    pub role:         &'a str,
+    pub tier:         &'a str,
+    pub tv:           u32,
+    pub account_type: Option<&'a str>,
 }
 
 /// Sign a user JWT. `role` is typically `"user"` or `"admin"`.
@@ -238,16 +242,17 @@ pub fn issue_user_token(
     encode(
         &Header::new(Algorithm::HS256),
         &IssuedUserClaims {
-            sub:      p.sub.to_string(),
-            email:    p.email.to_string(),
-            nickname: p.nickname.to_string(),
-            sex:      p.sex.to_string(),
-            age:      p.age,
-            role:     p.role.to_string(),
-            tier:     p.tier.to_string(),
-            tv:       p.tv,
-            exp:      now + USER_TOKEN_EXPIRY_SECS,
-            iat:      now,
+            sub:          p.sub.to_string(),
+            email:        p.email.to_string(),
+            nickname:     p.nickname.to_string(),
+            sex:          p.sex.to_string(),
+            age:          p.age,
+            role:         p.role.to_string(),
+            tier:         p.tier.to_string(),
+            tv:           p.tv,
+            exp:          now + USER_TOKEN_EXPIRY_SECS,
+            iat:          now,
+            account_type: p.account_type.map(|s| s.to_string()),
         },
         &EncodingKey::from_secret(secret.as_bytes()),
     )
