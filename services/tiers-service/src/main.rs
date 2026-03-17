@@ -61,15 +61,15 @@ fn tier_rank(tier: &str) -> u32 {
         "guest"     => 0,
         "regular"   => 1,
         "premium"   => 2,
-        "developer" => 3,
+        "unrestricted" => 3,
         _           => 0,
     }
 }
 
 /// Mirrors the static `TIERS` object in the JS version.
-/// developer is code-only until T-01 (admin UI).
+/// unrestricted is code-only until T-01 (admin UI).
 fn is_known_tier(tier: &str) -> bool {
-    matches!(tier, "guest" | "regular" | "premium" | "developer")
+    matches!(tier, "guest" | "regular" | "premium" | "unrestricted")
 }
 
 // ── Feature definitions ───────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ fn static_tiers() -> HashMap<String, Tier> {
         ("guest".into(),     Tier { name: "guest".into(),     label: "Guest".into(),     cls: "secondary".into(), rank: 0, nearby_radius_m: 500,       message_radius_m: None }),
         ("regular".into(),   Tier { name: "regular".into(),   label: "Regular".into(),   cls: "primary".into(),   rank: 1, nearby_radius_m: 1_000,     message_radius_m: Some(1000) }),
         ("premium".into(),   Tier { name: "premium".into(),   label: "Premium".into(),   cls: "warning".into(),   rank: 2, nearby_radius_m: 23_000,    message_radius_m: Some(23_000) }),
-        ("developer".into(), Tier { name: "developer".into(), label: "Developer".into(), cls: "warning".into(),   rank: 3, nearby_radius_m: 9_700_000, message_radius_m: Some(9_700_000) })
+        ("unrestricted".into(), Tier { name: "unrestricted".into(), label: "Unrestricted".into(), cls: "warning".into(), rank: 3, nearby_radius_m: 9_700_000, message_radius_m: Some(9_700_000) })
     ])
 }
 
