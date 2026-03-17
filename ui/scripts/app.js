@@ -32,7 +32,7 @@
   var WARM_TTL = 5 * 60 * 1000; // 5 min — re-warm if tab is idle for a long time
   var last = parseInt(sessionStorage.getItem(WARM_KEY) || '0', 10);
   if (Date.now() - last < WARM_TTL) return;
-  fetch((window.BOOMBOOM_API_URL || 'https://boom.up.railway.app/api') + '/health')
+  fetch((window.BOOMBOOM_API_URL || '') + '/health')
     .then(function (r) {
       console.log('[warm-up] ' + r.status + (r.status === 503 ? ' (cold-start)' : ' — ready'));
       sessionStorage.setItem(WARM_KEY, Date.now());

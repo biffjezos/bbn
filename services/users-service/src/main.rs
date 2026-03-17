@@ -229,7 +229,7 @@ struct UpdateMeBody {
     #[serde(rename = "publicKey")]
     public_key:            Option<String>,
     #[serde(rename = "encryptedPrivateKey")]
-    encrypted_private_key: Option<String>,
+    encrypted_private_key: Option<serde_json::Value>,
 }
 
 async fn put_me(
@@ -326,8 +326,10 @@ async fn put_me(
 
         // Accept re-encrypted key blob (atomic with password change)
         if let (Some(pk), Some(epk)) = (body.public_key, body.encrypted_private_key) {
-            update.insert("publicKey", pk);
-            update.insert("encryptedPrivateKey", epk);
+            if let Ok(epk_bson) = mongodb::bson::to_bson(&epk) {
+                update.insert("publicKey", pk);
+                update.insert("encryptedPrivateKey", epk_bson);
+            }
         }
     }
 
@@ -592,7 +594,7 @@ struct KeysBody {
     #[serde(rename = "publicKey")]
     public_key:            Option<String>,
     #[serde(rename = "encryptedPrivateKey")]
-    encrypted_private_key: Option<String>,
+    encrypted_private_key: Option<serde_json::Value>,
 }
 
 async fn put_keys(
@@ -604,6 +606,10 @@ async fn put_keys(
     let (Some(pk), Some(epk)) = (body.public_key, body.encrypted_private_key) else {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "publicKey and encryptedPrivateKey required." }))).into_response();
     };
+    let epk_bson = match mongodb::bson::to_bson(&epk) {
+        Ok(b)  => b,
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid encryptedPrivateKey." }))).into_response(),
+    };
 
     let oid = match safe_object_id(&claims.sub) {
         Some(id) => id,
@@ -611,7 +617,7 @@ async fn put_keys(
     };
 
     match state.db.collection::<Document>("users")
-        .update_one(doc! { "_id": oid }, doc! { "$set": { "publicKey": pk, "encryptedPrivateKey": epk } })
+        .update_one(doc! { "_id": oid }, doc! { "$set": { "publicKey": pk, "encryptedPrivateKey": epk_bson } })
         .await
     {
         Ok(_)  => Json(json!({ "ok": true })).into_response(),
@@ -637,8 +643,9 @@ async fn get_keys(
         .await
     {
         Ok(Some(d)) => {
-            let pk  = d.get_str("publicKey").ok();
-            let epk = d.get_str("encryptedPrivateKey").ok();
+            let pk:  Option<&str>          = d.get_str("publicKey").ok();
+            let epk: Option<serde_json::Value> = d.get("encryptedPrivateKey")
+                .and_then(|b| mongodb::bson::from_bson(b.clone()).ok());
             Json(json!({ "publicKey": pk, "encryptedPrivateKey": epk })).into_response()
         }
         Ok(None)    => (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
