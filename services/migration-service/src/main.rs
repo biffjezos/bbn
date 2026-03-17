@@ -46,7 +46,9 @@ impl Config {
             ));
         }
         Ok(Self {
-            port:           env::var("MIGRATION_PORT").ok()
+            port:           env::var("PORT")
+                                .or_else(|_| env::var("MIGRATION_PORT"))
+                                .ok()
                                 .and_then(|p| p.parse().ok())
                                 .unwrap_or(3099),
             mongo_uri:      env::var("MONGO_URI").unwrap(),
