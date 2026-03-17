@@ -2,8 +2,9 @@
 ///
 /// # Service token guard
 /// Add `_: ServiceToken` as a handler parameter to require a valid
-/// inter-service JWT on that route. The extractor reads `JwtSecret`
-/// from app state via `FromRef`.
+/// inter-service JWT on that route. The extractor reads `ServiceSecret`
+/// from app state via `FromRef`. This is intentionally separate from
+/// `JwtSecret` so the two secrets have independent rotation and blast radii.
 ///
 /// # User token decode
 /// Call `decode_user_token(raw, secret)` to decode a user/guest JWT.
@@ -21,12 +22,18 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// ── Shared secret newtype ─────────────────────────────────────────────────────
+// ── Shared secret newtypes ────────────────────────────────────────────────────
 
-/// Wraps the JWT secret so it can be extracted from app state via `FromRef`.
+/// Wraps the user JWT secret so it can be extracted from app state via `FromRef`.
 /// Each service's `AppState` must implement `FromRef<AppState> for JwtSecret`.
 #[derive(Clone)]
 pub struct JwtSecret(pub String);
+
+/// Wraps the inter-service JWT secret so it can be extracted from app state via `FromRef`.
+/// Kept separate from `JwtSecret` so the two secrets have independent blast radii.
+/// Each service's `AppState` must implement `FromRef<AppState> for ServiceSecret`.
+#[derive(Clone)]
+pub struct ServiceSecret(pub String);
 
 // ── Service token extractor ───────────────────────────────────────────────────
 
@@ -42,13 +49,13 @@ pub struct ServiceToken(pub ServiceClaims);
 
 impl<S> FromRequestParts<S> for ServiceToken
 where
-    JwtSecret: FromRef<S>,
+    ServiceSecret: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = (StatusCode, Json<serde_json::Value>);
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let JwtSecret(secret) = JwtSecret::from_ref(state);
+        let ServiceSecret(secret) = ServiceSecret::from_ref(state);
 
         let raw = parts
             .headers
@@ -244,6 +251,124 @@ pub fn issue_user_token(
         },
         &EncodingKey::from_secret(secret.as_bytes()),
     )
+}
+
+// ── RequireRegistered extractor ───────────────────────────────────────────────
+
+/// Wraps [`AuthToken`] and additionally rejects guest tokens.
+/// Use on routes that require a registered account (`role` == `"user"` or `"admin"`).
+pub struct RequireRegistered(pub UserClaims);
+
+impl<S> FromRequestParts<S> for RequireRegistered
+where
+    JwtSecret: FromRef<S>,
+    mongodb::Database: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthToken(claims) = AuthToken::from_request_parts(parts, state).await?;
+        if !matches!(claims.role.as_str(), "user" | "admin") {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "Registered account required.",
+                    "code":  "REGISTERED_REQUIRED"
+                })),
+            ));
+        }
+        Ok(RequireRegistered(claims))
+    }
+}
+
+// ── AuthToken extractor (any role) ───────────────────────────────────────────
+
+/// Axum extractor that accepts any valid JWT: guest, user, or admin.
+///
+/// For registered roles (`"user"`, `"admin"`) also verifies `tokenVersion` against
+/// the DB, rejecting tokens that were invalidated by a password change or admin action.
+///
+/// Requires `JwtSecret` and `mongodb::Database` in app state (both via `FromRef`).
+/// Each service's `AppState` must implement:
+/// ```ignore
+/// impl FromRef<AppState> for JwtSecret { ... }
+/// impl FromRef<AppState> for mongodb::Database { ... }
+/// ```
+pub struct AuthToken(pub UserClaims);
+
+impl<S> FromRequestParts<S> for AuthToken
+where
+    JwtSecret: FromRef<S>,
+    mongodb::Database: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        use crate::models::UserTv;
+        use crate::mongo::safe_object_id;
+        use mongodb::bson::doc;
+
+        let JwtSecret(secret) = JwtSecret::from_ref(state);
+        let db = mongodb::Database::from_ref(state);
+
+        let raw = parts
+            .headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        let token = raw
+            .strip_prefix("Bearer ")
+            .or_else(|| raw.strip_prefix("bearer "))
+            .unwrap_or(raw)
+            .trim();
+
+        if token.is_empty() {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "No token provided.", "code": "NO_TOKEN" })),
+            ));
+        }
+
+        let claims = decode_user_token(token, &secret).map_err(|_| (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "Token invalid or expired.", "code": "TOKEN_INVALID" })),
+        ))?;
+
+        // Verify tokenVersion for registered users — rejects tokens invalidated by
+        // password changes or admin role/tier changes.
+        if matches!(claims.role.as_str(), "user" | "admin") {
+            let oid = safe_object_id(&claims.sub).ok_or_else(|| (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "Token revoked.", "code": "TOKEN_REVOKED" })),
+            ))?;
+
+            let user = db
+                .collection::<UserTv>("users")
+                .find_one(doc! { "_id": oid })
+                .await
+                .map_err(|_| (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": "Internal error." })),
+                ))?
+                .ok_or_else(|| (
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({ "error": "Token revoked.", "code": "TOKEN_REVOKED" })),
+                ))?;
+
+            let db_tv = user.token_version.unwrap_or(0).max(0) as u32;
+            if db_tv != claims.tv.unwrap_or(0) {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({ "error": "Token revoked.", "code": "TOKEN_REVOKED" })),
+                ));
+            }
+        }
+
+        Ok(AuthToken(claims))
+    }
 }
 
 /// Sign a guest JWT.

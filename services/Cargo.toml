@@ -1,16 +1,18 @@
 [workspace]
-members  = ["common", "tiers-service", "auth-service"]
+members  = ["common", "tiers-service", "auth-service", "location-service", "blocks-service", "favourites-service", "messages-service", "users-service", "gateway"]
 resolver = "2"
 
 [workspace.dependencies]
-axum          = "0.8"
-tokio         = { version = "1", features = ["full"] }
-mongodb       = "3"
-jsonwebtoken  = "9"
-serde         = { version = "1", features = ["derive"] }
-serde_json    = "1"
-futures-util  = "0.3"
-anyhow        = "1"
-tracing       = "0.1"
+axum               = "0.8"
+tokio              = { version = "1", features = ["full"] }
+mongodb            = "3"
+jsonwebtoken       = "9"
+serde              = { version = "1", features = ["derive"] }
+serde_json         = "1"
+futures-util       = "0.3"
+anyhow             = "1"
+tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-bcrypt        = "0.15"
+bcrypt             = "0.15"
+reqwest            = { version = "0.12", features = ["json"] }
+tower-http         = { version = "0.6", features = ["cors"] }

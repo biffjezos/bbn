@@ -34,6 +34,6 @@ Do not remove tickets unless the owner explicitly says to.
 - Only load files relevant to the task. If it means you have to read all of them you have the permission. Think first, be token-sparing. It's good for the environment.
 - **If you identify a change you are not allowed to make** (e.g. requires backend changes, infrastructure, or affects the business model), add it to `.claude/TICKETS.md` with a short rationale and prerequisites. Do not implement it.
 - **Always create pull requests targeting `dev`**, not main or any other branch.
-- After each commit, tell me which `/services` must be redeployed and if any environment variables must be added, updated or can be removed from a service.
+- After each commit, inform about any changes that need to be made in the backend: environment variables to add, update, or remove per service; Railway settings or paths that need updating; any other infrastructure-side change required.
 - If you cannot find an error for the bug reported, do not fucking invent (hallucinate) errors that don't exist. Analyze, if other components of the app are down, running incorrectly, if all environment variables are set, URLs are correct.
 - If the project owner suggests improvements that are a chore to implement, have severe implications, stray from a privacy-by-design approach, or are not feasible: explain why, suggest a better solution and a path to the finished product by feasible milestones.

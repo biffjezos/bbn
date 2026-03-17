@@ -1,11 +1,13 @@
 # ── Build stage ───────────────────────────────────────────────
 FROM rust:latest AS builder
 WORKDIR /build
-# Copy workspace files from services/ subdirectory (build context is repo root)
 COPY services/Cargo.toml services/rust-toolchain.toml ./
 COPY services/common ./common
+# Stub workspace members not being built
 COPY services/tiers-service/Cargo.toml ./tiers-service/Cargo.toml
 RUN mkdir -p ./tiers-service/src && echo 'fn main(){}' > ./tiers-service/src/main.rs
+COPY services/auth-service/Cargo.toml ./auth-service/Cargo.toml
+RUN mkdir -p ./auth-service/src && echo 'fn main(){}' > ./auth-service/src/main.rs
 COPY services/location-service/Cargo.toml ./location-service/Cargo.toml
 RUN mkdir -p ./location-service/src && echo 'fn main(){}' > ./location-service/src/main.rs
 COPY services/blocks-service/Cargo.toml ./blocks-service/Cargo.toml
@@ -14,18 +16,17 @@ COPY services/favourites-service/Cargo.toml ./favourites-service/Cargo.toml
 RUN mkdir -p ./favourites-service/src && echo 'fn main(){}' > ./favourites-service/src/main.rs
 COPY services/messages-service/Cargo.toml ./messages-service/Cargo.toml
 RUN mkdir -p ./messages-service/src && echo 'fn main(){}' > ./messages-service/src/main.rs
-COPY services/users-service/Cargo.toml ./users-service/Cargo.toml
-RUN mkdir -p ./users-service/src && echo 'fn main(){}' > ./users-service/src/main.rs
-COPY services/auth-service ./auth-service
+# Build target
+COPY services/users-service ./users-service
 COPY services/gateway/Cargo.toml ./gateway/Cargo.toml
 RUN mkdir -p ./gateway/src && echo 'fn main(){}' > ./gateway/src/main.rs
-RUN cargo build --release -p auth-service
+RUN cargo build --release -p users-service
 
 # ── Runtime stage ─────────────────────────────────────────────
 FROM debian:bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates libssl3 \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /build/target/release/auth-service /usr/local/bin/auth-service
+COPY --from=builder /build/target/release/users-service /usr/local/bin/users-service
 EXPOSE 8080
-CMD ["/usr/local/bin/auth-service"]
+CMD ["/usr/local/bin/users-service"]
