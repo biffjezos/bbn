@@ -232,7 +232,7 @@ optional `label` field to the radius value — no separate collection needed.
 - `services/Cargo.toml` — workspace updated with all new members and tower-http dep
 - **Deferred (see T-08):** signed internal auth context (X-Auth-* headers); requires updating all 7 downstream services + gateway simultaneously
 
-**New env vars for gateway:** `JWT_SECRET`, `AUTH_SERVICE_URL`, `USERS_SERVICE_URL`, `LOCATION_SERVICE_URL`, `MESSAGES_SERVICE_URL`, `FAVOURITES_SERVICE_URL`, `TIERS_SERVICE_URL`, `BLOCKS_SERVICE_URL`, `MIGRATION_SERVICE_URL`, `ALLOWED_ORIGINS` (optional, default: `https://biffjezos.github.io`), `PORT` (optional, default: 8080). **No separate service secret** — `JWT_SECRET` is used for both user token verification and inter-service `X-Service-Token` generation.
+**New env vars for gateway:** `JWT_SECRET`, `SERVICE_SECRET`, `AUTH_SERVICE_URL`, `USERS_SERVICE_URL`, `LOCATION_SERVICE_URL`, `MESSAGES_SERVICE_URL`, `FAVOURITES_SERVICE_URL`, `TIERS_SERVICE_URL`, `BLOCKS_SERVICE_URL`, `MIGRATION_SERVICE_URL`, `ALLOWED_ORIGINS` (optional, default: `https://biffjezos.github.io`), `PORT` (optional, default: 8080). **`JWT_SECRET` and `SERVICE_SECRET` are separate** — `JWT_SECRET` signs user/guest tokens; `SERVICE_SECRET` signs inter-service `X-Service-Token` JWTs. Separating them means a leaked user secret cannot be used to forge service requests, and vice versa. All eight Rust services require both.
 
 ### T-04b — What was implemented (2026-03-16)
 
