@@ -609,7 +609,7 @@ This does not require a `roles` collection and can be implemented at any time.
 
 ## T-10 — Restore migration-service.js
 
-**Status:** Not started. Regression introduced 2026-03-17.
+**Status:** ✅ Done. Manually restored by Project Owner. migration-service.js now lives in `/services/migration-service/migration-service.js`
 
 ### Problem
 
