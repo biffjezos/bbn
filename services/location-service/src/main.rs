@@ -620,7 +620,27 @@ async fn get_user_location(
             "lon":       loc.lon,
             "updatedAt": loc.updated_at.to_string(),
         })).into_response(),
-        Ok(None)  => (StatusCode::NOT_FOUND, Json(json!({ "error": "Location not found." }))).into_response(),
+        Ok(None) => {
+            // Not in the live-location collection — check if this is a venue
+            // with a fixed position stored in the users collection.
+            let oid = mongodb::bson::oid::ObjectId::parse_str(&user_id).ok();
+            if let Some(oid) = oid {
+                match state.db
+                    .collection::<VenueDoc>("users")
+                    .find_one(doc! { "_id": oid, "accountType": "venue", "fixedLat": { "$exists": true } })
+                    .await
+                {
+                    Ok(Some(venue)) => return Json(json!({
+                        "lat":       venue.fixed_lat,
+                        "lon":       venue.fixed_lon,
+                        "updatedAt": "fixed",
+                    })).into_response(),
+                    Ok(None)  => {}
+                    Err(e) => eprintln!("[location/user/:id] venue fallback: {e}"),
+                }
+            }
+            (StatusCode::NOT_FOUND, Json(json!({ "error": "Location not found." }))).into_response()
+        }
         Err(e)    => { eprintln!("[location/user/:id] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
     }
 }

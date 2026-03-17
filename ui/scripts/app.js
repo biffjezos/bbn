@@ -566,7 +566,28 @@
 
   window.__authReady.then(function () {
     if (DEBUG) console.log('[Geo] Auth ready, starting geolocation');
-    if (isVenueAccount()) return; // venue accounts have fixed location — no GPS, no WS, no IP fallback
+    if (isVenueAccount()) {
+      // Fetch the fixed location from the profile and initialise the map.
+      // Connect WS so the gateway's nearby-push timer fires (PUT /location
+      // will be rejected by the backend — that's fine and harmless).
+      window.Api.getMe().then(function (data) {
+        var lat = data.fixedLat;
+        var lng = data.fixedLon;
+        if (typeof lat !== 'number' || typeof lng !== 'number') {
+          if (DEBUG) console.warn('[Geo] Venue has no fixedLat/fixedLon');
+          setStatus('location unavailable', 'off');
+          return;
+        }
+        window.GeoState.accuracy = 'fixed';
+        dispatchPosition(lat, lng);
+        setStatus('fixed location', 'live');
+        connectLocWS(); // receives geo:nearby pushes; onopen sends fixed pos to gateway
+      }).catch(function (e) {
+        if (DEBUG) console.warn('[Geo] Failed to load venue position:', e);
+        setStatus('location unavailable', 'off');
+      });
+      return;
+    }
     connectLocWS();
     startWatch();
   });
@@ -586,8 +607,9 @@
     if (_origOnLogin) _origOnLogin(data);
     // Reconnect WS with fresh user token (guest token no longer valid)
     closeLocWS();
-    // Venue accounts have a fixed location — do not push GPS position.
-    if (isVenueAccount()) return;
+    // Venue accounts have a fixed location — do not push GPS position,
+    // but reconnect the WS so nearby pushes keep working.
+    if (isVenueAccount()) { connectLocWS(); return; }
     connectLocWS();
     var pos = window.GeoState.pos;
     if (pos) {

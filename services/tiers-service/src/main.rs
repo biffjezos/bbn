@@ -550,7 +550,7 @@ async fn admin_delete_tier(
 
 // ── Startup seeder ────────────────────────────────────────────────────────────
 
-/// Upserts the three base tiers into MongoDB on startup.
+/// Upserts the four base tiers into MongoDB on startup.
 /// Uses $set for radius fields so corrections propagate to existing records,
 /// and $setOnInsert for immutable fields (name, label, cls, rank, createdAt).
 /// Does NOT create indexes (that remains migration 004's responsibility).
@@ -559,9 +559,10 @@ async fn seed_tiers(db: &Database) {
     let now = DateTime::now();
     // (name, label, cls, rank, nearbyRadiusM, messageRadiusM)
     let seeds: &[(&str, &str, &str, i32, i32, Option<i32>)] = &[
-        ("guest",   "Guest",   "secondary", 0, 500,   None),
-        ("regular", "Regular", "primary",   1, 1_000, Some(100)),
-        ("premium", "Premium", "warning",   2, 1_000, Some(1_000)),
+        ("guest",        "Guest",        "secondary", 0, 500,       None),
+        ("regular",      "Regular",      "primary",   1, 1_000,     Some(100)),
+        ("premium",      "Premium",      "warning",   2, 1_000,     Some(1_000)),
+        ("unrestricted", "Unrestricted", "warning",   3, 9_700_000, Some(9_700_000)),
     ];
     let mut seeded = 0u32;
     for &(name, label, cls, rank, nearby, msg) in seeds {
