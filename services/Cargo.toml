@@ -1,5 +1,5 @@
 [workspace]
-members  = ["common", "tiers-service", "auth-service", "location-service", "blocks-service", "favourites-service", "messages-service", "users-service", "gateway"]
+members  = ["common", "tiers-service", "auth-service", "location-service", "blocks-service", "favourites-service", "messages-service", "users-service", "gateway", "migration-service"]
 resolver = "2"
 
 [workspace.dependencies]
