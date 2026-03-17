@@ -428,6 +428,34 @@ single-instance deployment.
 - Venue login: same email/password, same JWT flow. Frontend detects
   `accountType: 'venue'` from the token and renders the venue profile view.
 
+### Venue profile editable fields — clarification (2026-03-17)
+
+**Admin-only fields (set via admin UI, not editable by venue itself):**
+- `venueName` — display name, set by admin on conversion. Currently editable
+  by the venue in `/profile` — **this must be removed**. Venue should not be
+  able to rename itself.
+- `address` — already read-only in the UI. Correct.
+- `fixedLat` / `fixedLon` — already read-only. Correct.
+
+**Venue-editable fields (venue manages via `/profile`):**
+- `openingHours` (string or structured, TBD) — e.g. "Mon–Fri 18:00–02:00".
+- `locationType` (string enum, TBD) — e.g. "bar", "club", "café", "restaurant",
+  "gallery", "other".
+
+**Implementation scope:**
+- `users-service`: accept `openingHours` and `locationType` in `PUT /users/me`
+  for venue accounts; reject `venueName` changes from venue self (admin-only).
+- `users-service GET /users/:id/profile`: include `openingHours` and
+  `locationType` in the public profile response for venue accounts.
+- `profile.js renderMyProfile`: remove `venueName` input; add `openingHours`
+  textarea and `locationType` select.
+- `profile.js renderPublicProfile`: show `openingHours` and `locationType`
+  when present on a venue profile.
+- `app.js openPinModal`: show `locationType` badge and `openingHours` line
+  in the map pin popup for venues.
+- **No admin UI changes required** — admin already sets `venueName` /
+  `address` / `fixedLat` / `fixedLon` on conversion.
+
 ### Owner's Comments
 
 - Not a high priority. Postponed until the rest is done. Remind me.
