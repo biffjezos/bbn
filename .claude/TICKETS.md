@@ -604,3 +604,93 @@ This does not require a `roles` collection and can be implemented at any time.
 ### Owner's Comments
 
 - 2026-03-16: Raised by owner — need ability to add/edit/remove roles with permissions. Custom roles and permissions require backend work; tracked here. Standalone self-modification guard (AUDIT 1.4) can be patched sooner.
+
+---
+
+## T-10 — Restore migration-service.js
+
+**Status:** Not started. Regression introduced 2026-03-17.
+
+### Problem
+
+`services/migration-service.js` was accidentally deleted in commit `4a8f547`
+("chore: retire Node.js services") along with the other Node.js services.
+TICKETS.md T-04c explicitly states "migration-service stays Node.js (intentional)".
+
+The gateway (`services/gateway/src/main.rs`) still calls
+`POST {MIGRATION_SERVICE_URL}/migrate/run` on every boot and logs an error if
+the service is unreachable. Without a running migration-service:
+
+- MongoDB TTL indexes for `messages` and `locations` are not applied on new
+  deployments (data is filtered in-query as a fallback, but not auto-purged at
+  the DB level — privacy regression for data at rest).
+- Migration `003_blocks_indexes` (unique index on `blocks`, index on
+  `blockedUserId`) is not applied — duplicate block documents can be inserted
+  (see also AUDIT.md 2.0 and 3.1-related context).
+- Migration `004_tiers_seed` is not applied — tiers-service falls back to
+  static tiers.
+
+### Fix
+
+Restore `services/migration-service.js` from git history (last known good:
+commit `09f266b` or earlier) and redeploy to Railway. The file is ~179 lines of
+Node.js. The Railway service for migration-service was not removed, so
+redeployment should be straightforward once the file is back in the repo.
+
+### Prerequisites
+
+None — this is a pure restoration. The gateway already expects it.
+
+### Priority
+
+**HIGH** — data at rest is not being auto-purged from MongoDB; this is a
+privacy regression in a privacy-by-design app.
+
+---
+
+## T-11 — Enforce 144-character plaintext limit on message send
+
+**Status:** Not started.
+
+### Problem
+
+The UI input counter in `ui/scripts/messages.js` (line 254) correctly counts
+down from 144 characters, but there is no enforcement on send. A user can type
+more than 144 characters and the message will be submitted without error. The
+messages-service validates only the *encrypted* text length (`MESSAGE_MAX_CHARS
+= 4096`), which is the ciphertext length, not the plaintext.
+
+The 144-character limit is intentional product behaviour. It must be enforced
+before encryption, on the client side.
+
+### Fix
+
+In `messages.js`, before calling `encryptFor()`, check `text.length > 144` and
+show an inline error instead of proceeding. No backend change required.
+
+### Prerequisites
+
+None.
+
+---
+
+## T-12 — Remove leftover `bbm_meet` localStorage key
+
+**Status:** Not started.
+
+### Problem
+
+`ui/scripts/auth.js` `clearUserStorage()` (line 44) removes a localStorage key
+`bbm_meet` that is not defined as a constant anywhere in the codebase. It
+appears to be a leftover from a removed feature. The key name is undocumented
+and may silently conflict with future features.
+
+### Fix
+
+Identify what `bbm_meet` was used for (git history), confirm it is fully
+retired, then remove the `localStorage.removeItem('bbm_meet')` line from
+`clearUserStorage()`.
+
+### Prerequisites
+
+None.
