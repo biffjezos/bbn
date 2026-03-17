@@ -160,9 +160,10 @@
       }).addTo(map);
     }
 
-    // Translucent view-radius circle
-    if (radius > 0) {
-      const clr = isVenue ? 'rgba(255,255,255,0.45)' : sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
+    // Translucent view-radius circle — suppressed for venues: a radius of tens of
+    // thousands of km renders as a distorted oval on Mercator and conveys nothing useful.
+    if (radius > 0 && !isVenue) {
+      const clr = sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
       if (selfCircle) {
         selfCircle.setLatLng([lat, lng]);
         selfCircle.setRadius(radius);
