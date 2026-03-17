@@ -287,9 +287,10 @@ async function renderPublicProfile() {
   const viewerIsReg = isRegistered();
 
   try {
-    const profile = await window.Api.getProfile(userId);
-    const cls     = sexClass(profile.sex);
-    const emoji   = sexEmoji(profile.sex);
+    const profile   = await window.Api.getProfile(userId);
+    const isVenue   = profile.accountType === 'venue';
+    const cls       = isVenue ? 'venue' : sexClass(profile.sex);
+    const avatarInner = isVenue ? '<i class="bi bi-house-fill"></i>' : sexEmoji(profile.sex);
     const threadHref = `${window.BOOMBOOM_BASE || ''}/messages/thread/?uid=${encodeURIComponent(userId)}&name=${encodeURIComponent(profile.nickname || displayName)}`;
 
     let isFav = false;
@@ -336,9 +337,12 @@ async function renderPublicProfile() {
     page.innerHTML = `
       <div class="bbm-pub-profile-hero">
         <div class="container-fluid px-4 px-md-5">
-          <div class="bbm-pub-avatar ${cls}">${emoji}</div>
+          <div class="bbm-pub-avatar ${cls}">${avatarInner}</div>
           <h1 class="bbm-pub-name">${escHtml(profile.nickname || displayName)}</h1>
-          <p class="bbm-pub-meta">${profile.age ? escHtml(String(profile.age)) + ' · ' : ''}${sexLabel(profile.sex)}</p>
+          ${isVenue
+            ? `<p class="bbm-pub-meta"><i class="bi bi-house-fill me-1"></i>Venue</p>`
+            : `<p class="bbm-pub-meta">${profile.age ? escHtml(String(profile.age)) + ' · ' : ''}${sexLabel(profile.sex)}</p>`
+          }
           ${actionBlock}
         </div>
       </div>

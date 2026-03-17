@@ -602,7 +602,6 @@ async fn post_online_batch(
 
 async fn get_user_location(
     ServiceToken(svc): ServiceToken,
-    AuthToken(_claims): AuthToken,
     State(state): State<AppState>,
     Path(user_id): Path<String>,
 ) -> impl IntoResponse {

@@ -606,9 +606,9 @@ This does not require a `roles` collection and can be implemented at any time.
 
 ---
 
-## T-10 — Restore migration-service.js
+## T-10 — Restore migration-service
 
-**Status:** ✅ Done. Manually restored by Project Owner. migration-service.js now lives in `/services/migration-service/migration-service.js`
+**Status:** 🔲 Railway deployment unverified. A Rust port exists at `services/migration-service/src/main.rs`. Project owner reports service not working (2026-03-17).
 
 ### Problem
 

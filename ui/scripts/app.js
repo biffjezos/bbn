@@ -260,13 +260,20 @@
       var targetIsReg = user.isRegistered;
       var accuracy    = user.accuracy;
 
+      var isVenuePin = user.accountType === 'venue';
       var avatarEl = $('pinAvatar');
-      if (avatarEl) avatarEl.className = 'pin-avatar ' + (sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
+      if (avatarEl) avatarEl.className = 'pin-avatar ' + (isVenuePin ? 'venue' : sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest');
       var iconEl = $('pinAvatarIcon');
-      if (iconEl) iconEl.textContent = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊';
+      if (iconEl) {
+        if (isVenuePin) {
+          iconEl.innerHTML = '<i class="bi bi-house-fill"></i>';
+        } else {
+          iconEl.textContent = sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊';
+        }
+      }
       if ($('pinNickname')) $('pinNickname').textContent = nickname || 'Anonymous';
-      if ($('pinAge'))      $('pinAge').textContent      = age ? age + ' yrs' : '—';
-      if ($('pinSex'))      $('pinSex').textContent      = sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—';
+      if ($('pinAge'))      $('pinAge').textContent      = isVenuePin ? '—' : (age ? age + ' yrs' : '—');
+      if ($('pinSex'))      $('pinSex').textContent      = isVenuePin ? 'Venue' : (sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—');
 
       if (targetIsReg && userId && !age) {
         window.Api.getProfile(userId).then(function(profile) {

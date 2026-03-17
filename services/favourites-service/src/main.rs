@@ -142,6 +142,16 @@ struct LocationEntry {
 }
 
 #[derive(Deserialize)]
+struct VenuePosition {
+    #[serde(rename = "_id")]
+    id:        mongodb::bson::oid::ObjectId,
+    #[serde(rename = "fixedLat")]
+    fixed_lat: f64,
+    #[serde(rename = "fixedLon")]
+    fixed_lon: f64,
+}
+
+#[derive(Deserialize)]
 struct NotificationDoc {
     #[serde(rename = "_id")]
     id:            mongodb::bson::oid::ObjectId,
@@ -470,7 +480,7 @@ async fn post_range_sync(
     let cutoff = BsonDateTime::from_millis(
         SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64 - location_ttl_ms
     );
-    let other_locs: Vec<LocationEntry> = match state.db
+    let live_locs: Vec<LocationEntry> = match state.db
         .collection::<LocationEntry>("locations")
         .find(doc! { "userId": { "$in": &other_ids }, "updatedAt": { "$gt": cutoff } })
         .projection(doc! { "userId": 1, "lat": 1, "lon": 1 })
@@ -479,6 +489,31 @@ async fn post_range_sync(
         Ok(c)  => c.try_collect().await.unwrap_or_default(),
         Err(e) => { eprintln!("[range-sync] find locations: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
+
+    // Also include venue accounts (fixed location, not in live-locations collection).
+    let live_ids: std::collections::HashSet<&str> = live_locs.iter().map(|l| l.user_id.as_str()).collect();
+    let venue_oids: Vec<_> = other_ids.iter()
+        .filter(|id| !live_ids.contains(id.as_str()))
+        .filter_map(|id| safe_object_id(id))
+        .collect();
+    let venue_locs: Vec<LocationEntry> = if venue_oids.is_empty() {
+        vec![]
+    } else {
+        match state.db
+            .collection::<VenuePosition>("users")
+            .find(doc! { "_id": { "$in": &venue_oids }, "accountType": "venue", "fixedLat": { "$exists": true } })
+            .projection(doc! { "_id": 1, "fixedLat": 1, "fixedLon": 1 })
+            .await
+        {
+            Ok(c) => c.try_collect::<Vec<_>>().await.unwrap_or_default()
+                .into_iter()
+                .map(|v| LocationEntry { user_id: v.id.to_hex(), lat: v.fixed_lat, lon: v.fixed_lon })
+                .collect(),
+            Err(e) => { eprintln!("[range-sync] venue positions: {e}"); vec![] }
+        }
+    };
+
+    let other_locs: Vec<LocationEntry> = live_locs.into_iter().chain(venue_locs).collect();
 
     if other_locs.is_empty() {
         return Json(json!({ "ok": true, "updated": 0 })).into_response();

@@ -128,9 +128,18 @@
 
   // ── Self marker + radius circle ───────────────────────────────
 
+  function getSelfAccountType() {
+    try {
+      const t = window.Auth?.getToken?.();
+      return t ? JSON.parse(atob(t.split('.')[1])).account_type || null : null;
+    } catch { return null; }
+  }
+
   function placeSelfMarker(lat, lng) {
-    const sex    = window.Auth?.getSex?.() || null;
-    const radius = viewRadius;
+    const sex         = window.Auth?.getSex?.() || null;
+    const accountType = getSelfAccountType();
+    const isVenue     = accountType === 'venue';
+    const radius      = viewRadius;
 
     if (selfMarker) {
       selfMarker.setLatLng([lat, lng]);
@@ -139,20 +148,21 @@
       // Rebuilding on every position update would prevent the compass from stabilising.
       if (sex !== lastSex) {
         lastSex = sex;
-        selfMarker.setIcon(makeLeafIcon(sex, true));
+        selfMarker.setIcon(makeLeafIcon(sex, true, accountType));
         // Reapply cached bearing after DOM replacement.
         if (lastBearing !== null) setSelfBearing(lastBearing);
       }
     } else {
       lastSex = sex;
       selfMarker = L.marker([lat, lng], {
-        icon:        makeLeafIcon(sex, true),
+        icon:        makeLeafIcon(sex, true, accountType),
         zIndexOffset: -1000,   // render below all other markers so nearby pins stay clickable
       }).addTo(map);
     }
 
-    // Translucent view-radius circle
-    if (radius > 0) {
+    // Translucent view-radius circle — not drawn for venue accounts (fixed position,
+    // huge radii distort badly in Mercator projection at normal zoom levels).
+    if (radius > 0 && !isVenue) {
       const clr = sex === 'f' ? '#e8186d' : sex === 'm' ? '#0eb8e8' : '#ffd200';
       if (selfCircle) {
         selfCircle.setLatLng([lat, lng]);
