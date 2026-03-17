@@ -98,17 +98,16 @@ own key) or by an admin with an active, approved `access_request` (T-13 gate).
 1. Venue owner registers a normal account (regular or premium tier) via the app.
 2. Venue owner contacts admin out-of-band (email or any channel) to request conversion.
 3. Admin opens admin UI → finds user → clicks "Convert to Venue".
-4. Admin fills in fixed venue fields: venueName, address, fixedLat, fixedLon,
-   public contact email (can differ from login email).
+4. Admin fills in fixed venue fields: venueName, address, fixedLat, fixedLon.
 5. Backend: $unset { age, sex } on the user document; $set { accountType: 'venue',
-   venueName, address, fixedLat, fixedLon, venueEmail }; $inc { tokenVersion: 1 }.
+   venueName, address, fixedLat, fixedLon }; $inc { tokenVersion: 1 }.
    Preserved: email (login), passwordHash, publicKey, encryptedPrivateKey, createdAt.
 6. Backend writes (or upserts) a permanent location doc: { userId, lat: fixedLat,
    lon: fixedLon, permanent: true, updatedAt: now }.
 7. Venue owner logs out and back in → receives new JWT with accountType: 'venue'.
 8. Frontend detects accountType === 'venue' and renders venue profile / edit form.
 9. Venue owner fills in owner-editable fields: description, openingHours,
-   specialOffers (free text), website URL. Saved via PUT /users/me.
+   specialOffers (free text). Saved via PUT /users/me.
 ```
 
 ### DB document additions
@@ -116,12 +115,11 @@ own key) or by an admin with an active, approved `access_request` (T-13 gate).
 **User document (venue):**
 ```json
 {
-  "accountType": "venue",
+  "accountType":  "venue",
   "venueName":    "The Rusty Anchor",
   "address":      "12 Harbour St",
   "fixedLat":     51.5074,
   "fixedLon":     -0.1278,
-  "venueEmail":   "info@rustyanchor.example",
   "description":  "...",
   "openingHours": "Mon–Sun 12:00–23:00",
   "specialOffers":"Happy hour 17:00–19:00"
@@ -129,12 +127,23 @@ own key) or by an admin with an active, approved `access_request` (T-13 gate).
 ```
 `age` and `sex` are removed (`$unset`) on conversion.
 `email`, `passwordHash`, `publicKey`, `encryptedPrivateKey`, `createdAt` are untouched.
+No contact fields — users reach venues via in-app messaging when in range.
 
 **Location document (venue):**
 ```json
 { "userId": "...", "lat": 51.5074, "lon": -0.1278, "permanent": true, "updatedAt": "..." }
 ```
 `permanent: true` means location-service never expires this entry from the nearby list.
+
+### Confirmed design decisions (2026-03-17)
+
+| # | Decision |
+|---|---|
+| Messaging | Bidirectional favourites required (both must favourite each other), same as users. Future improvement: one-directional — user favourites venue implicitly grants venue send permission to that user while in range. |
+| Search & favourites | Venues appear in user search and favourites lists, treated identically to user accounts. Remove the `$ne: 'venue'` exclusion from search. |
+| Reverse conversion | Not supported. Venue accounts are one-way. Inactivity deletion after 90 days (same policy as users — no code change needed). Account owner can re-register with the same email as a user account after deletion. |
+| Tiers | Same semantics as users. `premium` = wider range + messaging, which is meaningful for venues. |
+| Contact info | No contact fields. No `venueEmail`. Messaging is the only contact channel — in range, favourites-gated, same as users. |
 
 ### What needs to change
 
@@ -148,8 +157,8 @@ own key) or by an admin with an active, approved `access_request` (T-13 gate).
 - New `PATCH /admin/users/:id/account-type` endpoint (admin only): accepts venue fields, $unsets user fields, $sets venue fields, bumps tokenVersion, upserts permanent location doc.
 - `UserForToken` + `make_token`: include `accountType`.
 - `ProfileDoc`: include venue fields so `/users/:id/profile` returns them.
-- `PUT /users/me`: allow venue-editable fields (`description`, `openingHours`, `specialOffers`, `website`); block modification of fixed fields (`venueName`, `address`, `fixedLat`, `fixedLon`) by non-admin.
-- `GET /users/search`: exclude `accountType: 'venue'` from results (venues are found via map, not search).
+- `PUT /users/me`: allow venue-editable fields (`description`, `openingHours`, `specialOffers`); block modification of fixed fields (`venueName`, `address`, `fixedLat`, `fixedLon`) by non-admin.
+- `GET /users/search`: venues appear in results (same as users). No exclusion needed.
 
 **`services/auth-service/src/main.rs`**:
 - Read `accountType` from DB and pass to `issue_user_token` on login and register.
@@ -173,16 +182,6 @@ own key) or by an admin with an active, approved `access_request` (T-13 gate).
 | `ui/scripts/app.js` | Map pin: `bi-house-fill` icon for venues; pin modal shows venueName + address + link to profile |
 | `ui/_layouts/default.html` or `profile.html` | Venue profile section (no age/sex; add venue fields) |
 
-### Open questions
-
-| # | Question |
-|---|---|
-| OQ-1 | Can venues message users first, or only reply? (Favourites model implies mutual — confirm.) |
-| OQ-2 | Should venues appear in the favourites search/list? (Probably yes — "follow a venue".) |
-| OQ-3 | Can a venue be converted back to a regular user account? (Admin: $set accountType: 'user', restore age/sex fields?) |
-| OQ-4 | Tier semantics for venues: does `regular` vs `premium` mean anything? Or is `venue` its own implicit tier? |
-| OQ-5 | `venueEmail` on the profile — displayed publicly? Or only to users who have messaged the venue? |
-
 ### Complexity estimate
 
 Moderate. The `accountType` addition to `common/auth.rs` is the most careful
@@ -197,6 +196,7 @@ infrastructure or new services. Realistically 1–2 sessions.
   → admin converts. Fixed fields set by admin; variable fields (opening hours,
   special offers, description) set by venue owner on first login.
   Feasible to implement now — all prerequisites done.
+- 2026-03-17: All open questions resolved — see "Confirmed design decisions" above.
 
 ---
 
