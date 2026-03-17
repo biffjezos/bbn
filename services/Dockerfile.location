@@ -13,6 +13,8 @@ COPY services/blocks-service/Cargo.toml ./blocks-service/Cargo.toml
 RUN mkdir -p ./blocks-service/src && echo 'fn main(){}' > ./blocks-service/src/main.rs
 # Build target
 COPY services/location-service ./location-service
+COPY services/favourites-service/Cargo.toml ./favourites-service/Cargo.toml
+RUN mkdir -p ./favourites-service/src && echo 'fn main(){}' > ./favourites-service/src/main.rs
 RUN cargo build --release -p location-service
 
 # ── Runtime stage ─────────────────────────────────────────────
