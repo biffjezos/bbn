@@ -6,6 +6,8 @@ COPY services/Cargo.toml services/rust-toolchain.toml ./
 COPY services/common ./common
 COPY services/tiers-service/Cargo.toml ./tiers-service/Cargo.toml
 RUN mkdir -p ./tiers-service/src && echo 'fn main(){}' > ./tiers-service/src/main.rs
+COPY services/location-service/Cargo.toml ./location-service/Cargo.toml
+RUN mkdir -p ./location-service/src && echo 'fn main(){}' > ./location-service/src/main.rs
 COPY services/auth-service ./auth-service
 RUN cargo build --release -p auth-service
 
