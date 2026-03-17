@@ -18,7 +18,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use common::auth::{AdminUser, JwtSecret, ServiceToken};
+use common::auth::{AdminUser, JwtSecret, ServiceSecret, ServiceToken};
 use futures_util::TryStreamExt;
 use mongodb::{bson::{doc, oid::ObjectId, DateTime}, Client, Database};
 use serde::{Deserialize, Serialize};
@@ -28,15 +28,16 @@ use tokio::sync::RwLock;
 // ── Config ────────────────────────────────────────────────────────────────────
 
 struct Config {
-    port:       u16,
-    jwt_secret: String,
-    mongo_uri:  String,
-    db_name:    String,
+    port:           u16,
+    jwt_secret:     String,
+    service_secret: String,
+    mongo_uri:      String,
+    db_name:        String,
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let missing: Vec<&str> = ["JWT_SECRET", "MONGO_URI"]
+        let missing: Vec<&str> = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI"]
             .into_iter()
             .filter(|k| env::var(k).is_err())
             .collect();
@@ -44,10 +45,11 @@ impl Config {
             return Err(format!("FATAL: missing env vars: {}", missing.join(", ")));
         }
         Ok(Self {
-            port:       env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080),
-            jwt_secret: env::var("JWT_SECRET").unwrap(),
-            mongo_uri:  env::var("MONGO_URI").unwrap(),
-            db_name:    env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
+            port:           env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080),
+            jwt_secret:     env::var("JWT_SECRET").unwrap(),
+            service_secret: env::var("SERVICE_SECRET").unwrap(),
+            mongo_uri:      env::var("MONGO_URI").unwrap(),
+            db_name:        env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
         })
     }
 }
@@ -169,15 +171,17 @@ async fn load_tiers(cache: &RwLock<Option<TiersCache>>, db: &Database) -> HashMa
 
 #[derive(Clone)]
 struct AppState {
-    db:          Database,
-    jwt_secret:  JwtSecret,
-    tiers_cache: Arc<RwLock<Option<TiersCache>>>,
+    db:             Database,
+    jwt_secret:     JwtSecret,
+    service_secret: ServiceSecret,
+    tiers_cache:    Arc<RwLock<Option<TiersCache>>>,
 }
 
 impl FromRef<AppState> for JwtSecret {
-    fn from_ref(state: &AppState) -> Self {
-        state.jwt_secret.clone()
-    }
+    fn from_ref(state: &AppState) -> Self { state.jwt_secret.clone() }
+}
+impl FromRef<AppState> for ServiceSecret {
+    fn from_ref(state: &AppState) -> Self { state.service_secret.clone() }
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -606,8 +610,9 @@ async fn main() {
 
     let state = AppState {
         db,
-        jwt_secret:  JwtSecret(cfg.jwt_secret),
-        tiers_cache: Arc::new(RwLock::new(None)),
+        jwt_secret:     JwtSecret(cfg.jwt_secret),
+        service_secret: ServiceSecret(cfg.service_secret),
+        tiers_cache:    Arc::new(RwLock::new(None)),
     };
 
     // Route order: static segments (/tiers/info, /tiers/features, /tiers/check,

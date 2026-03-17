@@ -2,8 +2,9 @@
 ///
 /// # Service token guard
 /// Add `_: ServiceToken` as a handler parameter to require a valid
-/// inter-service JWT on that route. The extractor reads `JwtSecret`
-/// from app state via `FromRef`.
+/// inter-service JWT on that route. The extractor reads `ServiceSecret`
+/// from app state via `FromRef`. This is intentionally separate from
+/// `JwtSecret` so the two secrets have independent rotation and blast radii.
 ///
 /// # User token decode
 /// Call `decode_user_token(raw, secret)` to decode a user/guest JWT.
@@ -21,12 +22,18 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-// ── Shared secret newtype ─────────────────────────────────────────────────────
+// ── Shared secret newtypes ────────────────────────────────────────────────────
 
-/// Wraps the JWT secret so it can be extracted from app state via `FromRef`.
+/// Wraps the user JWT secret so it can be extracted from app state via `FromRef`.
 /// Each service's `AppState` must implement `FromRef<AppState> for JwtSecret`.
 #[derive(Clone)]
 pub struct JwtSecret(pub String);
+
+/// Wraps the inter-service JWT secret so it can be extracted from app state via `FromRef`.
+/// Kept separate from `JwtSecret` so the two secrets have independent blast radii.
+/// Each service's `AppState` must implement `FromRef<AppState> for ServiceSecret`.
+#[derive(Clone)]
+pub struct ServiceSecret(pub String);
 
 // ── Service token extractor ───────────────────────────────────────────────────
 
@@ -42,13 +49,13 @@ pub struct ServiceToken(pub ServiceClaims);
 
 impl<S> FromRequestParts<S> for ServiceToken
 where
-    JwtSecret: FromRef<S>,
+    ServiceSecret: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = (StatusCode, Json<serde_json::Value>);
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let JwtSecret(secret) = JwtSecret::from_ref(state);
+        let ServiceSecret(secret) = ServiceSecret::from_ref(state);
 
         let raw = parts
             .headers

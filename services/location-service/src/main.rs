@@ -19,7 +19,7 @@ use axum::{
     Router,
 };
 use common::{
-    auth::{AuthToken, JwtSecret, ServiceToken, UserClaims},
+    auth::{AuthToken, JwtSecret, ServiceSecret, ServiceToken, UserClaims},
     geo::haversine_distance,
     models::BlockDoc,
     service_token::ServiceTokenCache,
@@ -40,13 +40,14 @@ struct Config {
     mongo_uri:         String,
     db_name:           String,
     jwt_secret:        String,
+    service_secret:    String,
     fav_service_url:   String,
     tiers_service_url: String,
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let required = ["JWT_SECRET", "MONGO_URI", "FAV_SERVICE_URL", "TIERS_SERVICE_URL"];
+        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "FAV_SERVICE_URL", "TIERS_SERVICE_URL"];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
             return Err(format!(
@@ -59,6 +60,7 @@ impl Config {
             mongo_uri:         env::var("MONGO_URI").unwrap(),
             db_name:           env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
             jwt_secret:        env::var("JWT_SECRET").unwrap(),
+            service_secret:    env::var("SERVICE_SECRET").unwrap(),
             fav_service_url:   env::var("FAV_SERVICE_URL").unwrap(),
             tiers_service_url: env::var("TIERS_SERVICE_URL").unwrap(),
         })
@@ -97,6 +99,7 @@ struct TierRadiusCacheEntry {
 struct AppState {
     db:                  Database,
     jwt_secret:          String,
+    service_secret:      String,
     fav_service_url:     String,
     tiers_service_url:   String,
     http:                reqwest::Client,
@@ -109,7 +112,9 @@ struct AppState {
 impl FromRef<AppState> for JwtSecret {
     fn from_ref(state: &AppState) -> Self { JwtSecret(state.jwt_secret.clone()) }
 }
-
+impl FromRef<AppState> for ServiceSecret {
+    fn from_ref(state: &AppState) -> Self { ServiceSecret(state.service_secret.clone()) }
+}
 impl FromRef<AppState> for Database {
     fn from_ref(state: &AppState) -> Self { state.db.clone() }
 }
@@ -206,7 +211,7 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
         _ => 500.0,
     };
 
-    let svc_token = match state.svc_token_cache.get("location", &state.jwt_secret).await {
+    let svc_token = match state.svc_token_cache.get("location", &state.service_secret).await {
         Ok(t)  => t,
         Err(e) => { eprintln!("[location] tier radius: token error: {e}"); return fallback; }
     };
@@ -238,7 +243,7 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
 /// Fire-and-forget range-sync notification to favourites-service.
 fn notify_range_sync(state: AppState, user_id: String, lat: f64, lon: f64) {
     tokio::spawn(async move {
-        let svc_token = match state.svc_token_cache.get("location", &state.jwt_secret).await {
+        let svc_token = match state.svc_token_cache.get("location", &state.service_secret).await {
             Ok(t)  => t,
             Err(e) => { eprintln!("[location] range-sync: token error: {e}"); return; }
         };
@@ -565,6 +570,7 @@ async fn main() {
     let state = AppState {
         db,
         jwt_secret:         cfg.jwt_secret,
+        service_secret:     cfg.service_secret,
         fav_service_url:    cfg.fav_service_url,
         tiers_service_url:  cfg.tiers_service_url,
         http:               reqwest::Client::new(),

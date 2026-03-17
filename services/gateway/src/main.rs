@@ -93,16 +93,17 @@ struct HealthCache {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 struct Config {
-    port:          u16,
-    jwt_secret:    String,
-    auth_url:      String,
-    user_url:      String,
-    loc_url:       String,
-    msg_url:       String,
-    fav_url:       String,
-    tiers_url:     String,
-    blocks_url:    String,
-    migration_url: String,
+    port:           u16,
+    jwt_secret:     String,
+    service_secret: String,
+    auth_url:       String,
+    user_url:       String,
+    loc_url:        String,
+    msg_url:        String,
+    fav_url:        String,
+    tiers_url:      String,
+    blocks_url:     String,
+    migration_url:  String,
 }
 
 impl Config {
@@ -110,7 +111,7 @@ impl Config {
         let required = [
             "AUTH_SERVICE_URL", "USER_SERVICE_URL", "LOC_SERVICE_URL", "MSG_SERVICE_URL",
             "FAV_SERVICE_URL", "TIERS_SERVICE_URL", "BLOCKS_SERVICE_URL",
-            "MIGRATION_SERVICE_URL", "JWT_SECRET",
+            "MIGRATION_SERVICE_URL", "JWT_SECRET", "SERVICE_SECRET",
         ];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
@@ -118,8 +119,9 @@ impl Config {
                 missing.iter().map(|k| **k).collect::<Vec<_>>().join(", ")));
         }
         Ok(Self {
-            port:          env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3000),
-            jwt_secret:    env::var("JWT_SECRET").unwrap(),
+            port:           env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3000),
+            jwt_secret:     env::var("JWT_SECRET").unwrap(),
+            service_secret: env::var("SERVICE_SECRET").unwrap(),
             auth_url:      env::var("AUTH_SERVICE_URL").unwrap(),
             user_url:      env::var("USER_SERVICE_URL").unwrap(),
             loc_url:       env::var("LOC_SERVICE_URL").unwrap(),
@@ -137,6 +139,7 @@ impl Config {
 #[derive(Clone)]
 struct AppState {
     jwt_secret:      String,
+    service_secret:  String,
     auth_url:        String,
     user_url:        String,
     loc_url:         String,
@@ -185,7 +188,7 @@ fn bad_gw() -> axum::response::Response {
 }
 
 async fn get_svc_token(state: &AppState) -> Option<String> {
-    state.svc_token_cache.get("gateway", &state.jwt_secret).await.ok()
+    state.svc_token_cache.get("gateway", &state.service_secret).await.ok()
 }
 
 // ── Proxy ─────────────────────────────────────────────────────────────────────
@@ -921,7 +924,7 @@ async fn main() {
     println!("[gateway] Calling migration service…");
     match http
         .post(format!("{}/migrate/run", cfg.migration_url))
-        .header("X-Service-Token", svc_cache.get("gateway", &cfg.jwt_secret).await.unwrap_or_default())
+        .header("X-Service-Token", svc_cache.get("gateway", &cfg.service_secret).await.unwrap_or_default())
         .send().await
     {
         Ok(r) => match r.json::<Value>().await {
@@ -937,6 +940,7 @@ async fn main() {
 
     let state = AppState {
         jwt_secret:      cfg.jwt_secret,
+        service_secret:  cfg.service_secret,
         auth_url:        cfg.auth_url,
         user_url:        cfg.user_url,
         loc_url:         cfg.loc_url,

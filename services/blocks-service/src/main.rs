@@ -14,7 +14,7 @@ use axum::{
     Router,
 };
 use common::{
-    auth::{JwtSecret, RequireRegistered, ServiceToken},
+    auth::{JwtSecret, ServiceSecret, RequireRegistered, ServiceToken},
     mongo::safe_object_id,
 };
 use futures_util::TryStreamExt;
@@ -28,15 +28,16 @@ use serde_json::json;
 // ── Config ────────────────────────────────────────────────────────────────────
 
 struct Config {
-    port:       u16,
-    mongo_uri:  String,
-    db_name:    String,
-    jwt_secret: String,
+    port:           u16,
+    mongo_uri:      String,
+    db_name:        String,
+    jwt_secret:     String,
+    service_secret: String,
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let missing: Vec<_> = ["JWT_SECRET", "MONGO_URI"]
+        let missing: Vec<_> = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI"]
             .iter()
             .filter(|k| env::var(k).is_err())
             .collect();
@@ -47,10 +48,11 @@ impl Config {
             ));
         }
         Ok(Self {
-            port:       env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080),
-            mongo_uri:  env::var("MONGO_URI").unwrap(),
-            db_name:    env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
-            jwt_secret: env::var("JWT_SECRET").unwrap(),
+            port:           env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080),
+            mongo_uri:      env::var("MONGO_URI").unwrap(),
+            db_name:        env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
+            jwt_secret:     env::var("JWT_SECRET").unwrap(),
+            service_secret: env::var("SERVICE_SECRET").unwrap(),
         })
     }
 }
@@ -59,14 +61,17 @@ impl Config {
 
 #[derive(Clone)]
 struct AppState {
-    db:         Database,
-    jwt_secret: String,
+    db:             Database,
+    jwt_secret:     String,
+    service_secret: String,
 }
 
 impl FromRef<AppState> for JwtSecret {
     fn from_ref(state: &AppState) -> Self { JwtSecret(state.jwt_secret.clone()) }
 }
-
+impl FromRef<AppState> for ServiceSecret {
+    fn from_ref(state: &AppState) -> Self { ServiceSecret(state.service_secret.clone()) }
+}
 impl FromRef<AppState> for Database {
     fn from_ref(state: &AppState) -> Self { state.db.clone() }
 }
@@ -254,7 +259,7 @@ async fn main() {
         .database(&cfg.db_name);
     println!("[blocks] DB connected.");
 
-    let state = AppState { db, jwt_secret: cfg.jwt_secret };
+    let state = AppState { db, jwt_secret: cfg.jwt_secret, service_secret: cfg.service_secret };
 
     let app = Router::new()
         .route("/health",           get(health))

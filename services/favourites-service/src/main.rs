@@ -19,7 +19,7 @@ use axum::{
     Router,
 };
 use common::{
-    auth::{JwtSecret, RequireRegistered, ServiceToken},
+    auth::{JwtSecret, ServiceSecret, RequireRegistered, ServiceToken},
     geo::haversine_distance,
     mongo::safe_object_id,
     service_token::ServiceTokenCache,
@@ -41,13 +41,14 @@ struct Config {
     mongo_uri:         String,
     db_name:           String,
     jwt_secret:        String,
+    service_secret:    String,
     loc_service_url:   String,
     tiers_service_url: String,
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let required = ["JWT_SECRET", "MONGO_URI", "LOC_SERVICE_URL", "TIERS_SERVICE_URL"];
+        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "LOC_SERVICE_URL", "TIERS_SERVICE_URL"];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
             return Err(format!(
@@ -60,6 +61,7 @@ impl Config {
             mongo_uri:         env::var("MONGO_URI").unwrap(),
             db_name:           env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
             jwt_secret:        env::var("JWT_SECRET").unwrap(),
+            service_secret:    env::var("SERVICE_SECRET").unwrap(),
             loc_service_url:   env::var("LOC_SERVICE_URL").unwrap(),
             tiers_service_url: env::var("TIERS_SERVICE_URL").unwrap(),
         })
@@ -72,6 +74,7 @@ impl Config {
 struct AppState {
     db:                Database,
     jwt_secret:        String,
+    service_secret:    String,
     loc_service_url:   String,
     tiers_service_url: String,
     http:              reqwest::Client,
@@ -84,7 +87,9 @@ struct AppState {
 impl FromRef<AppState> for JwtSecret {
     fn from_ref(state: &AppState) -> Self { JwtSecret(state.jwt_secret.clone()) }
 }
-
+impl FromRef<AppState> for ServiceSecret {
+    fn from_ref(state: &AppState) -> Self { ServiceSecret(state.service_secret.clone()) }
+}
 impl FromRef<AppState> for Database {
     fn from_ref(state: &AppState) -> Self { state.db.clone() }
 }
@@ -163,7 +168,7 @@ async fn get_message_radius(state: &AppState, tier: &str) -> Option<f64> {
         }
     }
 
-    let svc_token = state.svc_token_cache.get("favourites", &state.jwt_secret).await.ok()?;
+    let svc_token = state.svc_token_cache.get("favourites", &state.service_secret).await.ok()?;
 
     let resp = state.http
         .get(format!("{}/tiers/radius/message/{tier}", state.tiers_service_url))
@@ -234,7 +239,7 @@ async fn get_favourites(
 
     // Check online status — degrade gracefully if location-service is unreachable
     let online_set: HashSet<String> = async {
-        let svc_token = state.svc_token_cache.get("favourites", &state.jwt_secret).await
+        let svc_token = state.svc_token_cache.get("favourites", &state.service_secret).await
             .map_err(|e| anyhow::anyhow!(e))?;
         let fav_ids: Vec<&str> = entries.iter().map(|e| e.favourite_user_id.as_str()).collect();
         let resp = state.http
@@ -649,6 +654,7 @@ async fn main() {
     let state = AppState {
         db,
         jwt_secret:        cfg.jwt_secret,
+        service_secret:    cfg.service_secret,
         loc_service_url:   cfg.loc_service_url,
         tiers_service_url: cfg.tiers_service_url,
         http:              reqwest::Client::new(),

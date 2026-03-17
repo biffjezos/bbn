@@ -10,11 +10,11 @@ use axum::{
     extract::{FromRef, Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
-    routing::{delete, get, post},
+    routing::get,
     Router,
 };
 use common::{
-    auth::{JwtSecret, RequireRegistered, ServiceToken},
+    auth::{JwtSecret, ServiceSecret, RequireRegistered, ServiceToken},
     geo::haversine_distance,
     mongo::safe_object_id,
     service_token::ServiceTokenCache,
@@ -34,6 +34,7 @@ struct Config {
     mongo_uri:         String,
     db_name:           String,
     jwt_secret:        String,
+    service_secret:    String,
     loc_service_url:   String,
     tiers_service_url: String,
     fav_service_url:   String,
@@ -41,7 +42,7 @@ struct Config {
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let required = ["JWT_SECRET", "MONGO_URI", "LOC_SERVICE_URL", "TIERS_SERVICE_URL", "FAV_SERVICE_URL"];
+        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "LOC_SERVICE_URL", "TIERS_SERVICE_URL", "FAV_SERVICE_URL"];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
             return Err(format!(
@@ -54,6 +55,7 @@ impl Config {
             mongo_uri:         env::var("MONGO_URI").unwrap(),
             db_name:           env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
             jwt_secret:        env::var("JWT_SECRET").unwrap(),
+            service_secret:    env::var("SERVICE_SECRET").unwrap(),
             loc_service_url:   env::var("LOC_SERVICE_URL").unwrap(),
             tiers_service_url: env::var("TIERS_SERVICE_URL").unwrap(),
             fav_service_url:   env::var("FAV_SERVICE_URL").unwrap(),
@@ -67,6 +69,7 @@ impl Config {
 struct AppState {
     db:                Database,
     jwt_secret:        String,
+    service_secret:    String,
     loc_service_url:   String,
     tiers_service_url: String,
     fav_service_url:   String,
@@ -77,7 +80,9 @@ struct AppState {
 impl FromRef<AppState> for JwtSecret {
     fn from_ref(state: &AppState) -> Self { JwtSecret(state.jwt_secret.clone()) }
 }
-
+impl FromRef<AppState> for ServiceSecret {
+    fn from_ref(state: &AppState) -> Self { ServiceSecret(state.service_secret.clone()) }
+}
 impl FromRef<AppState> for Database {
     fn from_ref(state: &AppState) -> Self { state.db.clone() }
 }
@@ -303,7 +308,7 @@ async fn send_message(
     }
 
     // ── Pair-status (fail closed) ──
-    let svc_token = match state.svc_token_cache.get("messages", &state.jwt_secret).await {
+    let svc_token = match state.svc_token_cache.get("messages", &state.service_secret).await {
         Ok(t)  => t,
         Err(e) => { eprintln!("[messages POST] svc token: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
@@ -500,6 +505,7 @@ async fn main() {
     let state = AppState {
         db,
         jwt_secret:        cfg.jwt_secret,
+        service_secret:    cfg.service_secret,
         loc_service_url:   cfg.loc_service_url,
         tiers_service_url: cfg.tiers_service_url,
         fav_service_url:   cfg.fav_service_url,
