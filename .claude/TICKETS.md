@@ -19,7 +19,7 @@ Before any marketing or scaling push, the order of priority is:
 7. **T-02** — Analytics (low-risk, can slot in any time)
 8. **T-06** — Venue accounts (needs T-01 and T-03)
 9. **T-07** — Settings page + device notifications (UX polish)
-10. **T-04c** — Rust port: remaining services (incremental, parallel with features)
+10. ~~**T-04c**~~ — ✅ Done (2026-03-17): Rust port complete — blocks, favourites, messages, users, gateway all live. migration-service stays Node.js.
 11. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c underway)
 
 ### Architectural Decision (2026-03-16)
@@ -219,7 +219,20 @@ optional `label` field to the radius value — no separate collection needed.
 
 ## T-04 — Port Services to Rust
 
-**Status:** T-04a ✅ Complete (2026-03-16). T-04b ✅ Complete (2026-03-16). T-01 now unblocked. Sequenced as T-04a/b/c — see Implementation Order.
+**Status:** T-04a ✅ Complete (2026-03-16). T-04b ✅ Complete (2026-03-16). T-04c ✅ Complete (2026-03-17). All services + gateway now in Rust. migration-service remains Node.js (intentional). T-01 now unblocked. Sequenced as T-04a/b/c — see Implementation Order.
+
+### T-04c — What was implemented (2026-03-17)
+
+- `services/blocks-service/` — Rust port (axum 0.8, mongodb 3)
+- `services/favourites-service/` — Rust port; fixed E0716 (tokio::join! temporaries), E0728 (await in non-async closure)
+- `services/messages-service/` — Rust port; E2EE ciphertext validation, route conflict fix (`/messages/{id}` combined)
+- `services/users-service/` — Rust port; bcrypt via spawn_blocking, regex_escape helper, find_one_and_update with ReturnDocument::After
+- `services/gateway/` — Full Axum port of server.js: 28 HTTP proxy routes, fixed-window per-IP rate limiting, CORS via tower-http, WS location + WS messages handlers (mpsc channel pattern, auth timeout, push timers), 30s health cache, migration-on-boot call
+- `services/Dockerfile.*` — per-service multi-stage Docker builds with workspace stubs
+- `services/Cargo.toml` — workspace updated with all new members and tower-http dep
+- **Deferred (see T-08):** signed internal auth context (X-Auth-* headers); requires updating all 7 downstream services + gateway simultaneously
+
+**New env vars for gateway:** `JWT_SECRET`, `AUTH_SERVICE_URL`, `USERS_SERVICE_URL`, `LOCATION_SERVICE_URL`, `MESSAGES_SERVICE_URL`, `FAVOURITES_SERVICE_URL`, `TIERS_SERVICE_URL`, `BLOCKS_SERVICE_URL`, `MIGRATION_SERVICE_URL`, `SERVICE_SECRET`, `ALLOWED_ORIGINS` (optional, default: `https://biffjezos.github.io`), `PORT` (optional, default: 8080)
 
 ### T-04b — What was implemented (2026-03-16)
 
