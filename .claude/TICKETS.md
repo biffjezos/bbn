@@ -446,24 +446,7 @@ None.
 
 ## T-12 — Remove leftover `bbm_meet` localStorage key
 
-**Status:** Not started.
-
-### Problem
-
-`ui/scripts/auth.js` `clearUserStorage()` (line 44) removes a localStorage key
-`bbm_meet` that is not defined as a constant anywhere in the codebase. It
-appears to be a leftover from a removed feature. The key name is undocumented
-and may silently conflict with future features.
-
-### Fix
-
-Identify what `bbm_meet` was used for (git history), confirm it is fully
-retired, then remove the `localStorage.removeItem('bbm_meet')` line from
-`clearUserStorage()`.
-
-### Prerequisites
-
-None.
+✅ Closed as invalid (2026-03-18). Details in TICKETS_DONE.md.
 
 ---
 
