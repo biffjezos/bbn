@@ -21,9 +21,11 @@ Before any marketing or scaling push, the order of priority is:
 8. ~~**T-06 Phase 1**~~ — ✅ Done (2026-03-18): Core venue + manager role implemented. Details in TICKETS_DONE.md.
    ~~**T-06c**~~ — ✅ Done (2026-03-18): Multiple venues per manager. Details in TICKETS_DONE.md.
    - **T-06b** — Venue messaging (deferred)
-9. **T-07** — Settings page + device notifications (UX polish)
+9. **T-07a** — Settings page (UX polish)
+   **T-07b** — Device notifications (UX polish, deferred until after Rust port)
 10. ~~**T-04c**~~ — ✅ Done (2026-03-17). Details in TICKETS_DONE.md.
-11. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c underway)
+11. **T-08 Phase 1** — Normalise accountType / tier / role data model (ex-T-13, prerequisite for Phase 2)
+    **T-08 Phase 2** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c + Phase 1)
 
 ### Architectural Decision (2026-03-16)
 
@@ -165,11 +167,11 @@ No implementation until multi-role support is landed and a preferred option is c
 
 ---
 
-## T-07 — Settings Page + Device Notifications
+## T-07a — Settings Page
 
-**Status:** Not started.
+**Status:** Not started. **Priority: medium.**
 
-### Settings page requirements
+### Requirements
 
 - Route: `/settings/`
 - Managed options:
@@ -177,7 +179,21 @@ No implementation until multi-role support is landed and a preferred option is c
   - (future) Notification preferences (opt in/out per event type).
   - (future) Privacy settings.
 
-### Device notification requirements
+### Prerequisites
+
+None — can be started independently.
+
+### Owner's Comments
+
+- Not a priority at the moment.
+
+---
+
+## T-07b — Device Notifications
+
+**Status:** Not started. **Priority: medium.** Deferred until after the Rust port.
+
+### Requirements
 
 Notification events (priority order):
 
@@ -198,20 +214,60 @@ Notification events (priority order):
 
 The existing `notifications` collection (added 2026-03-16) already supports arbitrary `type` values. New event types are additive — no schema change needed.
 
+### Prerequisites
+
+None for in-app extension. Web Push requires HTTPS (already satisfied) and VAPID key setup in Railway.
+
 ### Owner's Comments
 
-- Not a priority at the moment. May be postponed until after the rust port. Remind me.
+- Not a priority at the moment. May be postponed until after the Rust port. Remind me.
 
 ---
 
-## T-08 — Authority Service (auth + tiers consolidation + gateway-centralised RBAC)
+## T-08 — Coherent Identity Model + Authority Service
 
-**Status:** Not started. Addresses AUDIT.md 6.3 definitively.
+**Status:** Not started. Two sequential phases. Addresses AUDIT.md 6.3 definitively.
 
-### Problem
+**Rationale for merge with T-13:** T-13 (normalise the data model) and T-08 (enforce it centrally) solve opposite ends of the same structural problem. T-13 defines what the system should say; T-08 builds the single voice that says it. Phase 1 must be deployed before Phase 2 begins.
 
-There is no single authority for user rights and limits.
-Today's distribution:
+---
+
+### Phase 1 — Normalise accountType / tier / role (ex-T-13)
+
+**Problem:** The three identity axes are ad-hoc, inconsistently applied, and partially undocumented.
+
+- `accountType: null` is used as the implicit default for regular users — missing-field and "normal user" are indistinguishable.
+- `unrestricted` tier was added manually; not in seed migrations.
+- `role` enum is not validated server-side; any string is accepted.
+- JWT does not always emit `account_type`.
+- Tiers/venue interaction is undefined in code (only in TICKETS.md).
+
+**Canonical axis definitions (agreed 2026-03-18):**
+
+| Axis | Values | Meaning | Who sets it | In JWT? |
+|---|---|---|---|---|
+| `accountType` | `"user"` (never `null`), `"venue"` | What kind of entity the account represents. Determines profile fields, location handling, UI view. | Admin only. New registrations always `"user"`. | Yes — `account_type` claim |
+| `tier` | `guest`, `regular`, `premium`, `unrestricted`, … | Feature gates and radius limits. Fully DB-backed. Venue accounts can have a tier (controls message radius only — `nearbyRadiusM` is irrelevant for fixed-location venues). | Admin only. New registrations default to `regular`. Guests always `guest`. | Yes — `tier` claim |
+| `role` | `"user"`, `"admin"`, `"venue_manager"` | System actions the account may perform. Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent changes. | Yes — `role` claim |
+
+**Concrete changes:**
+
+1. `auth-service`: set `account_type: "user"` on every new registration; always emit it in JWT (never omit).
+2. `users-service`: add migration `006_default_account_type` — `db.users.updateMany({ accountType: { $in: [null, undefined] } }, { $set: { accountType: "user" } })`.
+3. All services reading `account_type` from JWT or DB: treat absent/null as `"user"` as a backwards-compat fallback.
+4. `users-service` `PATCH /admin/users/:id/role`: validate against `["user", "admin", "venue_manager"]` — reject any other string.
+5. Admin UI: show `accountType` as a read-only badge on every user row (alongside tier and role).
+6. Document tiers/venue interaction in tiers-service and admin UI tooltip: `messageRadiusM` applies to venues; `nearbyRadiusM` does not.
+
+**Prerequisites:** migration-service must be running (T-10) to apply migration 006.
+
+**Note (owner, 2026-03-18):** `unrestricted` stays a tier. No `developer` role or accountType.
+
+---
+
+### Phase 2 — Authority Service (ex-T-08)
+
+**Problem:** No single authority for user rights and limits.
 
 | What | Where |
 |---|---|
@@ -221,75 +277,61 @@ Today's distribution:
 | Token verification | Copy-pasted `verifyToken` in every JS service (×5) |
 | Role enforcement | Copy-pasted role check in every JS service (×5) |
 
-Any role model change (new role, new field) currently requires edits in 6+ places. This was the root cause of the admin-role cascade bug documented in AUDIT.md 6.3.
+Any role model change currently requires edits in 6+ places. Root cause of the admin-role cascade bug (AUDIT.md 6.3).
 
-### Proposed architecture
+**Proposed architecture:**
 
 **Step 1 — Merge auth-service and tiers-service into a single `authority-service` Rust binary:**
-
 - All JWT issuing and verification
 - tokenVersion DB check (single place, with short cache)
 - Tier definitions, feature flag checks, radius lookups
 - Admin role management (promote/demote, tokenVersion bumps)
 
 Exposes a single internal endpoint:
-
 ```
 POST /authority/verify
 Body: { token: "...", feature?: "message_online" }
-→ 200 { sub, role, tier, tv, features[], radii{} }
+→ 200 { sub, role, account_type, tier, tv, features[], radii{} }
 → 401/403 on invalid/expired/insufficient
 ```
 
-**Step 2 — Gateway becomes the single enforcer (implements AUDIT.md 6.3):**
-
-Gateway calls `/authority/verify` once per incoming request.
-On success, injects trusted headers into the proxied request:
-- `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV`
+**Step 2 — Gateway becomes the single enforcer:**
+Gateway calls `/authority/verify` once per request and injects trusted headers:
+- `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-AccountType`, `X-Auth-Tier`, `X-Auth-TV`
 - `X-Auth-Features` (JSON array), `X-Auth-Radii` (JSON object)
 
 Gateway's `checkTier()` becomes a header read — no separate tiers-service call.
 
 **Step 3 — Services drop `verifyToken` copy-paste:**
+Each service reads `X-Auth-*` headers. `X-Service-Token` still protects services from external callers. tokenVersion check moves entirely to gateway.
 
-Each service reads `X-Auth-*` headers instead of re-verifying the JWT.
-`X-Service-Token` still protects services from external callers.
-tokenVersion DB check moves entirely to the gateway step.
+**Step 4 — Retire tiers-service on Railway.**
 
-**Step 4 — Retire tiers-service:**
+**Security properties:**
+- Role/tier changes take effect immediately — gateway re-verifies on every request.
+- Stale JWT with downgraded role rejected at gateway as soon as `tokenVersion` is bumped.
+- New roles or features require changes in exactly one place (authority-service).
+- `X-Auth-*` headers trusted only because injected by gateway; services unreachable externally without `X-Service-Token`.
 
-Remove from Railway once authority-service is live and all services have been migrated to header-based auth.
+**What this is NOT:** Not a policy engine (no ABAC). Not a reverse proxy. Does not replace `X-Service-Token`.
 
-### Security properties
-
-- Role and tier changes take effect immediately — gateway re-verifies on every request, not just at login.
-- Stale JWT carrying a downgraded role is rejected at the gateway as soon as `tokenVersion` is bumped.
-- New roles or features require changes in exactly **one place** (authority-service).
-- `X-Auth-*` headers are only trusted because they are injected by the gateway; services are unreachable from the outside without `X-Service-Token`.
-
-### Prerequisites
-
-- T-01 complete (admin CRUD for tiers is established and tested before the service is merged)
-- T-04c in progress (JS services being ported to Rust; authority header pattern is adopted as services are ported)
+**Prerequisites:**
+- T-08 Phase 1 complete and deployed
+- T-01 complete (admin CRUD for tiers established)
+- T-04c in progress (JS→Rust port; authority header pattern adopted as services are ported)
 - No new infrastructure required
 
-### What this is NOT
-
-- Not a policy engine (no ABAC). The `authority/verify` response is a flat permission set, not a policy tree.
-- Not a reverse proxy. The gateway remains the routing layer. Authority is a verification call only.
-- Does not replace `X-Service-Token` inter-service authentication.
-
-### Implementation order (within this ticket)
-
-1. Extend auth-service to absorb tiers-service routes (internally, same binary, same DB).
+**Implementation order:**
+1. Extend auth-service to absorb tiers-service routes (same binary, same DB).
 2. Add `POST /authority/verify` endpoint.
-3. Update gateway to call authority and inject headers (replaces `checkTier` + `verifyToken`).
-4. Update each JS service to read headers (one service at a time, backwards-compatible).
-5. When all services are updated, retire tiers-service on Railway.
+3. Update gateway to call authority and inject headers.
+4. Update each JS service to read headers (one at a time, backwards-compatible).
+5. Retire tiers-service on Railway.
 
 ### Owner's Comments
 
-- 2026-03-16: Proposed by Claude based on the admin-role cascade bug post-mortem (AUDIT.md 6.3). Makes auth-service the true single authority for all rights and limits. Feasible once T-01 is done and T-04c is underway. tiers-service to be retired after merge.
+- 2026-03-16: Proposed by Claude based on admin-role cascade bug post-mortem (AUDIT.md 6.3). Feasible once T-01 done and T-04c underway.
+- 2026-03-18: T-13 merged into T-08 as Phase 1 — data model normalisation is prerequisite for the authority service.
 
 ---
 
@@ -334,87 +376,9 @@ privacy regression in a privacy-by-design app.
 
 ---
 
-## T-13 — Define and stabilise accountType / tier / role as a coherent system
+## T-13 — ✅ Merged into T-08 Phase 1 (2026-03-18)
 
-**Status:** Not started.
-
-### Problem
-
-The three orthogonal axes that govern user identity and access are currently
-ad-hoc, inconsistently applied, and underdocumented:
-
-- **`accountType`** — `null` for regular users, `"venue"` for venue accounts.
-  `null` is used as the implicit default, which means missing-field and
-  "normal user" are indistinguishable. No enum or validation exists.
-- **`tier`** — DB-backed (`guest`, `regular`, `premium`, `unrestricted`, …).
-  Controls feature access flags and radius limits. Added to JWT. Stored in
-  `users` collection. Managed via admin UI. Broadly correct but the `unrestricted`
-  tier was added manually and is not in the seed migrations yet. The interaction
-  between tier and accountType is undefined (e.g. does a venue get a tier?
-  what does `nearbyRadiusM` mean for a venue with a fixed location?).
-- **`role`** — `"user"` | `"admin"`. Controls admin actions. Added to JWT.
-  Currently only two values; hardcoded in every service's `verifyToken` copy.
-
-### Goal
-
-Produce a written spec (in this ticket) agreed by the owner, then implement
-it so every service, every JWT claim, and every UI check is consistent.
-
-### Proposed definitions
-
-| Axis | Values | Meaning | Who sets it | In JWT? |
-|---|---|---|---|---|
-| `accountType` | `"user"` (not `null`), `"venue"` | **What kind of entity** the account represents. Determines which profile fields exist, how location is handled, and which UI view renders. | Admin only (admin UI convert-to-venue / revert). New registrations always `"user"`. | Yes — `account_type` claim |
-| `tier` | `guest`, `regular`, `premium`, `unrestricted`, … | **What features and radii** the account is allowed. Fully DB-backed; admin-configurable. Venue accounts can have a tier (controls their message radius). | Admin only. New registrations default to `regular`. Guests always `guest`. | Yes — `tier` claim |
-| `role` | `"user"`, `"admin"`, `"venue_manager"` | **What system actions** the account may perform (read/write other users' data, call admin endpoints, manage linked venue accounts). Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent promotions. `venue_manager` granted by admin. | Yes — `role` claim |
-
-### Concrete changes required
-
-1. **Rename `accountType: null` → `accountType: "user"`** everywhere:
-   - `auth-service`: set `account_type: "user"` on every new registration.
-   - `users-service`: migration that sets `accountType: "user"` on all
-     existing documents where the field is absent or null.
-   - All services that read `account_type` from JWT or DB: treat absent/null
-     as `"user"` as a backwards-compat fallback (belt-and-suspenders only).
-   - Frontend `isVenueAccount()` check: remains `=== "venue"`, no change needed.
-
-2. **Add migration `006_default_account_type`** in migration-service:
-   ```
-   db.users.updateMany({ accountType: { $in: [null, undefined] } },
-                       { $set: { accountType: "user" } })
-   ```
-
-3. **JWT `issue_user_token`** in `common/src/auth.rs`: always emit
-   `account_type` (never omit it). For non-venue accounts emit `"user"`.
-
-4. **Tiers and venues**: document and enforce that a venue account MUST have
-   a tier assigned. The tier's `messageRadiusM` is the distance within which
-   a user must be to message the venue (and vice versa). The tier's
-   `nearbyRadiusM` is irrelevant for venues (venues don't broadcast GPS;
-   they are always visible to users within the *user's* own nearby radius).
-   Document this in the tiers-service and in the admin UI tooltip.
-
-5. **Role enum validation**: `users-service` `PATCH /admin/users/:id/role`
-   currently accepts any string. Restrict to `["user", "admin", "venue_manager"]` (or the
-   DB-backed roles list if T-09 is implemented first).
-
-6. **Admin UI**: show `accountType` field as a read-only badge on every user
-   row in the search results (alongside tier and role). Make it clear which
-   axis is being changed when the admin clicks "Convert to Venue" vs
-   "Change Tier" vs "Change Role".
-
-7. **TICKETS.md / AUDIT.md**: once implemented, record the final definitions
-   here so they can be referenced in future sessions without re-deriving them.
-
-### Prerequisites
-
-- T-08 (authority service) would centralise these checks, but this ticket can
-  be implemented independently service-by-service.
-- Migration-service must be running to apply migration 006.
-
-### Owner's note to self
-
-`unrestricted` stays a tier (agreed 2026-03-18). No `developer` role or accountType will be introduced. Admin role provides sufficient developer access.
+Scope (normalise accountType/tier/role data model) absorbed into T-08 as Phase 1. See T-08 for full spec and implementation plan.
 
 ---
 
