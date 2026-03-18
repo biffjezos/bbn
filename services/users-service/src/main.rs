@@ -102,10 +102,12 @@ struct UserForToken {
 #[derive(Deserialize)]
 struct SearchUserDoc {
     #[serde(rename = "_id")]
-    id:       mongodb::bson::oid::ObjectId,
-    nickname: Option<String>,
-    age:      Option<i32>,
-    sex:      Option<String>,
+    id:           mongodb::bson::oid::ObjectId,
+    nickname:     Option<String>,
+    age:          Option<i32>,
+    sex:          Option<String>,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -524,7 +526,7 @@ async fn search_users(
     let users: Vec<SearchUserDoc> = match state.db
         .collection::<SearchUserDoc>("users")
         .find(filter)
-        .projection(doc! { "nickname": 1, "age": 1, "sex": 1 })
+        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "accountType": 1 })
         .limit(50)
         .await
     {
@@ -560,7 +562,9 @@ async fn search_users(
 
     let mut results: Vec<_> = users.iter().map(|u| {
         let uid = u.id.to_hex();
-        let is_online = online_set.contains(uid.as_str());
+        // Venues have a fixed location and are always reachable — never offline.
+        let is_online = u.account_type.as_deref() == Some("venue")
+            || online_set.contains(uid.as_str());
         json!({
             "userId":   uid,
             "nickname": u.nickname.as_deref(),
@@ -810,7 +814,9 @@ async fn admin_get_users(
 
     let result: Vec<_> = users.iter().map(|u| {
         let uid = u.id.to_hex();
-        let is_online = online_set.contains(uid.as_str());
+        // Venues have a fixed location and are always reachable — never offline.
+        let is_online = u.account_type.as_deref() == Some("venue")
+            || online_set.contains(uid.as_str());
         json!({
             "userId":       uid,
             "nickname":     u.nickname.as_deref(),
