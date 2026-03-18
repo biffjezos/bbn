@@ -18,9 +18,56 @@ extra_js:
   <!-- Content -->
   <div class="container-fluid px-4 px-md-5 py-4">
 
+    <!-- Account Info -->
+    <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Account</h2>
+    <div id="accountInfoWrap" class="mb-5">
+      <p class="text-muted-bb small">Loading…</p>
+    </div>
+
+    <!-- Profile Settings -->
+    <div id="profileSettingsWrap" style="display:none" class="mb-5">
+      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Profile</h2>
+      <form id="profileForm" novalidate style="max-width:400px">
+        <div class="mb-3">
+          <label class="form-label" for="profileNickname">Nickname</label>
+          <input type="text" class="form-control" id="profileNickname" minlength="2" maxlength="32" autocomplete="off">
+        </div>
+        <div id="profileAgeWrap" class="mb-3">
+          <label class="form-label" for="profileAge">Age</label>
+          <input type="number" class="form-control" id="profileAge" min="18" max="120">
+        </div>
+        <div id="profileSexWrap" class="mb-3">
+          <label class="form-label" for="profileSex">Sex</label>
+          <select class="form-select" id="profileSex">
+            <option value="m">Male</option>
+            <option value="f">Female</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-bbm-primary" id="profileSaveBtn">Save Profile</button>
+        <span id="profileStatus" class="ms-3 small"></span>
+      </form>
+    </div>
+
+    <!-- Change Password -->
+    <div id="passwordWrap" style="display:none" class="mb-5">
+      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Change Password</h2>
+      <form id="passwordForm" novalidate style="max-width:400px">
+        <div class="mb-3">
+          <label class="form-label" for="currentPassword">Current Password</label>
+          <input type="password" class="form-control" id="currentPassword" autocomplete="current-password">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="newPassword">New Password</label>
+          <input type="password" class="form-control" id="newPassword" autocomplete="new-password" minlength="8" placeholder="At least 8 characters">
+        </div>
+        <button type="submit" class="btn btn-bbm-primary" id="passwordSaveBtn">Change Password</button>
+        <span id="passwordStatus" class="ms-3 small"></span>
+      </form>
+    </div>
+
     <!-- Blocked Users -->
     <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Blocked Users</h2>
-    <div id="blocksWrap"></div>
+    <div id="blocksWrap" class="mb-5"></div>
 
     <!-- Danger Zone -->
     <div class="mt-5" id="dangerZoneWrap" style="display:none">
