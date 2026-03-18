@@ -15,6 +15,7 @@
   let selfCircle      = null;
   let markers         = {};
   let favIds          = new Set();
+  let favOnline       = new Map(); // userId → bool (from getFavourites response)
   let favLines        = {}; // userId → { polyline }
   let lastNearbyUsers = [];
   let meetControl     = null;
@@ -288,7 +289,7 @@
     else if (targetSex === 'f') pillEl.classList.add('bbm-meet-pill--female');
     const distHtml = partner
       ? `<span class="bbm-meet-dist">${fmtDist(haversineM(selfPos.lat, selfPos.lng, partner.lat, partner.lon ?? partner.lng))}</span>`
-      : `<span class="bbm-meet-dist bbm-meet-absent">not visible</span>`;
+      : `<span class="bbm-meet-dist bbm-meet-absent">${favOnline.get(meet.uid) === false ? 'offline' : 'out of range'}</span>`;
 
     pillEl.innerHTML =
       `<span class="bbm-meet-icon">🧭</span>` +
@@ -352,6 +353,7 @@
     if (meetControl) { meetControl.remove(); meetControl = null; }
     lastNearbyUsers = [];
     favIds = new Set();
+    favOnline = new Map();
     setSelfBearing(null); // clear compass needle — not reset when icon rebuilds via lastBearing
   }
 
@@ -420,6 +422,7 @@
     if (window.Auth?.isRegistered()) {
       window.Api.getFavourites().then(function (data) {
         favIds = new Set((data.favourites || []).map(f => f.userId));
+        favOnline = new Map((data.favourites || []).map(f => [f.userId, f.online]));
       }).catch(function () {});
     }
   });
