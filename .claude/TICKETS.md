@@ -412,15 +412,15 @@ single-instance deployment.
 |---|---|---|
 | `accountType` | What the entity IS — determines profile shape, location behaviour, UI rendering | `"venue"` has `venueName`, fixed GPS, `openingHours`; `"user"` has age, sex, live GPS |
 | `tier` | What the account can REACH — feature gates and radius limits | `"premium"` = wider nearby radius, messaging enabled *(actual values are admin-configured in the DB; not defined here)* |
-| `role` | What the account can DO to the system — privileged actions on other accounts | `"manager"` = edit linked venue profiles; `"admin"` = full system access |
+| `role` | What the account can DO to the system — privileged actions on other accounts | `"venue_manager"` = edit linked venue accounts (venues only); `"admin"` = full system access |
 
-These three axes are fully orthogonal. A manager is `accountType: "user", role: "manager"` — a regular human on the map with their own tier, who additionally has management rights over linked venue accounts. Venues are `accountType: "venue", role: "user"`.
+These three axes are fully orthogonal. A venue manager is `accountType: "user", role: "venue_manager"` — a regular human on the map with their own tier, who additionally has management rights over their linked venue account(s). Venues are `accountType: "venue", role: "user"`. The `venue_manager` role is scoped exclusively to `accountType: "venue"` documents — it confers no rights over other user accounts.
 
 ---
 
 ### The Manager Role
 
-A manager is a human user account (`accountType: "user"`) with `role: "manager"` granted by an admin via the admin UI. The manager retains their own GPS presence, tier, and map behaviour — they appear exactly like any other user. The `manager` role only adds the ability to administer linked venue accounts.
+A manager is a human user account (`accountType: "user"`) with `role: "venue_manager"` granted by an admin via the admin UI. The manager retains their own GPS presence, tier, and map behaviour — they appear exactly like any other user. The `manager` role only adds the ability to administer linked venue accounts.
 
 **What a manager can do:**
 - Create a venue (see scope limits below)
@@ -433,7 +433,7 @@ A manager is a human user account (`accountType: "user"`) with `role: "manager"`
 - Change their own `accountType` or `role`
 
 **What only admin can do:**
-- Grant or revoke `role: "manager"` on a user account
+- Grant or revoke `role: "venue_manager"` on a user account
 - Reassign a venue to a different manager (if the manager account is deleted or demoted)
 - Change a venue's tier
 
@@ -441,7 +441,7 @@ A manager is a human user account (`accountType: "user"`) with `role: "manager"`
 
 ### Venue Accounts
 
-A venue is a document in the `users` collection with `accountType: "venue"`. It has **no credentials** — no email address, no password hash, no tokenVersion. It never logs in. It is addressed by its MongoDB ObjectId (`venueId`).
+A venue is a document in the `users` collection with `accountType: "venue"`. It has **no credentials** — no email address, no password hash, no tokenVersion. It never logs in. It is addressed by its standard MongoDB `_id` (the same `id` field every account has) — no separate venue-specific key is needed.
 
 **Venue document fields:**
 
@@ -471,13 +471,17 @@ Future sub-task (T-06b): allow multiple venues per manager. The tier system is t
 
 ### Messaging Architecture Note
 
-Venues have no JWT and therefore no active session. All messaging to/from a venue is keyed to the venue's `venueId` (ObjectId). When a user messages a venue, the message is stored with `recipientId = venueId`. The manager reads venue messages via a dedicated manager endpoint that:
+Venues have no JWT and therefore no active session. A message to a venue is stored identically to any other message: `{ senderId, recipientId }` where `recipientId` is the venue's `_id`. No schema change to the messages collection is needed.
 
-1. Verifies `role: "manager"` on the requesting JWT.
+At delivery time the messages-service resolves the recipient's `accountType`. If `"venue"`, it notifies `venue.managerId` (the linked manager's session) instead of expecting an active venue session. The routing concern is isolated to delivery — the stored document is type-agnostic.
+
+The venue manager reads venue messages via a dedicated endpoint that:
+
+1. Verifies `role: "venue_manager"` on the requesting JWT.
 2. Verifies `venue.managerId === req.auth.sub`.
-3. Returns messages for `venueId` as if it were the manager's own inbox context.
+3. Returns messages where `recipientId = venue._id`.
 
-This means the messages UI must support an "acting as venue X" context — a separate inbox panel within `/profile` when the manager is viewing a venue. The manager's own inbox and the venue's inbox are distinct.
+The messages UI must support an "acting as venue X" context — a separate inbox panel within `/profile`. The manager's own inbox and the venue's inbox are distinct.
 
 ---
 
@@ -492,18 +496,18 @@ This means the messages UI must support an "acting as venue X" context — a sep
 
 ### `/profile` — Manager View
 
-When a logged-in user has `role: "manager"`, `/profile` renders an additional section below their own profile: **"My Venue"** (or "My Venues" in the future). Layout mirrors `/favourites` — a card per venue with expand-to-edit. Clicking the venue card expands an edit form for `description`, `openingHours`, `locationType`. A "Create Venue" button is shown if no venue exists yet (and the limit has not been reached).
+When a logged-in user has `role: "venue_manager"`, `/profile` renders an additional section below their own profile: **"My Venue"** (or "My Venues" in the future). Layout mirrors `/favourites` — a card per venue with expand-to-edit. Clicking the venue card expands an edit form for `description`, `openingHours`, `locationType`. A "Create Venue" button is shown if no venue exists yet (and the limit has not been reached).
 
 ---
 
 ### Implementation Phases
 
 **Phase 1 — Core venue + manager (this ticket):**
-- New `role: "manager"` added to role enum in auth/users-service
+- New `role: "venue_manager"` added to role enum in auth/users-service
 - Admin UI: grant/revoke manager role (same as existing role CRUD)
 - New endpoint `POST /manager/venues` — create a venue (manager only, enforces one-venue limit)
-- New endpoint `PUT /manager/venues/:venueId` — edit mutable fields (manager only, ownership check)
-- New endpoint `DELETE /manager/venues/:venueId` — delete venue (manager only, ownership check)
+- New endpoint `PUT /manager/venues/:id` — edit mutable fields (manager only, ownership check)
+- New endpoint `DELETE /manager/venues/:id` — delete venue (manager only, ownership check)
 - `GET /manager/venues` — list manager's venues
 - `/profile` manager section: create/edit/delete venue UI
 - Map: render venue pins from `GET /location/venues` (new endpoint — returns all `accountType: "venue"` documents with `fixedLat/fixedLon`)
@@ -511,8 +515,8 @@ When a logged-in user has `role: "manager"`, `/profile` renders an additional se
 
 **Phase 2 — Venue messaging (T-06b, deferred):**
 - Manager inbox context ("acting as venue X")
-- `GET /manager/venues/:venueId/messages`
-- `POST /manager/venues/:venueId/messages` — send as venue
+- `GET /manager/venues/:id/messages`
+- `POST /manager/venues/:id/messages` — send as venue
 - Favourites: user adds venue as favourite → messaging channel opens
 
 **Phase 3 — Multiple venues per manager (T-06c, deferred):**
@@ -772,7 +776,7 @@ it so every service, every JWT claim, and every UI check is consistent.
 |---|---|---|---|---|
 | `accountType` | `"user"` (not `null`), `"venue"` | **What kind of entity** the account represents. Determines which profile fields exist, how location is handled, and which UI view renders. | Admin only (admin UI convert-to-venue / revert). New registrations always `"user"`. | Yes — `account_type` claim |
 | `tier` | `guest`, `regular`, `premium`, `unrestricted`, … | **What features and radii** the account is allowed. Fully DB-backed; admin-configurable. Venue accounts can have a tier (controls their message radius). | Admin only. New registrations default to `regular`. Guests always `guest`. | Yes — `tier` claim |
-| `role` | `"user"`, `"admin"`, `"manager"` | **What system actions** the account may perform (read/write other users' data, call admin endpoints, manage linked venue accounts). Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent promotions. `manager` granted by admin. | Yes — `role` claim |
+| `role` | `"user"`, `"admin"`, `"venue_manager"` | **What system actions** the account may perform (read/write other users' data, call admin endpoints, manage linked venue accounts). Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent promotions. `venue_manager` granted by admin. | Yes — `role` claim |
 
 ### Concrete changes required
 
@@ -801,7 +805,7 @@ it so every service, every JWT claim, and every UI check is consistent.
    Document this in the tiers-service and in the admin UI tooltip.
 
 5. **Role enum validation**: `users-service` `PATCH /admin/users/:id/role`
-   currently accepts any string. Restrict to `["user", "admin", "manager"]` (or the
+   currently accepts any string. Restrict to `["user", "admin", "venue_manager"]` (or the
    DB-backed roles list if T-09 is implemented first).
 
 6. **Admin UI**: show `accountType` field as a read-only badge on every user
