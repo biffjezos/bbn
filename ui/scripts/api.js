@@ -262,6 +262,10 @@ const Api = {
     });
   },
 
+  adminListVenueManagers() {
+    return apiFetch('/admin/users?by=role&q=venue_manager');
+  },
+
   adminReassignVenueManager(venueId, newManagerId) {
     return apiFetch(`/admin/venues/${encodeURIComponent(venueId)}/manager`, {
       method: 'PATCH',

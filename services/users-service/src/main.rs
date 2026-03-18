@@ -770,6 +770,7 @@ async fn admin_get_users(
                         None      => return Json(json!({ "users": [] })).into_response(),
                     }
                 }
+                Some("role")  => { filter.insert("role", trimmed); }
                 _ => {
                     let esc = regex_escape(trimmed);
                     filter.insert("nickname", doc! { "$regex": esc, "$options": "i" });

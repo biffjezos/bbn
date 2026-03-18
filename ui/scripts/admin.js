@@ -193,9 +193,10 @@ function renderUserCard(u) {
     '    </div>',
     '    <div class="row g-3 mb-3">',
     '      <div class="col-12 col-md-6">',
-    '        <label class="form-label small mb-1" for="new-mgr-' + escHtml(u.userId) + '">Reassign Manager — new manager user ID</label>',
-    '        <input type="text" class="form-control form-control-sm font-monospace" id="new-mgr-' + escHtml(u.userId) + '"',
-    '               placeholder="Paste venue_manager user ID…" autocomplete="off" />',
+    '        <label class="form-label small mb-1" for="new-mgr-' + escHtml(u.userId) + '">Reassign Manager</label>',
+    '        <select class="form-select form-select-sm" id="new-mgr-' + escHtml(u.userId) + '">',
+    '          <option value="">Loading venue managers…</option>',
+    '        </select>',
     '      </div>',
     '    </div>',
     '    <div class="d-flex align-items-center gap-3 flex-wrap">',
@@ -269,7 +270,29 @@ function renderUserCard(u) {
 
 function toggleUserCard(userId) {
   var el = document.getElementById('uexpand-' + userId);
-  if (el) el.classList.toggle('d-none');
+  if (!el) return;
+  var wasHidden = el.classList.contains('d-none');
+  el.classList.toggle('d-none');
+  if (wasHidden) _maybeLoadManagerDropdown(userId);
+}
+
+async function _maybeLoadManagerDropdown(userId) {
+  var sel = document.getElementById('new-mgr-' + userId);
+  if (!sel) return; // not a venue card
+  try {
+    var data = await window.Api.adminListVenueManagers();
+    var managers = (data.users || []).filter(function (u) { return u.role === 'venue_manager'; });
+    if (!managers.length) {
+      sel.innerHTML = '<option value="">No venue managers found</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— select a venue manager —</option>'
+      + managers.map(function (m) {
+          return '<option value="' + escHtml(m.userId) + '">' + escHtml(m.nickname) + '</option>';
+        }).join('');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Failed to load managers</option>';
+  }
 }
 
 async function saveUserChanges(userId) {
