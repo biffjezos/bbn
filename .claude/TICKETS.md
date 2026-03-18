@@ -11,19 +11,15 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 Before any marketing or scaling push, the order of priority is:
 
-1. ~~**T-05 Phase 1**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-2. ~~**T-03**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-3. ~~**T-04a**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-4. ~~**T-04b**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-5. ~~**T-01**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
-7. **T-02** — Analytics (low-risk, can slot in any time)
-8. ~~**T-06 Phase 1**~~ — ✅ Done (2026-03-18): Core venue + manager role implemented. Details in TICKETS_DONE.md.
-   ~~**T-06c**~~ — ✅ Done (2026-03-18): Multiple venues per manager. Details in TICKETS_DONE.md.
-   - **T-06b** — Venue messaging (deferred)
-9. **T-07** — Settings page + device notifications (UX polish)
-10. ~~**T-04c**~~ — ✅ Done (2026-03-17). Details in TICKETS_DONE.md.
-11. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c underway)
+1. **T-10** — Fix migration-service (HIGH: privacy regression — TTL indexes not running, data not auto-purged)
+2. **T-08 Phase 2** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (T-08 Phase 1 ✅ complete)
+3. **T-06b** — Venue messaging (ideally after T-08 Phase 2 for clean auth routing)
+4. **T-09** — Role CRUD with Permissions UI (prerequisite: T-08 Phase 2)
+5. **T-02** — Analytics (low-risk, can slot in any time)
+6. **T-05b** — Encrypted block note (blocked on OPAQUE implementation — see AUDIT.md 1.1)
+7. **T-14** — Manager-tier venue quota (deferred, prerequisite: T-08)
+8. **T-15** — Orphan venue reassignment (deferred, prerequisite: multi-role support)
+9. **T-07b** — Device notifications (low priority)
 
 ### Architectural Decision (2026-03-16)
 
@@ -71,12 +67,13 @@ requires no new infrastructure.
 
 ## T-05b — Encrypted note field in blocks
 
-**Status:** Not started. Blocked on OPAQUE (T-04b followup).
+**Status:** Not started. Blocked on OPAQUE implementation.
 
 T-05 Phase 1 (block mechanism + reason enum) is complete — see TICKETS_DONE.md.
+T-04b (Rust auth-service port) is complete, but OPAQUE/PAKE was deferred during the port — see AUDIT.md 1.1.
 
 Add optional encrypted note field once OPAQUE-based key derivation is in place.
-Note field (`note: "..."`) — storing free-text without proper client-side encryption (pending OPAQUE) would be a privacy regression. Reason enum is not sensitive.
+Note field (`note: "..."`) — storing free-text without proper client-side encryption would be a privacy regression. Reason enum is not sensitive.
 
 **Prerequisite:** OPAQUE / PAKE client-side key derivation (AUDIT.md 1.1).
 
@@ -118,6 +115,7 @@ These three axes are fully orthogonal. A venue manager is `accountType: "user", 
 
 ✅ Complete (2026-03-18). Venue limit lifted. Details in TICKETS_DONE.md.
 T-14 tracks future tiered quota (per-tier venue limits) — still deferred.
+T-15 tracks orphan venue reassignment (when manager is deleted) — still deferred.
 
 ---
 
@@ -127,7 +125,7 @@ T-14 tracks future tiered quota (per-tier venue limits) — still deferred.
 
 - Venue deleted → cascade delete: all messages where `senderId` or `recipientId` = venue `_id`, all favourites containing venue `_id`, all blocks involving venue `_id`.
 - Manager account deleted → delete all linked venues first (same cascade), then delete the manager account. No orphan venue is ever left in the DB.
-- Future: auto-reassignment of orphaned venues deferred to **T-09**.
+- Future: auto-reassignment of orphaned venues deferred to **T-15**.
 
 **2. Venue map visibility**
 
@@ -143,12 +141,12 @@ T-14 tracks future tiered quota (per-tier venue limits) — still deferred.
 
 ### Owner's Comments
 
-- 2026-03-18: Design agreed. Venue has no credentials, no login. Manager is a regular user with an added role. One venue per manager for now. Venue name/address/location immutable after creation. Tier is fixed (admin-only), no subscription yet.
-- 2026-03-18: Phase 1 complete.
+- 2026-03-18: Design agreed. Venue has no credentials, no login. Manager is a regular user with an added role. Venue name/address/location immutable after creation. Tier is fixed (admin-only), no subscription yet.
+- 2026-03-18: Phase 1 + T-06c complete. T-06b (venue messaging) deferred.
 
 ---
 
-## T-09 — Orphan Venue Reassignment
+## T-15 — Orphan Venue Reassignment
 
 **Status:** Not started. Deferred until multi-role support exists.
 
@@ -165,19 +163,17 @@ No implementation until multi-role support is landed and a preferred option is c
 
 ---
 
-## T-07 — Settings Page + Device Notifications
+## T-07a — Settings Page
 
-**Status:** Not started.
+✅ Complete (2026-03-18). Details in TICKETS_DONE.md.
 
-### Settings page requirements
+---
 
-- Route: `/settings/`
-- Managed options:
-  - View and remove blocked users (T-05).
-  - (future) Notification preferences (opt in/out per event type).
-  - (future) Privacy settings.
+## T-07b — Device Notifications
 
-### Device notification requirements
+**Status:** Not started. **Priority: medium.**
+
+### Requirements
 
 Notification events (priority order):
 
@@ -198,98 +194,95 @@ Notification events (priority order):
 
 The existing `notifications` collection (added 2026-03-16) already supports arbitrary `type` values. New event types are additive — no schema change needed.
 
+### Prerequisites
+
+None for in-app extension. Web Push requires HTTPS (already satisfied) and VAPID key setup in Railway.
+
 ### Owner's Comments
 
-- Not a priority at the moment. May be postponed until after the rust port. Remind me.
+- Not a priority at the moment.
 
 ---
 
-## T-08 — Authority Service (auth + tiers consolidation + gateway-centralised RBAC)
+## T-08 — Coherent Identity Model + Authority Service
 
-**Status:** Not started. Addresses AUDIT.md 6.3 definitively.
+**Status:** Phase 1 ✅ complete. Phase 2 pending.
 
-### Problem
+**Rationale for merge with T-13:** T-13 (normalise the data model) and T-08 (enforce it centrally) solve opposite ends of the same structural problem. T-13 defines what the system should say; T-08 builds the single voice that says it. Phase 1 must be deployed before Phase 2 begins.
 
-There is no single authority for user rights and limits.
-Today's distribution:
+---
+
+Phase 1 ✅ complete (2026-03-18). Details in TICKETS_DONE.md.
+
+---
+
+### Phase 2 — Authority Service (ex-T-08)
+
+**Problem:** No single authority for user rights and limits.
 
 | What | Where |
 |---|---|
 | JWT issue & tokenVersion | `auth-service` (Rust) |
 | Tier definitions & feature flags | `tiers-service` (Rust) |
-| Radius lookups | `tiers-service` (Rust) + hardcoded table in `location-service.js` |
-| Token verification | Copy-pasted `verifyToken` in every JS service (×5) |
-| Role enforcement | Copy-pasted role check in every JS service (×5) |
+| Radius lookups | `tiers-service` (Rust) + hardcoded table in `location-service/src/main.rs` |
+| Token verification | Copy-pasted `verifyToken` in every Rust service (×5) |
+| Role enforcement | Copy-pasted role check in every Rust service (×5) |
 
-Any role model change (new role, new field) currently requires edits in 6+ places. This was the root cause of the admin-role cascade bug documented in AUDIT.md 6.3.
+Any role model change currently requires edits in 6+ places. Root cause of the admin-role cascade bug (AUDIT.md 6.3).
 
-### Proposed architecture
+**Proposed architecture:**
 
 **Step 1 — Merge auth-service and tiers-service into a single `authority-service` Rust binary:**
-
 - All JWT issuing and verification
 - tokenVersion DB check (single place, with short cache)
 - Tier definitions, feature flag checks, radius lookups
 - Admin role management (promote/demote, tokenVersion bumps)
 
 Exposes a single internal endpoint:
-
 ```
 POST /authority/verify
 Body: { token: "...", feature?: "message_online" }
-→ 200 { sub, role, tier, tv, features[], radii{} }
+→ 200 { sub, role, account_type, tier, tv, features[], radii{} }
 → 401/403 on invalid/expired/insufficient
 ```
 
-**Step 2 — Gateway becomes the single enforcer (implements AUDIT.md 6.3):**
-
-Gateway calls `/authority/verify` once per incoming request.
-On success, injects trusted headers into the proxied request:
-- `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV`
+**Step 2 — Gateway becomes the single enforcer:**
+Gateway calls `/authority/verify` once per request and injects trusted headers:
+- `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-AccountType`, `X-Auth-Tier`, `X-Auth-TV`
 - `X-Auth-Features` (JSON array), `X-Auth-Radii` (JSON object)
 
 Gateway's `checkTier()` becomes a header read — no separate tiers-service call.
 
 **Step 3 — Services drop `verifyToken` copy-paste:**
+Each service reads `X-Auth-*` headers. `X-Service-Token` still protects services from external callers. tokenVersion check moves entirely to gateway.
 
-Each service reads `X-Auth-*` headers instead of re-verifying the JWT.
-`X-Service-Token` still protects services from external callers.
-tokenVersion DB check moves entirely to the gateway step.
+**Step 4 — Retire tiers-service on Railway.**
 
-**Step 4 — Retire tiers-service:**
+**Security properties:**
+- Role/tier changes take effect immediately — gateway re-verifies on every request.
+- Stale JWT with downgraded role rejected at gateway as soon as `tokenVersion` is bumped.
+- New roles or features require changes in exactly one place (authority-service).
+- `X-Auth-*` headers trusted only because injected by gateway; services unreachable externally without `X-Service-Token`.
 
-Remove from Railway once authority-service is live and all services have been migrated to header-based auth.
+**What this is NOT:** Not a policy engine (no ABAC). Not a reverse proxy. Does not replace `X-Service-Token`.
 
-### Security properties
-
-- Role and tier changes take effect immediately — gateway re-verifies on every request, not just at login.
-- Stale JWT carrying a downgraded role is rejected at the gateway as soon as `tokenVersion` is bumped.
-- New roles or features require changes in exactly **one place** (authority-service).
-- `X-Auth-*` headers are only trusted because they are injected by the gateway; services are unreachable from the outside without `X-Service-Token`.
-
-### Prerequisites
-
-- T-01 complete (admin CRUD for tiers is established and tested before the service is merged)
-- T-04c in progress (JS services being ported to Rust; authority header pattern is adopted as services are ported)
+**Prerequisites:**
+- T-08 Phase 1 complete and deployed
+- T-01 ✅ complete
+- T-04c ✅ complete (all services now in Rust)
 - No new infrastructure required
 
-### What this is NOT
-
-- Not a policy engine (no ABAC). The `authority/verify` response is a flat permission set, not a policy tree.
-- Not a reverse proxy. The gateway remains the routing layer. Authority is a verification call only.
-- Does not replace `X-Service-Token` inter-service authentication.
-
-### Implementation order (within this ticket)
-
-1. Extend auth-service to absorb tiers-service routes (internally, same binary, same DB).
+**Implementation order:**
+1. Extend auth-service to absorb tiers-service routes (same binary, same DB).
 2. Add `POST /authority/verify` endpoint.
-3. Update gateway to call authority and inject headers (replaces `checkTier` + `verifyToken`).
-4. Update each JS service to read headers (one service at a time, backwards-compatible).
-5. When all services are updated, retire tiers-service on Railway.
+3. Update gateway to call authority and inject headers.
+4. Update each Rust service to read `X-Auth-*` headers (one at a time, backwards-compatible).
+5. Retire tiers-service on Railway.
 
 ### Owner's Comments
 
-- 2026-03-16: Proposed by Claude based on the admin-role cascade bug post-mortem (AUDIT.md 6.3). Makes auth-service the true single authority for all rights and limits. Feasible once T-01 is done and T-04c is underway. tiers-service to be retired after merge.
+- 2026-03-16: Proposed by Claude based on admin-role cascade bug post-mortem (AUDIT.md 6.3).
+- 2026-03-18: T-13 merged into T-08 as Phase 1 — data model normalisation is prerequisite for the authority service. All prerequisites met (T-01 ✅, T-04c ✅). Ready to begin Phase 1.
 
 ---
 
@@ -334,113 +327,13 @@ privacy regression in a privacy-by-design app.
 
 ---
 
-## T-13 — Define and stabilise accountType / tier / role as a coherent system
+## T-13 — ✅ Merged into T-08 Phase 1 (2026-03-18)
 
-**Status:** Not started.
-
-### Problem
-
-The three orthogonal axes that govern user identity and access are currently
-ad-hoc, inconsistently applied, and underdocumented:
-
-- **`accountType`** — `null` for regular users, `"venue"` for venue accounts.
-  `null` is used as the implicit default, which means missing-field and
-  "normal user" are indistinguishable. No enum or validation exists.
-- **`tier`** — DB-backed (`guest`, `regular`, `premium`, `unrestricted`, …).
-  Controls feature access flags and radius limits. Added to JWT. Stored in
-  `users` collection. Managed via admin UI. Broadly correct but the `unrestricted`
-  tier was added manually and is not in the seed migrations yet. The interaction
-  between tier and accountType is undefined (e.g. does a venue get a tier?
-  what does `nearbyRadiusM` mean for a venue with a fixed location?).
-- **`role`** — `"user"` | `"admin"`. Controls admin actions. Added to JWT.
-  Currently only two values; hardcoded in every service's `verifyToken` copy.
-
-### Goal
-
-Produce a written spec (in this ticket) agreed by the owner, then implement
-it so every service, every JWT claim, and every UI check is consistent.
-
-### Proposed definitions
-
-| Axis | Values | Meaning | Who sets it | In JWT? |
-|---|---|---|---|---|
-| `accountType` | `"user"` (not `null`), `"venue"` | **What kind of entity** the account represents. Determines which profile fields exist, how location is handled, and which UI view renders. | Admin only (admin UI convert-to-venue / revert). New registrations always `"user"`. | Yes — `account_type` claim |
-| `tier` | `guest`, `regular`, `premium`, `unrestricted`, … | **What features and radii** the account is allowed. Fully DB-backed; admin-configurable. Venue accounts can have a tier (controls their message radius). | Admin only. New registrations default to `regular`. Guests always `guest`. | Yes — `tier` claim |
-| `role` | `"user"`, `"admin"`, `"venue_manager"` | **What system actions** the account may perform (read/write other users' data, call admin endpoints, manage linked venue accounts). Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent promotions. `venue_manager` granted by admin. | Yes — `role` claim |
-
-### Concrete changes required
-
-1. **Rename `accountType: null` → `accountType: "user"`** everywhere:
-   - `auth-service`: set `account_type: "user"` on every new registration.
-   - `users-service`: migration that sets `accountType: "user"` on all
-     existing documents where the field is absent or null.
-   - All services that read `account_type` from JWT or DB: treat absent/null
-     as `"user"` as a backwards-compat fallback (belt-and-suspenders only).
-   - Frontend `isVenueAccount()` check: remains `=== "venue"`, no change needed.
-
-2. **Add migration `006_default_account_type`** in migration-service:
-   ```
-   db.users.updateMany({ accountType: { $in: [null, undefined] } },
-                       { $set: { accountType: "user" } })
-   ```
-
-3. **JWT `issue_user_token`** in `common/src/auth.rs`: always emit
-   `account_type` (never omit it). For non-venue accounts emit `"user"`.
-
-4. **Tiers and venues**: document and enforce that a venue account MUST have
-   a tier assigned. The tier's `messageRadiusM` is the distance within which
-   a user must be to message the venue (and vice versa). The tier's
-   `nearbyRadiusM` is irrelevant for venues (venues don't broadcast GPS;
-   they are always visible to users within the *user's* own nearby radius).
-   Document this in the tiers-service and in the admin UI tooltip.
-
-5. **Role enum validation**: `users-service` `PATCH /admin/users/:id/role`
-   currently accepts any string. Restrict to `["user", "admin", "venue_manager"]` (or the
-   DB-backed roles list if T-09 is implemented first).
-
-6. **Admin UI**: show `accountType` field as a read-only badge on every user
-   row in the search results (alongside tier and role). Make it clear which
-   axis is being changed when the admin clicks "Convert to Venue" vs
-   "Change Tier" vs "Change Role".
-
-7. **TICKETS.md / AUDIT.md**: once implemented, record the final definitions
-   here so they can be referenced in future sessions without re-deriving them.
-
-### Prerequisites
-
-- T-08 (authority service) would centralise these checks, but this ticket can
-  be implemented independently service-by-service.
-- Migration-service must be running to apply migration 006.
-
-### Owner's note to self
-
-`unrestricted` stays a tier (agreed 2026-03-18). No `developer` role or accountType will be introduced. Admin role provides sufficient developer access.
+Scope (normalise accountType/tier/role data model) absorbed into T-08 as Phase 1. See T-08 for full spec and implementation plan.
 
 ---
 
-## T-11 — Enforce 144-character plaintext limit on message send
-
-**Status:** Not started.
-
-### Problem
-
-The UI input counter in `ui/scripts/messages.js` (line 254) correctly counts
-down from 144 characters, but there is no enforcement on send. A user can type
-more than 144 characters and the message will be submitted without error. The
-messages-service validates only the *encrypted* text length (`MESSAGE_MAX_CHARS
-= 4096`), which is the ciphertext length, not the plaintext.
-
-The 144-character limit is intentional product behaviour. It must be enforced
-before encryption, on the client side.
-
-### Fix
-
-In `messages.js`, before calling `encryptFor()`, check `text.length > 144` and
-show an inline error instead of proceeding. No backend change required.
-
-### Prerequisites
-
-None.
+## T-11 — ✅ Complete (2026-03-18). Details in TICKETS_DONE.md.
 
 ---
 
@@ -482,6 +375,70 @@ This does not require a `roles` collection and can be implemented at any time.
 ### Owner's Comments
 
 - 2026-03-16: Raised by owner — need ability to add/edit/remove roles with permissions. Custom roles and permissions require backend work; tracked here. Standalone self-modification guard (AUDIT 1.4) can be patched sooner.
+
+---
+
+## T-16 — meta collection: runtime-configurable settings
+
+**Status:** Not started. Requires backend work.
+
+### Problem
+
+Several constants that affect user experience are currently hardcoded in services
+and cannot be changed without a redeploy. The owner's 2026-03-18 audit identified
+a clear split between safe runtime-editable values and constants that must stay
+in code.
+
+### Proposed schema
+
+```
+meta: {
+  key:             string   // e.g. "message_ttl_ms"
+  value:           any
+  type:            "number" | "string" | "boolean"
+  scope:           "admin" | "user" | "system"
+  description:     string
+  restartRequired: boolean
+  affects:         string   // service name or "ui"
+}
+```
+
+### Safe to make runtime-editable (first pass, 9 entries)
+
+| Key | Current value | Scope | Notes |
+|---|---|---|---|
+| `message_ttl_ms` | 14 400 000 (4 h) | admin | Stamped at write time — safe to change |
+| `favourite_expiry_days` | 30 | admin | Same pattern |
+| `rate_limit_login` | 10 / 15 min | admin | Immediate effect |
+| `rate_limit_register` | 5 / 1 hr | admin | Immediate effect |
+| `rate_limit_api` | 120 / 60 sec | admin | Immediate effect |
+| `ws_location_min_delta_m` | 5 m | admin | Immediate effect |
+| `location_update_min_distance_m` | 100 m | admin | Immediate effect |
+| `map_default_zoom` | 17 | user | UI-only; currently localStorage |
+| `show_favourite_pins_on_map` | true | user | UI-only; currently localStorage |
+
+### NOT safe to make runtime-editable
+
+MongoDB index TTLs (sessions `15 min`, locations `10 min`) require a `collMod`
+or migration to take effect — track as a separate migration step when these
+become configurable.
+
+Everything crypto, bcrypt cost, JWT structure, CORS — hard-code, no exceptions.
+
+### Prerequisites
+
+- T-08 Phase 2 (Authority service) ideally precedes the backend half, so
+  there is a single place to read/cache `meta` values.
+- The `map_default_zoom` and `show_favourite_pins_on_map` user-scope keys are
+  **already implemented as server-side per-user preferences** in T-07a (2026-03-18)
+  via `GET/PUT /users/me/preferences` — these two `meta` entries are obsolete for
+  the user scope. They remain listed here only for completeness; no further action
+  needed unless a global admin default (separate from per-user overrides) is wanted.
+
+### Owner's Comments
+
+- 2026-03-18: Audit provided by owner. First-pass scope agreed: 9 entries,
+  zero unsafe side-effects. DB-index TTLs tracked separately.
 
 ---
 

@@ -339,7 +339,7 @@ async fn put_location(
     }
 
     // Venue accounts have a fixed location — GPS pushes are not accepted.
-    if claims.account_type.as_deref() == Some("venue") {
+    if claims.account_type == "venue" {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Venue accounts have a fixed location." }))).into_response();
     }
 

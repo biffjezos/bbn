@@ -118,13 +118,26 @@ async function renderUsersTab() {
   });
 }
 
+function parseAdminSearchQuery(raw) {
+  var accountType = null;
+  var cleaned = raw.replace(/\btype:(venue|user)\b/gi, function (_, t) {
+    accountType = t.toLowerCase();
+    return '';
+  }).replace(/\s+/g, ' ').trim();
+  return { q: cleaned, accountType: accountType };
+}
+
 async function runUserSearch() {
-  var q   = document.getElementById('adminUserSearch').value.trim();
+  var raw = document.getElementById('adminUserSearch').value.trim();
   var by  = document.getElementById('adminSearchBy').value;
   var out = document.getElementById('adminUserResults');
+  var parsed = parseAdminSearchQuery(raw);
   out.innerHTML = '<p class="text-muted-bb small">Searching…</p>';
   try {
-    var data = await window.Api.adminSearchUsers({ q: q || undefined, by: by });
+    var params = { by: by };
+    if (parsed.q)           params.q           = parsed.q;
+    if (parsed.accountType) params.accountType = parsed.accountType;
+    var data = await window.Api.adminSearchUsers(params);
     if (!data.users || !data.users.length) {
       out.innerHTML = '<p class="text-muted-bb small">No results.</p>';
       return;
@@ -135,6 +148,9 @@ async function runUserSearch() {
     });
     out.querySelectorAll('[data-save-user]').forEach(function (btn) {
       btn.addEventListener('click', function () { saveUserChanges(btn.dataset.saveUser); });
+    });
+    out.querySelectorAll('[data-reassign-venue]').forEach(function (btn) {
+      btn.addEventListener('click', function () { reassignVenueManager(btn.dataset.reassignVenue); });
     });
     out.querySelectorAll('[data-copy-id]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -153,25 +169,59 @@ function renderUserCard(u) {
   var dot = u.online
     ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00e5a0;margin-right:6px;vertical-align:middle"></span>'
     : '';
+  var acctBadge  = u.accountType === 'venue'
+    ? '<span class="badge bg-secondary ms-1" style="font-size:0.65rem">venue</span>'
+    : '';
   var adminBadge = u.role === 'admin'
     ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem">admin</span>'
     : u.role === 'venue_manager'
       ? '<span class="badge bg-info ms-1" style="font-size:0.65rem">venue manager</span>'
       : '';
-  return [
-    '<div class="bbm-section mb-3" id="ucard-' + escHtml(u.userId) + '">',
-    '  <div class="d-flex align-items-center justify-content-between gap-3"',
-    '       style="cursor:pointer" data-toggle-card="' + escHtml(u.userId) + '">',
-    '    <div class="text-truncate">',
-    '      ' + dot + '<strong>' + escHtml(u.nickname) + '</strong>',
-    '      <span class="text-muted-bb ms-2" style="font-size:0.78rem">' + escHtml(u.email) + '</span>',
-    '      <span class="badge bg-' + escHtml(_tierCls(u.tier)) + ' ms-2" style="font-size:0.65rem">' + escHtml(u.tier) + '</span>',
-    '      ' + adminBadge,
+
+  var isVenue = u.accountType === 'venue';
+
+  // Venue cards: show manager field + reassign control instead of role/save.
+  var expandedBody = isVenue ? [
+    '    <div class="row g-3 mb-3">',
+    '      <div class="col-12 col-sm-6 col-md-4">',
+    '        <div class="small text-muted-bb mb-1">Venue ID</div>',
+    '        <div class="d-flex align-items-center gap-1">',
+    '          <code style="font-size:0.72rem;word-break:break-all">' + escHtml(u.userId) + '</code>',
+    '          <button class="btn btn-bbm-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.userId) + '" title="Copy ID" style="line-height:1">',
+    '            <i class="bi bi-clipboard" style="font-size:0.72rem"></i>',
+    '          </button>',
+    '        </div>',
+    '      </div>',
+    '      <div class="col-12 col-sm-6 col-md-4">',
+    '        <div class="small text-muted-bb mb-1">Current Manager ID</div>',
+    '        <div class="d-flex align-items-center gap-1">',
+    '          <code style="font-size:0.72rem;word-break:break-all" id="mgr-current-' + escHtml(u.userId) + '">' + escHtml(u.managerId || '—') + '</code>',
+    '          ' + (u.managerId ? '<button class="btn btn-bbm-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.managerId) + '" title="Copy Manager ID" style="line-height:1"><i class="bi bi-clipboard" style="font-size:0.72rem"></i></button>' : ''),
+    '        </div>',
+    '      </div>',
+    '      <div class="col-6 col-md-2">',
+    '        <label class="form-label small mb-1" for="tier-' + escHtml(u.userId) + '">Tier</label>',
+    '        ' + _buildTierSelect(u.userId, u.tier),
+    '      </div>',
     '    </div>',
-    '    <i class="bi bi-chevron-down text-muted flex-shrink-0"></i>',
-    '  </div>',
-    '  <div class="d-none mt-3 pt-3" style="border-top:1px solid var(--bbm-border)"',
-    '       id="uexpand-' + escHtml(u.userId) + '">',
+    '    <div class="row g-3 mb-3">',
+    '      <div class="col-12 col-md-6">',
+    '        <label class="form-label small mb-1" for="new-mgr-' + escHtml(u.userId) + '">Reassign Manager</label>',
+    '        <select class="form-select form-select-sm" id="new-mgr-' + escHtml(u.userId) + '">',
+    '          <option value="">Loading venue managers…</option>',
+    '        </select>',
+    '      </div>',
+    '    </div>',
+    '    <div class="d-flex align-items-center gap-3 flex-wrap">',
+    '      <button class="btn btn-bbm-primary btn-sm" data-save-user="' + escHtml(u.userId) + '">',
+    '        <i class="bi bi-check2 me-1"></i>Save Tier',
+    '      </button>',
+    '      <button class="btn btn-bbm-ghost btn-sm" data-reassign-venue="' + escHtml(u.userId) + '">',
+    '        <i class="bi bi-person-fill-gear me-1"></i>Reassign Manager',
+    '      </button>',
+    '      <span id="save-status-' + escHtml(u.userId) + '" style="font-size:0.8rem"></span>',
+    '    </div>',
+  ].join('') : [
     '    <div class="row g-3 mb-3">',
     '      <div class="col-12 col-sm-6 col-md-4">',
     '        <div class="small text-muted-bb mb-1">User ID</div>',
@@ -209,6 +259,23 @@ function renderUserCard(u) {
     '      </button>',
     '      <span id="save-status-' + escHtml(u.userId) + '" style="font-size:0.8rem"></span>',
     '    </div>',
+  ].join('');
+
+  return [
+    '<div class="bbm-section mb-3" id="ucard-' + escHtml(u.userId) + '">',
+    '  <div class="d-flex align-items-center justify-content-between gap-3"',
+    '       style="cursor:pointer" data-toggle-card="' + escHtml(u.userId) + '">',
+    '    <div class="text-truncate">',
+    '      ' + dot + '<strong>' + escHtml(u.nickname) + '</strong>',
+    '      <span class="text-muted-bb ms-2" style="font-size:0.78rem">' + escHtml(u.email || '') + '</span>',
+    '      <span class="badge bg-' + escHtml(_tierCls(u.tier)) + ' ms-2" style="font-size:0.65rem">' + escHtml(u.tier) + '</span>',
+    '      ' + acctBadge + adminBadge,
+    '    </div>',
+    '    <i class="bi bi-chevron-down text-muted flex-shrink-0"></i>',
+    '  </div>',
+    '  <div class="d-none mt-3 pt-3" style="border-top:1px solid var(--bbm-border)"',
+    '       id="uexpand-' + escHtml(u.userId) + '">',
+    expandedBody,
     '  </div>',
     '</div>',
   ].join('');
@@ -216,17 +283,39 @@ function renderUserCard(u) {
 
 function toggleUserCard(userId) {
   var el = document.getElementById('uexpand-' + userId);
-  if (el) el.classList.toggle('d-none');
+  if (!el) return;
+  var wasHidden = el.classList.contains('d-none');
+  el.classList.toggle('d-none');
+  if (wasHidden) _maybeLoadManagerDropdown(userId);
+}
+
+async function _maybeLoadManagerDropdown(userId) {
+  var sel = document.getElementById('new-mgr-' + userId);
+  if (!sel) return; // not a venue card
+  try {
+    var data = await window.Api.adminListVenueManagers();
+    var managers = (data.users || []).filter(function (u) { return u.role === 'venue_manager'; });
+    if (!managers.length) {
+      sel.innerHTML = '<option value="">No venue managers found</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— select a venue manager —</option>'
+      + managers.map(function (m) {
+          return '<option value="' + escHtml(m.userId) + '">' + escHtml(m.nickname) + '</option>';
+        }).join('');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Failed to load managers</option>';
+  }
 }
 
 async function saveUserChanges(userId) {
   var tierEl   = document.getElementById('tier-' + userId);
-  var roleEl   = document.getElementById('role-' + userId);
+  var roleEl   = document.getElementById('role-' + userId); // absent for venue cards
   var statusEl = document.getElementById('save-status-' + userId);
-  if (!tierEl || !roleEl || !statusEl) return;
+  if (!tierEl || !statusEl) return;
 
   var newTier = tierEl.value.trim();
-  var newRole = roleEl.value;
+  var newRole = roleEl ? roleEl.value : null;
 
   if (!newTier) { statusEl.className = 'text-danger'; statusEl.textContent = 'Tier cannot be empty.'; return; }
 
@@ -241,7 +330,7 @@ async function saveUserChanges(userId) {
 
     var ops = [];
     if (newTier !== user.tier) ops.push(window.Api.adminSetTier(userId, newTier));
-    if (newRole !== user.role) ops.push(window.Api.adminSetRole(userId, newRole));
+    if (newRole !== null && newRole !== user.role) ops.push(window.Api.adminSetRole(userId, newRole));
 
     if (!ops.length) {
       statusEl.className = 'text-muted-bb';
@@ -251,7 +340,35 @@ async function saveUserChanges(userId) {
 
     await Promise.all(ops);
     statusEl.className = 'text-success';
-    statusEl.textContent = 'Saved. User token invalidated — they will re-login on next request.';
+    statusEl.textContent = newRole !== null ? 'Saved. User token invalidated — they will re-login on next request.' : 'Tier saved.';
+  } catch (err) {
+    statusEl.className = 'text-danger';
+    statusEl.textContent = err.message;
+  }
+}
+
+async function reassignVenueManager(venueId) {
+  var inputEl  = document.getElementById('new-mgr-' + venueId);
+  var statusEl = document.getElementById('save-status-' + venueId);
+  if (!inputEl || !statusEl) return;
+
+  var newManagerId = inputEl.value.trim();
+  if (!newManagerId) {
+    statusEl.className = 'text-danger';
+    statusEl.textContent = 'Paste the new manager\'s user ID first.';
+    return;
+  }
+
+  statusEl.className = 'text-muted-bb';
+  statusEl.textContent = 'Reassigning…';
+
+  try {
+    await window.Api.adminReassignVenueManager(venueId, newManagerId);
+    var currentEl = document.getElementById('mgr-current-' + venueId);
+    if (currentEl) currentEl.textContent = newManagerId;
+    inputEl.value = '';
+    statusEl.className = 'text-success';
+    statusEl.textContent = 'Manager reassigned.';
   } catch (err) {
     statusEl.className = 'text-danger';
     statusEl.textContent = err.message;

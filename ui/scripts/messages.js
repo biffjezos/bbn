@@ -175,9 +175,10 @@ async function handleConversationsUpdate(messages) {
       catch { _profileCache[uid] = { value: {}, exp: Date.now() + _CACHE_TTL_MS }; }
     }
     const profile = _profileCache[uid].value;
-    threads[uid].nickname  = profile.nickname  || uid;
+    threads[uid].nickname  = uid === myId ? 'Reminder to Yourself' : (profile.nickname || uid);
     threads[uid].sex       = profile.sex       || null;
     threads[uid].publicKey = profile.publicKey || null;
+    threads[uid].isSelf    = uid === myId;
   }));
 
   // Decrypt previews
@@ -263,6 +264,7 @@ function setupThreadUI(userId) {
     sendBtn.addEventListener('click', async () => {
       const text = input?.value.trim();
       if (!text) return;
+      if (text.length > 144) { if (errEl) { errEl.textContent = 'Message too long (max 144 characters).'; errEl.classList.remove('d-none'); } return; }
       errEl?.classList.add('d-none');
 
       if (!window.requireUnlocked?.()) { console.warn('[Send] blocked: crypto not unlocked'); return; }

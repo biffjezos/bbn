@@ -148,7 +148,7 @@ async fn get_blocks(
         .filter_map(|e| {
             let blocked_id = e.get_str("blockedUserId").ok()?.to_string();
             let reason     = e.get_str("reason").ok()?.to_string();
-            let created_at = e.get_datetime("createdAt").ok().map(|d| d.to_string());
+            let created_at = e.get_datetime("createdAt").ok().and_then(|d| d.try_to_rfc3339_string().ok());
             let profile    = user_map.get(&blocked_id);
             Some(json!({
                 "userId":    blocked_id,

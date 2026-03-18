@@ -167,7 +167,7 @@ pub struct UserClaims {
     pub nickname:     Option<String>,
     pub age:          Option<u32>,
     pub sex:          Option<String>,
-    pub account_type: Option<String>, // "venue" for venue accounts; absent for regular users
+    pub account_type: String,
 }
 
 /// Decode and validate (signature + expiry) a user/guest JWT.
@@ -201,8 +201,7 @@ struct IssuedUserClaims {
     tv:           u32,
     exp:          u64,
     iat:          u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    account_type: Option<String>,
+    account_type: String,
 }
 
 #[derive(Serialize)]
@@ -230,7 +229,7 @@ pub struct UserTokenParams<'a> {
     pub role:         &'a str,
     pub tier:         &'a str,
     pub tv:           u32,
-    pub account_type: Option<&'a str>,
+    pub account_type: &'a str,
 }
 
 /// Sign a user JWT. `role` is typically `"user"` or `"admin"`.
@@ -252,7 +251,7 @@ pub fn issue_user_token(
             tv:           p.tv,
             exp:          now + USER_TOKEN_EXPIRY_SECS,
             iat:          now,
-            account_type: p.account_type.map(|s| s.to_string()),
+            account_type: p.account_type.to_string(),
         },
         &EncodingKey::from_secret(secret.as_bytes()),
     )

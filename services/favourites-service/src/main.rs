@@ -124,7 +124,7 @@ struct UserProfile {
     nickname:     Option<String>,
     sex:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type: Option<String>,
+    account_type: String,
 }
 
 #[derive(Deserialize)]
@@ -276,17 +276,17 @@ async fn get_favourites(
         .map(|e| {
             let u = &user_map[&e.favourite_user_id];
             {
-                let is_venue = u.account_type.as_deref() == Some("venue");
+                let is_venue = u.account_type == "venue";
                 json!({
                     "userId":        e.favourite_user_id,
                     "nickname":      u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
                     "sex":           u.sex.as_deref(),
-                    "accountType":   u.account_type.as_deref(),
+                    "accountType":   u.account_type,
                     // Venues are always online
                     "online":        is_venue || online_set.contains(&e.favourite_user_id),
-                    "addedAt":       e.added_at.map(|d| d.to_string()),
+                    "addedAt":       e.added_at.and_then(|d| d.try_to_rfc3339_string().ok()),
                     "withinRange":   e.within_range,
-                    "withinRangeAt": e.within_range_at.map(|d| d.to_string()),
+                    "withinRangeAt": e.within_range_at.and_then(|d| d.try_to_rfc3339_string().ok()),
                 })
             }
         })
@@ -627,13 +627,34 @@ async fn get_notifications(
         Err(e) => { eprintln!("[notifications GET] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
+    // Check which senders are already in the recipient's favourites (single query).
+    let sender_ids: Vec<&str> = items.iter().map(|n| n.from_user_id.as_str()).collect();
+    let already_fav_ids: HashSet<String> = if sender_ids.is_empty() {
+        HashSet::new()
+    } else {
+        match state.db.collection::<Document>("favourites")
+            .find(doc! { "ownerUserId": &claims.sub, "favouriteUserId": { "$in": &sender_ids } })
+            .projection(doc! { "favouriteUserId": 1 })
+            .await
+        {
+            Ok(cursor) => {
+                let docs: Vec<Document> = cursor.try_collect().await.unwrap_or_default();
+                docs.into_iter()
+                    .filter_map(|d| d.get_str("favouriteUserId").ok().map(String::from))
+                    .collect()
+            }
+            Err(_) => HashSet::new(),
+        }
+    };
+
     let notifications: Vec<_> = items.iter().map(|n| json!({
         "id":           n.id.to_hex(),
         "fromUserId":   n.from_user_id,
         "fromNickname": n.from_nickname.as_deref(),
         "fromSex":      n.from_sex.as_deref(),
         "type":         n.type_,
-        "createdAt":    n.created_at.map(|d| d.to_string()),
+        "createdAt":    n.created_at.and_then(|d| d.try_to_rfc3339_string().ok()),
+        "alreadyFav":   already_fav_ids.contains(&n.from_user_id),
     })).collect();
 
     Json(json!({ "notifications": notifications })).into_response()

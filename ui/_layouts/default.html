@@ -36,12 +36,13 @@
 <script src="{{ '/scripts/auth.js'   | relative_url }}?v={{ site.time | date: '%s' }}"></script>
 <script src="{{ '/scripts/app.js'    | relative_url }}?v={{ site.time | date: '%s' }}"></script>
 <script src="{{ '/scripts/blocks.js' | relative_url }}?v={{ site.time | date: '%s' }}"></script>
+<script src="{{ '/scripts/prefs.js'  | relative_url }}?v={{ site.time | date: '%s' }}"></script>
 
 <!-- Route guards: redirect unauthorised visitors before page content loads -->
 <script>
   (function () {
     var base       = window.BOOMBOOM_BASE || '';
-    var PROTECTED  = [base + '/messages', base + '/favourites', base + '/profile'];
+    var PROTECTED  = [base + '/messages', base + '/favourites', base + '/profile', base + '/settings'];
     var ADMIN_ONLY = [base + '/admin'];
     var path       = window.location.pathname;
     var isAdmin    = ADMIN_ONLY.some(function(p) { return path.startsWith(p); });

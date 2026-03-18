@@ -6,6 +6,73 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-07a — Settings Page
+
+**Status:** ✅ Complete (2026-03-18).
+
+### What was implemented
+
+- Route: `/settings/` — full settings page loaded via the app layout
+- **Blocked users** — list of blocked accounts with unblock button (T-05 integration)
+- **Account info** — displays email, accountType, tier, role (read-only)
+- **App limits** — shows session duration, message TTL, other tier-derived limits
+- **Profile editing** — nickname, age, sex (same fields as registration)
+- **Password change** — current + new password form
+- **Preferences** — map default zoom and show-favourite-pins toggle; stored server-side in `users` document via `GET/PUT /users/me/preferences`; `prefs.js` added as global module (loads between `blocks.js` and `map.js`); localStorage used as synchronous read-through cache for `map.js`
+- **Danger zone** — account deletion and other destructive actions
+
+### Backend additions (users-service)
+
+- `GET /users/me/preferences` — returns `{ mapZoom, showFavPins }` with defaults (17, true) when sub-document absent
+- `PUT /users/me/preferences` — updates `preferences.mapZoom` and/or `preferences.showFavPins` via dot-notation `$set`
+
+### New files
+
+- `ui/settings/index.html`
+- `ui/scripts/settings.js`
+- `ui/scripts/prefs.js` (global preferences module)
+
+### Notes
+
+- T-16 `meta` entries for `map_default_zoom` and `show_favourite_pins_on_map` are now server-side per-user prefs (not admin-controlled `meta`). T-16 entry updated accordingly.
+
+---
+
+## T-08 Phase 1 — Normalise accountType / tier / role (ex-T-13)
+
+**Status:** ✅ Complete (2026-03-18).
+
+**Canonical axis definitions:**
+
+| Axis | Values | Meaning | Who sets it | In JWT? |
+|---|---|---|---|---|
+| `accountType` | `"user"` (never `null`), `"venue"` | What kind of entity the account represents. | Admin only. New registrations always `"user"`. | Yes — `account_type` claim |
+| `tier` | `guest`, `regular`, `premium`, `unrestricted` | Feature gates and radius limits. | Admin only. New registrations default to `regular`. | Yes — `tier` claim |
+| `role` | `"user"`, `"admin"`, `"venue_manager"` | System actions the account may perform. | Bootstrap env var / admin UI. | Yes — `role` claim |
+
+**What was done:**
+- Legacy accounts without `accountType` deleted from DB directly (dev environment, two test accounts).
+- `account_type: Option<String>` → `String` across all services and `common/src/auth.rs`.
+- All `.as_deref() == Some("venue")` patterns replaced with direct `== "venue"` comparisons.
+- `skip_serializing_if` on `account_type` in JWT claims removed — field always present.
+- `migration_007` (`007_default_account_type`) removed from migration-service (no longer needed; DB has no null accountType rows).
+- `UserTokenParams.account_type: Option<&str>` → `&str`.
+
+**Note (owner, 2026-03-18):** `unrestricted` stays a tier. No `developer` role or accountType.
+
+---
+
+## T-11 — Enforce 144-character plaintext limit on message send
+
+**Status:** ✅ Complete (2026-03-18).
+
+Added a guard in `ui/scripts/messages.js` (send handler, line 266) that checks
+`text.length > 144` before calling `encryptFor()`. Shows an inline error and
+returns early — encryption and send are never reached for oversized input.
+No backend change required.
+
+---
+
 ## T-12 — Remove leftover `bbm_meet` localStorage key
 
 **Status:** ✅ Closed as invalid (2026-03-18).

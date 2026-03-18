@@ -246,6 +246,7 @@ async fn auth_register(
             "sex":          &sex,
             "tier":         "regular",
             "role":         "user",
+            "accountType":  "user",
             "tokenVersion": 0_i32,
             "createdAt":    DateTime::now(),
         })
@@ -287,7 +288,7 @@ async fn auth_register(
         role:         "user",
         tier:         "regular",
         tv:           0,
-        account_type: None, // new registrations are never venues
+        account_type: Some("user"), // always set; backfilled for old accounts by migration 007
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/register] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
@@ -322,7 +323,7 @@ struct UserDoc {
     tier:          Option<String>,
     role:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type:  Option<String>,
+    account_type:  String,
     #[serde(rename = "passwordHash")]
     password_hash: String,
     #[serde(rename = "tokenVersion")]
@@ -389,7 +390,7 @@ async fn auth_login(
         role:         &role,
         tier:         &tier,
         tv,
-        account_type: user.account_type.as_deref(),
+        account_type: &user.account_type,
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/login] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
@@ -426,7 +427,7 @@ async fn main() {
         .database(&cfg.db_name);
     println!("[auth] DB connected.");
 
-    // Ensure TTL index on sessions.createdAt — auto-expires guest sessions after 2 hours.
+    // Ensure TTL index on sessions.createdAt — auto-expires guest sessions after 20 minutes.
     // create_index is idempotent: MongoDB ignores the call if the index already exists.
     {
         let idx = IndexModel::builder()

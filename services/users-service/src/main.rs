@@ -94,7 +94,7 @@ struct UserForToken {
     role:          Option<String>,
     tier:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type:  Option<String>,
+    account_type:  String,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
 }
@@ -107,7 +107,7 @@ struct SearchUserDoc {
     age:          Option<i32>,
     sex:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type: Option<String>,
+    account_type: String,
 }
 
 #[derive(Deserialize)]
@@ -118,7 +118,7 @@ struct ProfileDoc {
     #[serde(rename = "publicKey")]
     public_key:            Option<String>,
     #[serde(rename = "accountType")]
-    account_type:          Option<String>,
+    account_type:          String,
     #[serde(rename = "venueName")]
     venue_name:            Option<String>,
     description:           Option<String>,
@@ -142,7 +142,9 @@ struct AdminUserDoc {
     tier:          Option<String>,
     role:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type:  Option<String>,
+    account_type:  String,
+    #[serde(rename = "managerId")]
+    manager_id:    Option<String>,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
     #[serde(rename = "createdAt")]
@@ -184,7 +186,7 @@ fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
             role:         match user.role.as_deref() { Some("admin") => "admin", Some("venue_manager") => "venue_manager", _ => "user" },
             tier:         user.tier.as_deref().unwrap_or("regular"),
             tv:           user.token_version.unwrap_or(0).max(0) as u32,
-            account_type: user.account_type.as_deref(),
+            account_type: &user.account_type,
         },
         secret,
     )
@@ -490,13 +492,15 @@ async fn delete_me(
 
 #[derive(Deserialize)]
 struct SearchQuery {
-    nickname: Option<String>,
+    nickname:     Option<String>,
     #[serde(rename = "ageMin")]
-    age_min:  Option<i32>,
+    age_min:      Option<i32>,
     #[serde(rename = "ageMax")]
-    age_max:  Option<i32>,
-    sex:      Option<String>,
-    online:   Option<String>,
+    age_max:      Option<i32>,
+    sex:          Option<String>,
+    online:       Option<String>,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
 }
 
 async fn search_users(
@@ -515,6 +519,12 @@ async fn search_users(
     if let Some(sex) = &q.sex {
         if matches!(sex.as_str(), "m" | "f") {
             filter.insert("sex", sex.as_str());
+        }
+    }
+
+    if let Some(at) = &q.account_type {
+        if matches!(at.as_str(), "user" | "venue") {
+            filter.insert("accountType", at.as_str());
         }
     }
 
@@ -563,7 +573,7 @@ async fn search_users(
     let mut results: Vec<_> = users.iter().map(|u| {
         let uid = u.id.to_hex();
         // Venues have a fixed location and are always reachable — never offline.
-        let is_online = u.account_type.as_deref() == Some("venue")
+        let is_online = u.account_type == "venue"
             || online_set.contains(uid.as_str());
         json!({
             "userId":      uid,
@@ -571,7 +581,7 @@ async fn search_users(
             "age":         u.age,
             "sex":         u.sex.as_deref(),
             "online":      is_online,
-            "accountType": u.account_type.as_deref(),
+            "accountType": u.account_type,
         })
     }).collect();
 
@@ -635,7 +645,7 @@ async fn get_profile(
                 "age":                 user.age,
                 "sex":                 user.sex.as_deref(),
                 "publicKey":           user.public_key.as_deref(),
-                "accountType":         user.account_type.as_deref(),
+                "accountType":         user.account_type,
                 "venueName":           user.venue_name.as_deref(),
                 "description":         user.description.as_deref(),
                 "openingHours":        user.opening_hours.as_deref(),
@@ -662,7 +672,7 @@ async fn get_profile(
         "age":                user.age,
         "sex":                user.sex.as_deref(),
         "publicKey":          user.public_key.as_deref(),
-        "accountType":        user.account_type.as_deref(),
+        "accountType":        user.account_type,
         "venueName":          user.venue_name.as_deref(),
         "description":        user.description.as_deref(),
         "openingHours":       user.opening_hours.as_deref(),
@@ -738,12 +748,94 @@ async fn get_keys(
     }
 }
 
+// ── GET /users/me/preferences ────────────────────────────────────────────────
+
+async fn get_preferences(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let oid = match safe_object_id(&claims.sub) {
+        Some(id) => id,
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid user id." }))).into_response(),
+    };
+
+    let user: Option<Document> = match state.db.collection::<Document>("users")
+        .find_one(doc! { "_id": oid })
+        .projection(doc! { "preferences": 1 })
+        .await
+    {
+        Ok(u)  => u,
+        Err(e) => { eprintln!("[users/me/preferences GET] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+
+    let prefs        = user.as_ref().and_then(|d| d.get_document("preferences").ok());
+    let map_zoom     = prefs.and_then(|p| p.get_i32("mapZoom").ok()).unwrap_or(17);
+    let show_fav_pins = prefs.and_then(|p| p.get_bool("showFavPins").ok()).unwrap_or(true);
+
+    Json(json!({ "mapZoom": map_zoom, "showFavPins": show_fav_pins })).into_response()
+}
+
+// ── PUT /users/me/preferences ────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct PreferencesBody {
+    #[serde(rename = "mapZoom")]
+    map_zoom:      Option<serde_json::Value>,
+    #[serde(rename = "showFavPins")]
+    show_fav_pins: Option<bool>,
+}
+
+async fn put_preferences(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+    Json(body): Json<PreferencesBody>,
+) -> impl IntoResponse {
+    let oid = match safe_object_id(&claims.sub) {
+        Some(id) => id,
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid user id." }))).into_response(),
+    };
+
+    let mut update = doc! {};
+
+    if let Some(zoom_val) = body.map_zoom {
+        let zoom: i32 = match &zoom_val {
+            serde_json::Value::Number(n) => n.as_i64().unwrap_or(17) as i32,
+            serde_json::Value::String(s) => s.parse().unwrap_or(17),
+            _ => 17,
+        };
+        if zoom < 1 || zoom > 19 {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "mapZoom must be 1–19." }))).into_response();
+        }
+        update.insert("preferences.mapZoom", zoom);
+    }
+
+    if let Some(show) = body.show_fav_pins {
+        update.insert("preferences.showFavPins", show);
+    }
+
+    if update.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Nothing to update." }))).into_response();
+    }
+
+    match state.db.collection::<Document>("users")
+        .update_one(doc! { "_id": oid }, doc! { "$set": update })
+        .await
+    {
+        Ok(_)  => Json(json!({ "ok": true })).into_response(),
+        Err(e) => { eprintln!("[users/me/preferences PUT] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    }
+}
+
 // ── GET /admin/users ──────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 struct AdminSearchQuery {
-    q:  Option<String>,
-    by: Option<String>,
+    q:            Option<String>,
+    by:           Option<String>,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
 }
 
 async fn admin_get_users(
@@ -768,11 +860,18 @@ async fn admin_get_users(
                         None      => return Json(json!({ "users": [] })).into_response(),
                     }
                 }
+                Some("role")  => { filter.insert("role", trimmed); }
                 _ => {
                     let esc = regex_escape(trimmed);
                     filter.insert("nickname", doc! { "$regex": esc, "$options": "i" });
                 }
             }
+        }
+    }
+
+    if let Some(at) = &q.account_type {
+        if matches!(at.as_str(), "user" | "venue") {
+            filter.insert("accountType", at.as_str());
         }
     }
 
@@ -816,7 +915,7 @@ async fn admin_get_users(
     let result: Vec<_> = users.iter().map(|u| {
         let uid = u.id.to_hex();
         // Venues have a fixed location and are always reachable — never offline.
-        let is_online = u.account_type.as_deref() == Some("venue")
+        let is_online = u.account_type == "venue"
             || online_set.contains(uid.as_str());
         json!({
             "userId":       uid,
@@ -827,9 +926,10 @@ async fn admin_get_users(
             "tier":         u.tier.as_deref().unwrap_or("regular"),
             "role":         u.role.as_deref().unwrap_or("user"),
             "tokenVersion": u.token_version.unwrap_or(0),
-            "accountType":  u.account_type.as_deref(),
+            "accountType":  u.account_type,
+            "managerId":    u.manager_id.as_deref(),
             "online":       is_online,
-            "createdAt":    u.created_at.map(|d| d.to_string()),
+            "createdAt":    u.created_at.and_then(|d| d.try_to_rfc3339_string().ok()),
         })
     }).collect();
 
@@ -924,6 +1024,75 @@ async fn admin_patch_role(
     };
 
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
+}
+
+// ── PATCH /admin/venues/:id/manager ──────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct ReassignManagerBody {
+    #[serde(rename = "newManagerId")]
+    new_manager_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RoleOnlyDoc {
+    role: Option<String>,
+}
+
+async fn admin_patch_venue_manager(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+    State(state): State<AppState>,
+    Path(venue_id): Path<String>,
+    Json(body): Json<ReassignManagerBody>,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+
+    let venue_oid = match safe_object_id(&venue_id) {
+        Some(o) => o,
+        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid venue id." }))).into_response(),
+    };
+
+    let new_manager_id = match body.new_manager_id.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        Some(id) => id.to_string(),
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "newManagerId is required." }))).into_response(),
+    };
+
+    let manager_oid = match safe_object_id(&new_manager_id) {
+        Some(o) => o,
+        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid newManagerId." }))).into_response(),
+    };
+
+    // Verify new manager exists and has the venue_manager role.
+    let manager_doc = match state.db.collection::<RoleOnlyDoc>("users")
+        .find_one(doc! { "_id": manager_oid })
+        .projection(doc! { "role": 1 })
+        .await
+    {
+        Ok(Some(u)) => u,
+        Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "New manager account not found." }))).into_response(),
+        Err(e)      => { eprintln!("[admin/venues PATCH manager] manager lookup: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+    if manager_doc.role.as_deref() != Some("venue_manager") {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Target account does not have the venue_manager role." }))).into_response();
+    }
+
+    // Verify venue exists.
+    match state.db.collection::<Document>("users")
+        .update_one(
+            doc! { "_id": venue_oid, "accountType": "venue" },
+            doc! { "$set": { "managerId": &new_manager_id } },
+        )
+        .await
+    {
+        Ok(r) if r.matched_count == 0 => return (StatusCode::NOT_FOUND, Json(json!({ "error": "Venue not found." }))).into_response(),
+        Ok(_)  => {},
+        Err(e) => { eprintln!("[admin/venues PATCH manager] update: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    }
+
+    Json(json!({ "ok": true })).into_response()
 }
 
 // ── Manager venue endpoints ───────────────────────────────────────────────────
@@ -1185,9 +1354,11 @@ async fn main() {
         .route("/users/{user_id}/profile",   get(get_profile))
         .route("/users/me/keys",             put(put_keys))
         .route("/users/me/keys",             get(get_keys))
+        .route("/users/me/preferences",      get(get_preferences).put(put_preferences))
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
         .route("/admin/users/{id}/role",         patch(admin_patch_role))
+        .route("/admin/venues/{id}/manager",     patch(admin_patch_venue_manager))
         .route("/manager/venues",            get(get_manager_venues).post(post_manager_venues))
         .route("/manager/venues/{id}",       put(put_manager_venue).delete(delete_manager_venue))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })

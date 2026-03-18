@@ -123,7 +123,7 @@
   Auth.onLogout = function () {
     applyAuthState(false);
     window.MapModule && window.MapModule.refreshMarkers();
-    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile', BASE + '/admin'];
+    var prot = [BASE + '/messages', BASE + '/favourites', BASE + '/profile', BASE + '/admin', BASE + '/settings'];
     if (prot.some(function(p) { return location.pathname.startsWith(p); })) {
       window.location.href = BASE + '/';
     }
@@ -898,10 +898,13 @@
     if (dot) dot.classList.remove('d-none');
 
     container.innerHTML = notifications.map(function (n) {
-      return '<div class="alert alert-info alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0" role="alert" data-notif-id="' + esc(n.id) + '" style="border-left:none;border-right:none;border-top:none">' +
+      var body = n.alreadyFav
+        ? '<strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites.'
+        : '<strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites. ' +
+          '<a href="#" class="alert-link fav-back-link">Add them back</a> to start chatting!';
+      return '<div class="alert alert-info alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0" role="alert" data-notif-id="' + esc(n.id) + '" data-from-user-id="' + esc(n.fromUserId) + '" style="border-left:none;border-right:none;border-top:none">' +
         '<i class="bi bi-star-fill flex-shrink-0"></i>' +
-        '<span><strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites. ' +
-        '<a href="' + esc((window.BOOMBOOM_BASE) + '/favourites/') + '" class="alert-link">Add them back</a> to start chatting!</span>' +
+        '<span>' + body + '</span>' +
         '<button type="button" class="btn-close ms-auto flex-shrink-0" aria-label="Dismiss"></button>' +
         '</div>';
     }).join('');
@@ -920,8 +923,21 @@
       btn.addEventListener('click', function () { dismiss(btn.closest('[data-notif-id]')); });
     });
 
-    container.querySelectorAll('.alert-link').forEach(function (link) {
-      link.addEventListener('click', function () { dismiss(link.closest('[data-notif-id]')); });
+    container.querySelectorAll('.fav-back-link').forEach(function (link) {
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        var alertEl    = link.closest('[data-notif-id]');
+        var fromUserId = alertEl && alertEl.dataset.fromUserId;
+        dismiss(alertEl);
+        var dest = (window.BOOMBOOM_BASE || '') + '/favourites/';
+        if (fromUserId && window.Api) {
+          window.Api.addFavourite(fromUserId).catch(function () {}).finally(function () {
+            window.location.href = dest;
+          });
+        } else {
+          window.location.href = dest;
+        }
+      });
     });
   }
 

@@ -108,16 +108,7 @@ async function renderMyProfile() {
 
   const isVenue = current.accountType === 'venue';
 
-  const dangerBorderColor = isVenue ? 'var(--bbm-danger-border)'
-    : current.sex === 'f' ? 'var(--bbm-meet-pill-border)'
-    : current.sex === 'm' ? 'var(--bbm-meet-pill-border-male)'
-    : 'var(--bbm-danger-border)';
-  const dangerLabelColor = isVenue ? 'var(--bbm-danger-text)'
-    : current.sex === 'f' ? 'var(--bbm-pink-light)'
-    : current.sex === 'm' ? 'var(--bbm-blue-light)'
-    : 'var(--bbm-danger-text)';
-
-  const editableFields = isVenue ? `
+const editableFields = isVenue ? `
       <div class="mb-3">
         <label class="form-label">Venue name</label>
         <input type="text" class="form-control" id="editNickname"
@@ -174,16 +165,6 @@ async function renderMyProfile() {
           <i class="bi bi-key me-2"></i>Change Password
         </button>
       </div>
-    </div>
-
-    <div class="bbm-profile-form mt-5"
-      style="border:1px solid ${dangerBorderColor};border-radius:var(--bbm-radius,12px);padding:1.25rem">
-      <h6 style="font-size:0.75rem;letter-spacing:0.08em;text-transform:uppercase;
-                 color:${dangerLabelColor};margin-bottom:0.75rem">Danger Zone</h6>
-      <p class="text-muted-bb small mb-3">Permanently deletes your account, messages and favourites.</p>
-      <button class="btn btn-bbm-danger" id="deleteAccountBtn">
-        <i class="bi bi-trash3 me-2"></i>Delete Account
-      </button>
     </div>`;
 
   const tierBadgeEl = document.getElementById('tierBadge');
@@ -230,14 +211,6 @@ async function renderMyProfile() {
     }
   });
 
-  document.getElementById('deleteAccountBtn').addEventListener('click', () => {
-    const input = document.getElementById('deleteNicknameInput');
-    if (input) input.value = '';
-    const confirmBtn = document.getElementById('confirmDeleteBtn');
-    if (confirmBtn) confirmBtn.disabled = true;
-    new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
-  });
-
   // Render "My Venue" section for venue managers
   if (getJwtRole() === 'venue_manager') {
     renderManagerVenueSection(wrap);
@@ -260,7 +233,7 @@ async function renderMyProfile() {
       <div class="mb-4"><label class="form-label" for="confirmPw">Confirm New Password</label>
         <input type="password" class="form-control" id="confirmPw" autocomplete="new-password" /></div>
       <button class="btn btn-bbm-primary" id="savePwBtn"><i class="bi bi-check2 me-2"></i>Update Password</button>`;
-    document.getElementById('deleteAccountBtn').closest('.bbm-profile-form').before(section);
+    wrap.appendChild(section);
 
     document.getElementById('savePwBtn').addEventListener('click', async () => {
       const alertEl = document.getElementById('pwAlert');
@@ -501,6 +474,7 @@ async function renderPublicProfile() {
   page.innerHTML = loadingHtml('Loading profile…');
 
   const viewerIsReg = isRegistered();
+  const isOwnProfile = viewerIsReg && userId === getJwtField('sub');
 
   try {
     const profile   = await window.Api.getProfile(userId);
@@ -532,7 +506,20 @@ async function renderPublicProfile() {
            <i class="bi bi-slash-circle me-1"></i>Block User
          </button>`;
 
-    const actionBlock = viewerIsReg ? `
+    const actionBlock = !viewerIsReg ? `
+      <div class="mt-4">
+        <p class="text-muted-bb mb-3">Create an account to message and favourite people nearby.</p>
+        <div class="d-flex gap-3 flex-wrap">
+          <button class="btn btn-bbm-primary" data-bs-toggle="modal" data-bs-target="#registerModal">
+            <i class="bi bi-person-plus me-2"></i>Create Account</button>
+          <button class="btn btn-bbm-ghost" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>
+        </div>
+      </div>`
+    : isOwnProfile ? `
+      <div class="d-flex gap-3 flex-wrap mt-4 align-items-center">
+        <a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message yourself</a>
+      </div>`
+    : `
       <div class="d-flex gap-3 flex-wrap mt-4 align-items-center">
         ${msgBtnHtml}
         <button class="btn ${isFav ? 'btn-bbm-outline-pink' : 'btn-bbm-ghost'}" id="favToggleBtn"
@@ -543,14 +530,6 @@ async function renderPublicProfile() {
       </div>
       <div class="mt-3">
         ${blockToggleHtml}
-      </div>` : `
-      <div class="mt-4">
-        <p class="text-muted-bb mb-3">Create an account to message and favourite people nearby.</p>
-        <div class="d-flex gap-3 flex-wrap">
-          <button class="btn btn-bbm-primary" data-bs-toggle="modal" data-bs-target="#registerModal">
-            <i class="bi bi-person-plus me-2"></i>Create Account</button>
-          <button class="btn btn-bbm-ghost" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>
-        </div>
       </div>`;
 
     page.innerHTML = `
