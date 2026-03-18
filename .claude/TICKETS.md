@@ -535,9 +535,10 @@ When a logged-in user has `role: "venue_manager"`, `/profile` renders an additio
 
 **2. Message radius — bi-directional, lower-tier governs**
 
-- User → venue: user must be within their own `nearbyRadiusM` of the venue's `fixedLat/fixedLon`.
-- Venue → user: user must be within the venue's `nearbyRadiusM` of the venue's `fixedLat/fixedLon`.
-- Effective radius = min(user tier `nearbyRadiusM`, venue tier `nearbyRadiusM`). Lower tier always wins.
+- User → venue: user must be within their own `messageRadiusM` of the venue's `fixedLat/fixedLon`.
+- Venue → user: user must be within the venue's `messageRadiusM` of the venue's `fixedLat/fixedLon`.
+- Effective radius = min(user tier `messageRadiusM`, venue tier `messageRadiusM`). Lower tier always wins.
+- The existing `GET /tiers/radius/message/:tier` endpoint (tiers-service) and the `get_message_radius` helper in favourites-service must be reused — same pattern as user-to-user messaging.
 - User blocks venue → venue cannot see or message that user (same enforcement as user-to-user blocks).
 
 **3. Venue map visibility**
