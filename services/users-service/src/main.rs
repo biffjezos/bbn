@@ -566,11 +566,12 @@ async fn search_users(
         let is_online = u.account_type.as_deref() == Some("venue")
             || online_set.contains(uid.as_str());
         json!({
-            "userId":   uid,
-            "nickname": u.nickname.as_deref(),
-            "age":      u.age,
-            "sex":      u.sex.as_deref(),
-            "online":   is_online,
+            "userId":      uid,
+            "nickname":    u.nickname.as_deref(),
+            "age":         u.age,
+            "sex":         u.sex.as_deref(),
+            "online":      is_online,
+            "accountType": u.account_type.as_deref(),
         })
     }).collect();
 
