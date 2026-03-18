@@ -21,6 +21,21 @@ function getJwtField(field) {
 
 function getJwtRole() { return getJwtField('role') || 'user'; }
 
+const ROLE_BADGE = {
+  admin:         { cls: 'bg-danger',  icon: 'bi-shield-lock-fill', label: 'Admin' },
+  venue_manager: { cls: 'bg-info',    icon: 'bi-house-fill',       label: 'Venue Manager' },
+};
+
+function roleBadgesHtml(roles) {
+  return roles
+    .filter(function(r) { return r !== 'user' && ROLE_BADGE[r]; })
+    .map(function(r) {
+      var b = ROLE_BADGE[r];
+      return `<span class="badge ${b.cls} d-inline-flex align-items-center gap-1" style="font-size:0.8rem"><i class="bi ${b.icon}"></i>&nbsp;${b.label}</span>`;
+    })
+    .join('');
+}
+
 function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'unknown'; }
 function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
 function sexLabel(sex)  { return sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—'; }
@@ -141,6 +156,7 @@ async function renderMyProfile() {
 
       <div class="mb-4 d-flex align-items-center gap-2 flex-wrap">
         ${isVenue ? `<span class="badge bg-secondary d-inline-flex align-items-center gap-1" style="font-size:0.8rem"><i class="bi bi-house-fill"></i>&nbsp;Venue account</span>` : ''}
+        ${roleBadgesHtml([getJwtRole()])}
         <span class="text-muted-bb small">${isVenue ? 'Plan:' : 'Account type'}</span>
         <span id="tierBadge"
           class="badge bg-${escHtml(tierCls)} d-inline-flex align-items-center gap-1"
