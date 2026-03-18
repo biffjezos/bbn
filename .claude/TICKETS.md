@@ -381,29 +381,7 @@ Scope (normalise accountType/tier/role data model) absorbed into T-08 as Phase 1
 
 ---
 
-## T-11 — Enforce 144-character plaintext limit on message send
-
-**Status:** Not started.
-
-### Problem
-
-The UI input counter in `ui/scripts/messages.js` (line 254) correctly counts
-down from 144 characters, but there is no enforcement on send. A user can type
-more than 144 characters and the message will be submitted without error. The
-messages-service validates only the *encrypted* text length (`MESSAGE_MAX_CHARS
-= 4096`), which is the ciphertext length, not the plaintext.
-
-The 144-character limit is intentional product behaviour. It must be enforced
-before encryption, on the client side.
-
-### Fix
-
-In `messages.js`, before calling `encryptFor()`, check `text.length > 144` and
-show an inline error instead of proceeding. No backend change required.
-
-### Prerequisites
-
-None.
+## T-11 — ✅ Complete (2026-03-18). Details in TICKETS_DONE.md.
 
 ---
 
