@@ -175,9 +175,10 @@ async function handleConversationsUpdate(messages) {
       catch { _profileCache[uid] = { value: {}, exp: Date.now() + _CACHE_TTL_MS }; }
     }
     const profile = _profileCache[uid].value;
-    threads[uid].nickname  = profile.nickname  || uid;
+    threads[uid].nickname  = uid === myId ? 'Reminder to Yourself' : (profile.nickname || uid);
     threads[uid].sex       = profile.sex       || null;
     threads[uid].publicKey = profile.publicKey || null;
+    threads[uid].isSelf    = uid === myId;
   }));
 
   // Decrypt previews

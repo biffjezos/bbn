@@ -492,13 +492,15 @@ async fn delete_me(
 
 #[derive(Deserialize)]
 struct SearchQuery {
-    nickname: Option<String>,
+    nickname:     Option<String>,
     #[serde(rename = "ageMin")]
-    age_min:  Option<i32>,
+    age_min:      Option<i32>,
     #[serde(rename = "ageMax")]
-    age_max:  Option<i32>,
-    sex:      Option<String>,
-    online:   Option<String>,
+    age_max:      Option<i32>,
+    sex:          Option<String>,
+    online:       Option<String>,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
 }
 
 async fn search_users(
@@ -517,6 +519,12 @@ async fn search_users(
     if let Some(sex) = &q.sex {
         if matches!(sex.as_str(), "m" | "f") {
             filter.insert("sex", sex.as_str());
+        }
+    }
+
+    if let Some(at) = &q.account_type {
+        if matches!(at.as_str(), "user" | "venue") {
+            filter.insert("accountType", at.as_str());
         }
     }
 
@@ -744,8 +752,10 @@ async fn get_keys(
 
 #[derive(Deserialize)]
 struct AdminSearchQuery {
-    q:  Option<String>,
-    by: Option<String>,
+    q:            Option<String>,
+    by:           Option<String>,
+    #[serde(rename = "accountType")]
+    account_type: Option<String>,
 }
 
 async fn admin_get_users(
@@ -776,6 +786,12 @@ async fn admin_get_users(
                     filter.insert("nickname", doc! { "$regex": esc, "$options": "i" });
                 }
             }
+        }
+    }
+
+    if let Some(at) = &q.account_type {
+        if matches!(at.as_str(), "user" | "venue") {
+            filter.insert("accountType", at.as_str());
         }
     }
 

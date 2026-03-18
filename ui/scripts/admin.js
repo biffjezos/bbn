@@ -118,13 +118,26 @@ async function renderUsersTab() {
   });
 }
 
+function parseAdminSearchQuery(raw) {
+  var accountType = null;
+  var cleaned = raw.replace(/\btype:(venue|user)\b/gi, function (_, t) {
+    accountType = t.toLowerCase();
+    return '';
+  }).replace(/\s+/g, ' ').trim();
+  return { q: cleaned, accountType: accountType };
+}
+
 async function runUserSearch() {
-  var q   = document.getElementById('adminUserSearch').value.trim();
+  var raw = document.getElementById('adminUserSearch').value.trim();
   var by  = document.getElementById('adminSearchBy').value;
   var out = document.getElementById('adminUserResults');
+  var parsed = parseAdminSearchQuery(raw);
   out.innerHTML = '<p class="text-muted-bb small">Searching…</p>';
   try {
-    var data = await window.Api.adminSearchUsers({ q: q || undefined, by: by });
+    var params = { by: by };
+    if (parsed.q)           params.q           = parsed.q;
+    if (parsed.accountType) params.accountType = parsed.accountType;
+    var data = await window.Api.adminSearchUsers(params);
     if (!data.users || !data.users.length) {
       out.innerHTML = '<p class="text-muted-bb small">No results.</p>';
       return;

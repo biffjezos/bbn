@@ -149,13 +149,14 @@ const Api = {
     return apiFetch(`/tiers/${encodeURIComponent(tier)}/info`);
   },
 
-  searchUsers({ nickname, ageMin, ageMax, sex, online } = {}) {
+  searchUsers({ nickname, ageMin, ageMax, sex, online, accountType } = {}) {
     const qs = new URLSearchParams();
-    if (nickname != null && nickname !== '') qs.set('nickname', nickname);
-    if (ageMin   != null) qs.set('ageMin', ageMin);
-    if (ageMax   != null) qs.set('ageMax', ageMax);
-    if (sex      != null) qs.set('sex', sex);
-    if (online   != null) qs.set('online', online ? 'yes' : 'no');
+    if (nickname    != null && nickname    !== '') qs.set('nickname',    nickname);
+    if (ageMin      != null) qs.set('ageMin', ageMin);
+    if (ageMax      != null) qs.set('ageMax', ageMax);
+    if (sex         != null) qs.set('sex', sex);
+    if (online      != null) qs.set('online', online ? 'yes' : 'no');
+    if (accountType != null && accountType !== '') qs.set('accountType', accountType);
     return apiFetch(`/users/search?${qs.toString()}`);
   },
 
@@ -241,10 +242,11 @@ const Api = {
 
   // ---- Admin --------------------------------------------------
 
-  adminSearchUsers({ q, by } = {}) {
+  adminSearchUsers({ q, by, accountType } = {}) {
     const qs = new URLSearchParams();
-    if (q  != null && q  !== '') qs.set('q',  q);
-    if (by != null && by !== '') qs.set('by', by);
+    if (q           != null && q           !== '') qs.set('q',           q);
+    if (by          != null && by          !== '') qs.set('by',          by);
+    if (accountType != null && accountType !== '') qs.set('accountType', accountType);
     return apiFetch(`/admin/users?${qs.toString()}`);
   },
 

@@ -38,16 +38,17 @@ function toggleMeet(uid, nickname, sex) {
 
 // ── Search query parser ───────────────────────────────────────
 // Supported tokens: age:33  age:<30  age:<=30  age:>20  age:>=20  age:18-25
-//                   sex:m/f  online:yes/no  (remaining words = nickname text)
+//                   sex:m/f  online:yes/no  type:venue/type:user
+//                   (remaining words = nickname text)
 // Spaces around : and operators are allowed: "age: < 49 sex: f"
 
 function parseSearchQuery(raw) {
-  const result = { text: '', ageMin: null, ageMax: null, sex: null, online: null };
+  const result = { text: '', ageMin: null, ageMax: null, sex: null, online: null, accountType: null };
   const textParts = [];
 
   // Normalise spaces within filter tokens so "age: < 49" → "age:<49"
   const normalised = raw
-    .replace(/\b(age|sex|online)\s*:\s*/gi, (_, k) => k.toLowerCase() + ':')
+    .replace(/\b(age|sex|online|type)\s*:\s*/gi, (_, k) => k.toLowerCase() + ':')
     .replace(/\bage:([<>]=?)\s*(\d)/g, 'age:$1$2')
     .replace(/\bage:(\d+)\s*-\s*(\d+)/g, 'age:$1-$2');
 
@@ -79,6 +80,9 @@ function parseSearchQuery(raw) {
     if (lo === 'online:yes') { result.online = true;  continue; }
     if (lo === 'online:no')  { result.online = false; continue; }
 
+    if (lo === 'type:venue') { result.accountType = 'venue'; continue; }
+    if (lo === 'type:user')  { result.accountType = 'user';  continue; }
+
     textParts.push(part);
   }
 
@@ -90,9 +94,10 @@ function parseSearchQuery(raw) {
 // Favourites have: userId, nickname, sex, online (no age available)
 
 function matchesFav(f, q) {
-  if (q.text    && !f.nickname.toLowerCase().includes(q.text.toLowerCase())) return false;
-  if (q.sex     && f.sex !== q.sex)    return false;
-  if (q.online  !== null && f.online !== q.online) return false;
+  if (q.text        && !f.nickname.toLowerCase().includes(q.text.toLowerCase())) return false;
+  if (q.sex         && f.sex !== q.sex)              return false;
+  if (q.online      !== null && f.online !== q.online) return false;
+  if (q.accountType && f.accountType !== q.accountType) return false;
   // age not available on favourites — skip
   return true;
 }
@@ -253,11 +258,12 @@ async function renderSearchResults(wrap, q, rawQuery, blockedIds = new Set()) {
   let globalUsers = [];
   try {
     const params = {};
-    if (q.text)            params.nickname = q.text;
-    if (q.ageMin != null)  params.ageMin   = q.ageMin;
-    if (q.ageMax != null)  params.ageMax   = q.ageMax;
-    if (q.sex    != null)  params.sex      = q.sex;
-    if (q.online != null)  params.online   = q.online;
+    if (q.text)            params.nickname    = q.text;
+    if (q.ageMin != null)  params.ageMin      = q.ageMin;
+    if (q.ageMax != null)  params.ageMax      = q.ageMax;
+    if (q.sex    != null)  params.sex         = q.sex;
+    if (q.online != null)  params.online      = q.online;
+    if (q.accountType)     params.accountType = q.accountType;
 
     const { users = [] } = await window.Api.searchUsers(params);
     globalUsers = users.filter(u => !favIds.has(u.userId));

@@ -55,6 +55,25 @@
     });
   }
 
+  function initDangerZone() {
+    var dangerWrap = document.getElementById('dangerZoneWrap');
+    var deleteBtn  = document.getElementById('deleteAccountBtn');
+    if (!dangerWrap || !deleteBtn) return;
+
+    // Only show for registered users
+    if (window.Auth && window.Auth.getToken && window.Auth.getToken()) {
+      dangerWrap.style.display = '';
+    }
+
+    deleteBtn.addEventListener('click', function () {
+      var input = document.getElementById('deleteNicknameInput');
+      if (input) input.value = '';
+      var confirmBtn = document.getElementById('confirmDeleteBtn');
+      if (confirmBtn) confirmBtn.disabled = true;
+      new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
+    });
+  }
+
   async function init() {
     wrap = document.getElementById('blocksWrap');
     if (!wrap) return;
@@ -67,6 +86,8 @@
     } catch (err) {
       wrap.innerHTML = '<p class="text-muted-bb small">Could not load blocked users.</p>';
     }
+
+    initDangerZone();
   }
 
   document.addEventListener('DOMContentLoaded', init);

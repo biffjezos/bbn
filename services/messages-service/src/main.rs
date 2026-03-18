@@ -275,9 +275,6 @@ async fn send_message(
     }
 
     let from_id = &claims.sub;
-    if from_id == &to_id {
-        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Cannot message yourself." }))).into_response();
-    }
 
     let to_oid = match safe_object_id(&to_id) {
         Some(id) => id,
@@ -294,6 +291,28 @@ async fn send_message(
         Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "Recipient not found." }))).into_response(),
         Err(e)      => { eprintln!("[messages POST] user lookup: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
+
+    // ── Self-message shortcut (Reminder to Yourself) ──
+    if from_id == &to_id {
+        let now_dt  = now_bson();
+        let expires = BsonDateTime::from_millis(now_ms() + MESSAGE_TTL_MS);
+        return match state.db.collection::<Document>("messages")
+            .insert_one(doc! {
+                "fromUserId": from_id,
+                "toUserId":   &to_id,
+                "text":       &text,
+                "sentAt":     now_dt,
+                "expiresAt":  expires,
+            })
+            .await
+        {
+            Ok(r)  => (StatusCode::CREATED, Json(json!({
+                "_id":       r.inserted_id.as_object_id().map(|o| o.to_hex()),
+                "expiresAt": expires.to_string(),
+            }))).into_response(),
+            Err(e) => { eprintln!("[messages POST] self-insert: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+        };
+    }
 
     // ── Block check (either direction) ──
     let block_coll = state.db.collection::<Document>("blocks");
