@@ -6,6 +6,14 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-12 — Remove leftover `bbm_meet` localStorage key
+
+**Status:** ✅ Closed as invalid (2026-03-18).
+
+Investigated during session 2026-03-18. `bbm_meet` is **not** a leftover — it is the active storage key for the compass/meeting feature (`localStorage.setItem('bbm_meet', JSON.stringify({ uid, nickname, sex }))` in `ui/scripts/favourites.js`). The `localStorage.removeItem('bbm_meet')` in `clearUserStorage()` is intentional: cancelling an active compass target on logout is correct behaviour. No action required.
+
+---
+
 ## T-01 — Admin UI (`/admin`)
 
 **Status:** ✅ Complete (2026-03-16).

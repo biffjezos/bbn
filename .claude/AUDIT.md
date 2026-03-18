@@ -1,6 +1,6 @@
 # bOOmbOOm.NOW! — Code & Security Audit
 
-**Date:** 2026-03-10
+**Date:** 2026-03-18 (last updated)
 **Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
 **Auditor:** Claude (claude-sonnet-4-6)
 **Note:** Carries forward postponed items from AUDIT-20260310-1425.md
@@ -135,7 +135,26 @@ on the next gateway boot after disk space is freed.
 
 ---
 
-## 3. Non-Security Bugs
+### 2.2 Sessions TTL index must be dropped and recreated after guest-TTL change
+
+**Date:** 2026-03-18
+**File:** MongoDB `sessions` collection
+
+Guest session TTL was corrected from 2 h to 20 min (2026-03-18). The TTL index on `sessions.createdAt` still carries the old `expireAfterSeconds: 7200` value — MongoDB silently ignores `createIndex()` when an index with the same key pattern already exists, so the new value (1200 s) will not take effect until the old index is dropped.
+
+**One-time action required (Railway MongoDB shell or Compass):**
+
+```
+db.sessions.dropIndex("createdAt_1")
+```
+
+The gateway will recreate it with `expireAfterSeconds: 1200` on next boot.
+
+**Priority:** LOW — guest sessions currently expire after 2 h instead of 20 min. No privacy regression (they do expire); just looser than intended.
+
+---
+
+
 
 ### 3.1 `haversineDistance` duplicated across three files
 
@@ -335,6 +354,7 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 | 🔲 | 3.1 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
 | ✅ | 3.2 | Bug | LOW | Tier badge in /profile has hard-coded values — resolved T-03 |
 | 🔲 | 4.1 | Performance | LOW | Send-rate bucket is in-process — not safe for multi-instance |
+| 🔲 | 2.2 | Infrastructure | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
 | 🔲 | 4.2 | Performance | LOW | Notification poll scales linearly with active users |
 | 🔲 | 6.1 | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated |
 | 🔲 | 6.2 | Maintainability | LOW | app.js mixes four module concerns |
