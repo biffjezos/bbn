@@ -518,9 +518,12 @@ async function renderPublicProfile() {
     }
 
     const isBlocked = !!profile.blockedByViewer;
-    const msgBtnHtml = isBlocked
-      ? `<span class="btn btn-bbm-pink disabled" aria-disabled="true" style="opacity:0.5"><i class="bi bi-chat-dots me-2"></i>Message</span>`
-      : `<a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message</a>`;
+    const canMsg = !(isVenue && profile.canReceiveMessages === false);
+    const msgBtnHtml = !canMsg
+      ? ''
+      : isBlocked
+        ? `<span class="btn btn-bbm-pink disabled" aria-disabled="true" style="opacity:0.5"><i class="bi bi-chat-dots me-2"></i>Message</span>`
+        : `<a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message</a>`;
     const blockToggleHtml = isBlocked
       ? `<button class="btn btn-link text-muted p-0" id="unblockUserBtn" style="font-size:0.875rem;text-decoration:none">
            <i class="bi bi-slash-circle me-1"></i>Unblock
