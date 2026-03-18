@@ -6,6 +6,17 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-11 — Enforce 144-character plaintext limit on message send
+
+**Status:** ✅ Complete (2026-03-18).
+
+Added a guard in `ui/scripts/messages.js` (send handler, line 266) that checks
+`text.length > 144` before calling `encryptFor()`. Shows an inline error and
+returns early — encryption and send are never reached for oversized input.
+No backend change required.
+
+---
+
 ## T-12 — Remove leftover `bbm_meet` localStorage key
 
 **Status:** ✅ Closed as invalid (2026-03-18).

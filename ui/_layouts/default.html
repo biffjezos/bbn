@@ -41,7 +41,7 @@
 <script>
   (function () {
     var base       = window.BOOMBOOM_BASE || '';
-    var PROTECTED  = [base + '/messages', base + '/favourites', base + '/profile'];
+    var PROTECTED  = [base + '/messages', base + '/favourites', base + '/profile', base + '/settings'];
     var ADMIN_ONLY = [base + '/admin'];
     var path       = window.location.pathname;
     var isAdmin    = ADMIN_ONLY.some(function(p) { return path.startsWith(p); });
