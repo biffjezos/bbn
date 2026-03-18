@@ -284,9 +284,9 @@ async fn get_favourites(
                     "accountType":   u.account_type,
                     // Venues are always online
                     "online":        is_venue || online_set.contains(&e.favourite_user_id),
-                    "addedAt":       e.added_at.map(|d| d.to_string()),
+                    "addedAt":       e.added_at.and_then(|d| d.try_to_rfc3339_string().ok()),
                     "withinRange":   e.within_range,
-                    "withinRangeAt": e.within_range_at.map(|d| d.to_string()),
+                    "withinRangeAt": e.within_range_at.and_then(|d| d.try_to_rfc3339_string().ok()),
                 })
             }
         })
@@ -653,7 +653,7 @@ async fn get_notifications(
         "fromNickname": n.from_nickname.as_deref(),
         "fromSex":      n.from_sex.as_deref(),
         "type":         n.type_,
-        "createdAt":    n.created_at.map(|d| d.to_string()),
+        "createdAt":    n.created_at.and_then(|d| d.try_to_rfc3339_string().ok()),
         "alreadyFav":   already_fav_ids.contains(&n.from_user_id),
     })).collect();
 

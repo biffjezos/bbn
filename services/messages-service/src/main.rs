@@ -155,8 +155,8 @@ fn msg_to_json(m: &MessageDoc) -> serde_json::Value {
         "fromUserId": m.from_user_id,
         "toUserId":   m.to_user_id,
         "text":       m.text,
-        "sentAt":     m.sent_at.map(|d| d.to_string()),
-        "expiresAt":  m.expires_at.map(|d| d.to_string()),
+        "sentAt":     m.sent_at.and_then(|d| d.try_to_rfc3339_string().ok()),
+        "expiresAt":  m.expires_at.and_then(|d| d.try_to_rfc3339_string().ok()),
     })
 }
 
@@ -308,7 +308,7 @@ async fn send_message(
         {
             Ok(r)  => (StatusCode::CREATED, Json(json!({
                 "_id":       r.inserted_id.as_object_id().map(|o| o.to_hex()),
-                "expiresAt": expires.to_string(),
+                "expiresAt": expires.try_to_rfc3339_string().ok(),
             }))).into_response(),
             Err(e) => { eprintln!("[messages POST] self-insert: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
         };
@@ -466,7 +466,7 @@ async fn send_message(
 
     (StatusCode::CREATED, Json(json!({
         "_id":       result.inserted_id.as_object_id().map(|o| o.to_hex()),
-        "expiresAt": expires.to_string(),
+        "expiresAt": expires.try_to_rfc3339_string().ok(),
     }))).into_response()
 }
 

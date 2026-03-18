@@ -849,7 +849,7 @@ async fn admin_get_users(
             "accountType":  u.account_type,
             "managerId":    u.manager_id.as_deref(),
             "online":       is_online,
-            "createdAt":    u.created_at.map(|d| d.to_string()),
+            "createdAt":    u.created_at.and_then(|d| d.try_to_rfc3339_string().ok()),
         })
     }).collect();
 
