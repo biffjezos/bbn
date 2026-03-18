@@ -88,50 +88,50 @@ forcing the user to re-login and receive a token with the updated claim.
 
 ## 2. Infrastructure
 
-### 2.1 migration-service ported to Rust — Railway deployment needs verification
+### 2.1 migration-service not running — root cause: Railway disk too small
 
-**Date:** 2026-03-17 (updated 2026-03-17)
+**Date:** 2026-03-17 (updated 2026-03-18)
 **Files:** `services/migration-service/src/main.rs` (Rust port),
 `services/gateway/src/main.rs` (calls `MIGRATION_SERVICE_URL` on boot)
 
-The original `migration-service.js` was removed and a Rust port was created at
-`services/migration-service/src/main.rs` (workspace member, compiles correctly).
-T-04c noted migration-service stays Node.js — the Rust port went ahead anyway.
-Project owner reports service "doesn't work". Likely cause: Railway service root
-directory for migration-service must be `services/` (workspace root, where
-`Cargo.toml` is), **not** `services/migration-service/`. Build command:
-`cargo build --release --bin migration-service`. Start command:
-`./target/release/migration-service`.
+The migration-service itself is working correctly (responds, connects to MongoDB,
+reports the failure). The root cause is the Railway MongoDB volume: total disk is
+only **454 MB**, with 222 MB used by the OS and MongoDB process overhead, leaving
+232 MB free. MongoDB's WiredTiger engine requires a **minimum of 524 MB free** for
+write operations (index creation, inserts). This requirement exceeds the available
+free space and cannot be resolved by deleting data — the MongoDB database contains
+only ~614 KB of data across all collections.
 
-**Consequences if not running:**
-- MongoDB TTL indexes for `messages` and `locations` not applied — expired data
-  not auto-purged at DB level (privacy regression).
+**Confirmed 2026-03-18:** All collections inspected via `db.getCollectionNames()`.
+No bloated collections. The disk constraint is structural, not data-related.
+
+**Resolution: migrate MongoDB to Atlas free tier (M0).**
+- Atlas manages storage independently; WiredTiger journal overhead is not charged
+  against the 512 MB data limit.
+- The dataset is ~614 KB / 53 documents — trivially small.
+- Update `MONGO_URI` in Railway env vars for all services.
+- Migration-service will apply all 6 pending migrations on next gateway boot.
+- The `/migrate/reset` endpoint (drops ephemeral collections, re-runs all migrations)
+  is available if a clean slate is preferred.
+
+**Consequences while not running:**
+- MongoDB TTL indexes for `messages`, `locations`, `sessions` not applied — expired
+  data not auto-purged at DB level (privacy regression).
 - Migration `003_blocks_indexes` not enforced — duplicate block entries possible.
-- Migrations `004_tiers_seed` / `005_rename_developer_tier` not applied.
+- Migrations `004_tiers_seed` / `005_rename_developer_tier` / `006_email_index_sparse`
+  not applied.
 
 **Priority:** HIGH — privacy regression in a privacy-by-design app.
 
 ---
 
-### 2.0 MongoDB disk space — migration 003 not applied
+### 2.0 MongoDB disk space — superseded by 2.1
 
-**Date:** 2026-03-16
+**Date:** 2026-03-16 (superseded 2026-03-18)
 
-Railway MongoDB volume has ~221 MB free; WiredTiger requires ≥ 500 MB for write
-operations. Migration `003_blocks_indexes` cannot apply. Retries on every gateway
-boot with the same failure.
-
-**Current impact:**
-- `blocks` collection has no unique index on `{ blockerUserId, blockedUserId }` —
-  duplicate block documents can be inserted.
-- No index on `{ blockedUserId }` — block lookups in location/messages/users
-  services do full collection scans. Negligible at dev-alpha scale.
-
-**Acceptable for now:** app is in dev-alpha, no real users at risk.
-
-**Resolution:** Upgrade the Railway MongoDB plan. Do this after T-04 (Rust port)
-is complete — see TICKETS.md T-04 reminder. Migration 003 will apply automatically
-on the next gateway boot after disk space is freed.
+Merged into 2.1. Root cause confirmed: Railway volume is structurally too small
+(454 MB total). Upgrading the plan to 1 GB is not available on the current Railway
+tier. Resolution: migrate to MongoDB Atlas (see 2.1).
 
 ---
 
@@ -337,8 +337,8 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 | 🔲 | 1.2 | Security | MEDIUM | Gateway send-rate bypassable at messages-service level |
 | ✅ | 1.3 | Security | LOW (future) | JWT tier claim stale after admin tier change — resolved T-01 |
 | 🔲 | 1.4 | Security | LOW | Admin self-promotion guard missing — can modify own tier/role via API |
-| 🔲 | 2.1 | Infrastructure | HIGH | migration-service.js deleted — migrations not running, TTL indexes absent, privacy regression |
-| 🔲 | 2.0 | Infrastructure | MEDIUM | MongoDB disk space — migration 003 not applied (dev-alpha: acceptable) |
+| 🔲 | 2.1 | Infrastructure | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
+| ~~🔲~~ | ~~2.0~~ | ~~Infrastructure~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by 2.1 |
 | 🔲 | 3.1 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
 | ✅ | 3.2 | Bug | LOW | Tier badge in /profile has hard-coded values — resolved T-03 |
 | 🔲 | 4.1 | Performance | LOW | Send-rate bucket is in-process — not safe for multi-instance |
