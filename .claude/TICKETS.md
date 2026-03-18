@@ -22,7 +22,7 @@ Before any marketing or scaling push, the order of priority is:
 9. **T-05b** — Encrypted block note (blocked on OPAQUE implementation — see AUDIT.md 1.1)
 10. **T-14** — Manager-tier venue quota (deferred, prerequisite: T-08)
 11. **T-15** — Orphan venue reassignment (deferred, prerequisite: multi-role support)
-12. **T-07b** — Device notifications (low riority)
+12. **T-07b** — Device notifications (low priority)
 
 ### Architectural Decision (2026-03-16)
 
