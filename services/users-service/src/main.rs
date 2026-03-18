@@ -94,7 +94,7 @@ struct UserForToken {
     role:          Option<String>,
     tier:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type:  Option<String>,
+    account_type:  String,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
 }
@@ -107,7 +107,7 @@ struct SearchUserDoc {
     age:          Option<i32>,
     sex:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type: Option<String>,
+    account_type: String,
 }
 
 #[derive(Deserialize)]
@@ -118,7 +118,7 @@ struct ProfileDoc {
     #[serde(rename = "publicKey")]
     public_key:            Option<String>,
     #[serde(rename = "accountType")]
-    account_type:          Option<String>,
+    account_type:          String,
     #[serde(rename = "venueName")]
     venue_name:            Option<String>,
     description:           Option<String>,
@@ -142,7 +142,7 @@ struct AdminUserDoc {
     tier:          Option<String>,
     role:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type:  Option<String>,
+    account_type:  String,
     #[serde(rename = "managerId")]
     manager_id:    Option<String>,
     #[serde(rename = "tokenVersion")]
@@ -186,7 +186,7 @@ fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
             role:         match user.role.as_deref() { Some("admin") => "admin", Some("venue_manager") => "venue_manager", _ => "user" },
             tier:         user.tier.as_deref().unwrap_or("regular"),
             tv:           user.token_version.unwrap_or(0).max(0) as u32,
-            account_type: user.account_type.as_deref(),
+            account_type: &user.account_type,
         },
         secret,
     )
@@ -565,7 +565,7 @@ async fn search_users(
     let mut results: Vec<_> = users.iter().map(|u| {
         let uid = u.id.to_hex();
         // Venues have a fixed location and are always reachable — never offline.
-        let is_online = u.account_type.as_deref() == Some("venue")
+        let is_online = u.account_type == "venue"
             || online_set.contains(uid.as_str());
         json!({
             "userId":      uid,
@@ -573,7 +573,7 @@ async fn search_users(
             "age":         u.age,
             "sex":         u.sex.as_deref(),
             "online":      is_online,
-            "accountType": u.account_type.as_deref(),
+            "accountType": u.account_type,
         })
     }).collect();
 
@@ -637,7 +637,7 @@ async fn get_profile(
                 "age":                 user.age,
                 "sex":                 user.sex.as_deref(),
                 "publicKey":           user.public_key.as_deref(),
-                "accountType":         user.account_type.as_deref(),
+                "accountType":         user.account_type,
                 "venueName":           user.venue_name.as_deref(),
                 "description":         user.description.as_deref(),
                 "openingHours":        user.opening_hours.as_deref(),
@@ -664,7 +664,7 @@ async fn get_profile(
         "age":                user.age,
         "sex":                user.sex.as_deref(),
         "publicKey":          user.public_key.as_deref(),
-        "accountType":        user.account_type.as_deref(),
+        "accountType":        user.account_type,
         "venueName":          user.venue_name.as_deref(),
         "description":        user.description.as_deref(),
         "openingHours":       user.opening_hours.as_deref(),
@@ -819,7 +819,7 @@ async fn admin_get_users(
     let result: Vec<_> = users.iter().map(|u| {
         let uid = u.id.to_hex();
         // Venues have a fixed location and are always reachable — never offline.
-        let is_online = u.account_type.as_deref() == Some("venue")
+        let is_online = u.account_type == "venue"
             || online_set.contains(uid.as_str());
         json!({
             "userId":       uid,
@@ -830,7 +830,7 @@ async fn admin_get_users(
             "tier":         u.tier.as_deref().unwrap_or("regular"),
             "role":         u.role.as_deref().unwrap_or("user"),
             "tokenVersion": u.token_version.unwrap_or(0),
-            "accountType":  u.account_type.as_deref(),
+            "accountType":  u.account_type,
             "managerId":    u.manager_id.as_deref(),
             "online":       is_online,
             "createdAt":    u.created_at.map(|d| d.to_string()),

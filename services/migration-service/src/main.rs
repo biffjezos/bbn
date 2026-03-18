@@ -87,7 +87,6 @@ const MIGRATIONS: &[&str] = &[
     "004_tiers_seed",
     "005_rename_developer_tier",
     "006_email_index_sparse",
-    "007_default_account_type",
 ];
 
 async fn migration_001(db: &Database) -> Result<(), mongodb::error::Error> {
@@ -220,21 +219,6 @@ async fn migration_005(db: &Database) -> Result<(), mongodb::error::Error> {
     Ok(())
 }
 
-async fn migration_007(db: &Database) -> Result<(), mongodb::error::Error> {
-    // Backfill accountType: "user" for all user accounts that predate this field.
-    // { accountType: null } matches both null and missing in MongoDB.
-    // Venue accounts already carry accountType: "venue" — not affected.
-    // Once this migration has run, the null-fallback in auth-service login
-    // (sanitize_account_type / account_type: None → "user") can be removed.
-    // See TICKETS.md T-08 Phase 1 cleanup stub.
-    db.collection::<Document>("users")
-        .update_many(
-            doc! { "accountType": mongodb::bson::Bson::Null },
-            doc! { "$set": { "accountType": "user" } },
-        ).await?;
-    Ok(())
-}
-
 async fn migration_006(db: &Database) -> Result<(), mongodb::error::Error> {
     // The email unique index was created non-sparse in 001.  Venue accounts
     // are inserted into the same collection without an email field, so two
@@ -260,7 +244,6 @@ async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Er
         "004_tiers_seed"             => migration_004(db).await,
         "005_rename_developer_tier"  => migration_005(db).await,
         "006_email_index_sparse"     => migration_006(db).await,
-        "007_default_account_type"   => migration_007(db).await,
         _                            => Ok(()), // unknown migration — skip
     }
 }

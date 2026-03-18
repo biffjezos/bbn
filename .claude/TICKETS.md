@@ -225,51 +225,13 @@ None for in-app extension. Web Push requires HTTPS (already satisfied) and VAPID
 
 ## T-08 — Coherent Identity Model + Authority Service
 
-**Status:** Not started. Two sequential phases. Addresses AUDIT.md 6.3 definitively.
+**Status:** Phase 1 ✅ complete. Phase 2 pending.
 
 **Rationale for merge with T-13:** T-13 (normalise the data model) and T-08 (enforce it centrally) solve opposite ends of the same structural problem. T-13 defines what the system should say; T-08 builds the single voice that says it. Phase 1 must be deployed before Phase 2 begins.
 
 ---
 
-### Phase 1 — Normalise accountType / tier / role (ex-T-13)
-
-**Problem:** The three identity axes are ad-hoc, inconsistently applied, and partially undocumented.
-
-- `accountType: null` is used as the implicit default for regular users — missing-field and "normal user" are indistinguishable.
-- `unrestricted` tier was added manually; not in seed migrations.
-- `role` enum is not validated server-side; any string is accepted.
-- JWT does not always emit `account_type`.
-- Tiers/venue interaction is undefined in code (only in TICKETS.md).
-
-**Canonical axis definitions (agreed 2026-03-18):**
-
-| Axis | Values | Meaning | Who sets it | In JWT? |
-|---|---|---|---|---|
-| `accountType` | `"user"` (never `null`), `"venue"` | What kind of entity the account represents. Determines profile fields, location handling, UI view. | Admin only. New registrations always `"user"`. | Yes — `account_type` claim |
-| `tier` | `guest`, `regular`, `premium`, `unrestricted`, … | Feature gates and radius limits. Fully DB-backed. Venue accounts can have a tier (controls message radius only — `nearbyRadiusM` is irrelevant for fixed-location venues). | Admin only. New registrations default to `regular`. Guests always `guest`. | Yes — `tier` claim |
-| `role` | `"user"`, `"admin"`, `"venue_manager"` | System actions the account may perform. Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent changes. | Yes — `role` claim |
-
-**Concrete changes:**
-
-1. `auth-service`: set `account_type: "user"` on every new registration; always emit it in JWT (never omit).
-2. `users-service`: add migration `006_default_account_type` — `db.users.updateMany({ accountType: { $in: [null, undefined] } }, { $set: { accountType: "user" } })`.
-3. All services reading `account_type` from JWT or DB: treat absent/null as `"user"` as a backwards-compat fallback.
-4. `users-service` `PATCH /admin/users/:id/role`: validate against `["user", "admin", "venue_manager"]` — reject any other string.
-5. Admin UI: show `accountType` as a read-only badge on every user row (alongside tier and role).
-6. Document tiers/venue interaction in tiers-service and admin UI tooltip: `messageRadiusM` applies to venues; `nearbyRadiusM` does not.
-
-**Prerequisites:** migration-service must be running (T-10) to apply migration 007.
-
-**Note (owner, 2026-03-18):** `unrestricted` stays a tier. No `developer` role or accountType.
-
-**Deferred cleanup — remove once migration 007 has run (blocked on T-10):**
-
-Migration 007 (`007_default_account_type`) is written and registered in migration-service but will not execute until T-10 is resolved. Until then, existing accounts have `accountType: null` in the DB. Two fallback code paths must remain until the migration runs, then must be deleted:
-
-1. `services/auth-service/src/main.rs` — `auth_login`: `account_type: user.account_type.as_deref()` passes `None` for old accounts. Once migration runs all users have the field set, so `None` is impossible for registered accounts. At that point, make this field required (remove the `Option`) and reject tokens for accounts missing it.
-2. `services/common/src/auth.rs` — `UserClaims.account_type: Option<String>`: after migration, every registered-user JWT carries the field. Callers that pattern-match `None` as `"user"` fallback can be tightened.
-
-Do not remove this note until T-10 is resolved and migration 007 is confirmed applied.
+Phase 1 ✅ complete (2026-03-18). Details in TICKETS_DONE.md.
 
 ---
 

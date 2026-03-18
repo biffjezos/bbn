@@ -323,7 +323,7 @@ struct UserDoc {
     tier:          Option<String>,
     role:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type:  Option<String>,
+    account_type:  String,
     #[serde(rename = "passwordHash")]
     password_hash: String,
     #[serde(rename = "tokenVersion")]
@@ -390,7 +390,7 @@ async fn auth_login(
         role:         &role,
         tier:         &tier,
         tv,
-        account_type: user.account_type.as_deref(),
+        account_type: &user.account_type,
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/login] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }

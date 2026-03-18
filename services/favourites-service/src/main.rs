@@ -124,7 +124,7 @@ struct UserProfile {
     nickname:     Option<String>,
     sex:          Option<String>,
     #[serde(rename = "accountType")]
-    account_type: Option<String>,
+    account_type: String,
 }
 
 #[derive(Deserialize)]
@@ -276,12 +276,12 @@ async fn get_favourites(
         .map(|e| {
             let u = &user_map[&e.favourite_user_id];
             {
-                let is_venue = u.account_type.as_deref() == Some("venue");
+                let is_venue = u.account_type == "venue";
                 json!({
                     "userId":        e.favourite_user_id,
                     "nickname":      u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
                     "sex":           u.sex.as_deref(),
-                    "accountType":   u.account_type.as_deref(),
+                    "accountType":   u.account_type,
                     // Venues are always online
                     "online":        is_venue || online_set.contains(&e.favourite_user_id),
                     "addedAt":       e.added_at.map(|d| d.to_string()),
