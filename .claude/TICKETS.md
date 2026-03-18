@@ -397,6 +397,69 @@ This does not require a `roles` collection and can be implemented at any time.
 
 ---
 
+## T-16 — meta collection: runtime-configurable settings
+
+**Status:** Not started. Requires backend work.
+
+### Problem
+
+Several constants that affect user experience are currently hardcoded in services
+and cannot be changed without a redeploy. The owner's 2026-03-18 audit identified
+a clear split between safe runtime-editable values and constants that must stay
+in code.
+
+### Proposed schema
+
+```
+meta: {
+  key:             string   // e.g. "message_ttl_ms"
+  value:           any
+  type:            "number" | "string" | "boolean"
+  scope:           "admin" | "user" | "system"
+  description:     string
+  restartRequired: boolean
+  affects:         string   // service name or "ui"
+}
+```
+
+### Safe to make runtime-editable (first pass, 9 entries)
+
+| Key | Current value | Scope | Notes |
+|---|---|---|---|
+| `message_ttl_ms` | 14 400 000 (4 h) | admin | Stamped at write time — safe to change |
+| `favourite_expiry_days` | 30 | admin | Same pattern |
+| `rate_limit_login` | 10 / 15 min | admin | Immediate effect |
+| `rate_limit_register` | 5 / 1 hr | admin | Immediate effect |
+| `rate_limit_api` | 120 / 60 sec | admin | Immediate effect |
+| `ws_location_min_delta_m` | 5 m | admin | Immediate effect |
+| `location_update_min_distance_m` | 100 m | admin | Immediate effect |
+| `map_default_zoom` | 17 | user | UI-only; currently localStorage |
+| `show_favourite_pins_on_map` | true | user | UI-only; currently localStorage |
+
+### NOT safe to make runtime-editable
+
+MongoDB index TTLs (sessions `15 min`, locations `10 min`) require a `collMod`
+or migration to take effect — track as a separate migration step when these
+become configurable.
+
+Everything crypto, bcrypt cost, JWT structure, CORS — hard-code, no exceptions.
+
+### Prerequisites
+
+- T-08 Phase 2 (Authority service) ideally precedes the backend half, so
+  there is a single place to read/cache `meta` values.
+- The `map_default_zoom` and `show_favourite_pins_on_map` user-scope keys are
+  **already implemented as localStorage** in T-07a (2026-03-18) — these two
+  entries in `meta` are pending only if a server-backed per-user preference
+  store is added later.
+
+### Owner's Comments
+
+- 2026-03-18: Audit provided by owner. First-pass scope agreed: 9 entries,
+  zero unsafe side-effects. DB-index TTLs tracked separately.
+
+---
+
 ## T-14 — Manager-tier venue quota (tiered multi-venue)
 
 **Status:** Deferred — no tier infrastructure exists for managers yet.

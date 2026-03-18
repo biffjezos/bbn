@@ -24,45 +24,32 @@ extra_js:
       <p class="text-muted-bb small">Loading…</p>
     </div>
 
-    <!-- Profile Settings -->
-    <div id="profileSettingsWrap" style="display:none" class="mb-5">
-      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Profile</h2>
-      <form id="profileForm" novalidate style="max-width:400px">
-        <div class="mb-3">
-          <label class="form-label" for="profileNickname">Nickname</label>
-          <input type="text" class="form-control" id="profileNickname" minlength="2" maxlength="32" autocomplete="off">
-        </div>
-        <div id="profileAgeWrap" class="mb-3">
-          <label class="form-label" for="profileAge">Age</label>
-          <input type="number" class="form-control" id="profileAge" min="18" max="120">
-        </div>
-        <div id="profileSexWrap" class="mb-3">
-          <label class="form-label" for="profileSex">Sex</label>
-          <select class="form-select" id="profileSex">
-            <option value="m">Male</option>
-            <option value="f">Female</option>
-          </select>
-        </div>
-        <button type="submit" class="btn btn-bbm-primary" id="profileSaveBtn">Save Profile</button>
-        <span id="profileStatus" class="ms-3 small"></span>
-      </form>
+    <!-- App Limits (read-only) -->
+    <div id="appLimitsWrap" class="mb-5" style="display:none">
+      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">App Limits</h2>
+      <div id="appLimitsFields"></div>
     </div>
 
-    <!-- Change Password -->
-    <div id="passwordWrap" style="display:none" class="mb-5">
-      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Change Password</h2>
-      <form id="passwordForm" novalidate style="max-width:400px">
+    <!-- Preferences (user-editable, stored locally) -->
+    <div id="preferencesWrap" class="mb-5" style="display:none">
+      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Preferences</h2>
+      <div style="max-width:400px">
+
         <div class="mb-3">
-          <label class="form-label" for="currentPassword">Current Password</label>
-          <input type="password" class="form-control" id="currentPassword" autocomplete="current-password">
+          <label class="form-label" for="prefMapZoom">Default map zoom <span class="text-muted-bb" style="font-size:0.8rem;font-weight:400">(1 – 19)</span></label>
+          <input type="number" class="form-control" id="prefMapZoom" min="1" max="19">
         </div>
-        <div class="mb-3">
-          <label class="form-label" for="newPassword">New Password</label>
-          <input type="password" class="form-control" id="newPassword" autocomplete="new-password" minlength="8" placeholder="At least 8 characters">
+
+        <div class="mb-4 d-flex align-items-center gap-3">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="prefFavPins" checked>
+            <label class="form-check-label" for="prefFavPins">Show lines to favourites on map</label>
+          </div>
         </div>
-        <button type="submit" class="btn btn-bbm-primary" id="passwordSaveBtn">Change Password</button>
-        <span id="passwordStatus" class="ms-3 small"></span>
-      </form>
+
+        <button class="btn btn-bbm-primary" id="prefSaveBtn">Save Preferences</button>
+        <span id="prefStatus" class="ms-3 small"></span>
+      </div>
     </div>
 
     <!-- Blocked Users -->

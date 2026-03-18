@@ -29,6 +29,9 @@
   const TILE_ATTR    = '&copy; OpenStreetMap contributors &copy; CARTO';
   const DEFAULT_ZOOM = 17;
 
+  function getZoom()      { return window.BbmPrefs ? window.BbmPrefs.mapZoom()     : DEFAULT_ZOOM; }
+  function showFavPins()  { return window.BbmPrefs ? window.BbmPrefs.showFavPins() : true; }
+
   // ── Helpers ──────────────────────────────────────────────────
 
   function markerEmoji(sex) { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
@@ -121,7 +124,7 @@
   function initMap(lat, lng) {
     if (map) return;
     if (DEBUG) console.log('[Map] Initialising at', lat, lng);
-    map = L.map('map', { center: [lat, lng], zoom: DEFAULT_ZOOM, zoomControl: true });
+    map = L.map('map', { center: [lat, lng], zoom: getZoom(), zoomControl: true });
     L.tileLayer(TILE_URL, { attribution: TILE_ATTR, maxZoom: 19 }).addTo(map);
     canvasRenderer = L.canvas({ padding: 0.5 });
     placeSelfMarker(lat, lng);
@@ -211,6 +214,11 @@
 
   function drawFavLines(selfPos, users) {
     if (!window.Auth?.isRegistered()) return;
+    if (!showFavPins()) {
+      // Clear any existing lines when preference is off
+      Object.keys(favLines).forEach(uid => { map.removeLayer(favLines[uid].polyline); delete favLines[uid]; });
+      return;
+    }
     const sp       = [selfPos.lat, selfPos.lng];
     const activeIds = new Set();
 
@@ -328,7 +336,7 @@
 
   function centreOnSelf() {
     const pos = window.GeoState?.pos;
-    if (map && pos) map.setView([pos.lat, pos.lng], DEFAULT_ZOOM, { animate: true });
+    if (map && pos) map.setView([pos.lat, pos.lng], getZoom(), { animate: true });
   }
 
   function onGuestExpired() {

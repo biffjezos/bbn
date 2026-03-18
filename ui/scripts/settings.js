@@ -4,6 +4,12 @@
 
 (function () {
 
+  // ── Storage keys for user preferences ─────────────────────────────────────
+  var PREF_MAP_ZOOM  = 'bbm_pref_map_zoom';
+  var PREF_FAV_PINS  = 'bbm_pref_show_fav_pins';
+
+  // ── Utilities ──────────────────────────────────────────────────────────────
+
   function escHtml(str) {
     return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -16,7 +22,7 @@
     catch { return null; }
   }
 
-  // Handle BSON extended-JSON date format produced by the Rust backend.
+  // Handle BSON extended-JSON date format from Rust backend.
   function parseBsonDate(val) {
     if (!val) return null;
     if (typeof val === 'string') return new Date(val);
@@ -36,13 +42,12 @@
 
   function formatRadius(m) {
     if (m == null) return '—';
-    if (m === -1) return 'Unlimited';
+    if (m === -1)  return 'Unlimited';
     if (m >= 1000) return (m / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + ' km';
     return m + ' m';
   }
 
-  // ── Read-only info row helper ──────────────────────────────────────────────
-
+  // Read-only info row: disabled input with label
   function infoRow(label, value) {
     return [
       '<div class="mb-3" style="max-width:400px">',
@@ -65,17 +70,15 @@
       return;
     }
 
-    var tier        = claims.tier || 'regular';
-    var role        = claims.role || 'user';
+    var tier        = claims.tier        || 'regular';
+    var role        = claims.role        || 'user';
     var accountType = claims.account_type || 'user';
 
-    // Friendly labels
     var accountTypeLabel = accountType === 'venue' ? 'Venue' : 'User';
-    var roleLabel = role === 'admin' ? 'Administrator'
+    var roleLabel = role === 'admin'         ? 'Administrator'
                   : role === 'venue_manager' ? 'Venue Manager'
                   : null;
 
-    // Fetch /users/me and tier info in parallel
     var meData   = null;
     var tierData = null;
     try {
@@ -95,12 +98,8 @@
     var rows = [];
     rows.push(infoRow('Account type', accountTypeLabel));
     if (roleLabel) rows.push(infoRow('Role', roleLabel));
-    rows.push(infoRow('Membership', tierLabel));
+    rows.push(infoRow('Membership',   tierLabel));
     rows.push(infoRow('Member since', memberSince));
-
-    rows.push('<div class="mt-3 mb-2" style="max-width:400px"><hr style="border-color:var(--bbm-border,rgba(255,255,255,.08))"></div>');
-
-    rows.push(infoRow('Messages auto-delete after', '4 hours'));
     rows.push(infoRow('Nearby radius', formatRadius(nearbyRadiusM)));
     if (messageRadiusM != null) {
       rows.push(infoRow('Messaging radius', formatRadius(messageRadiusM)));
@@ -109,143 +108,54 @@
     wrap.innerHTML = rows.join('');
   }
 
-  // ── Profile Form ───────────────────────────────────────────────────────────
+  // ── App Limits (read-only, static) ────────────────────────────────────────
 
-  function initProfileForm() {
-    var wrap = document.getElementById('profileSettingsWrap');
-    if (!wrap) return;
+  function initAppLimits() {
+    var wrap   = document.getElementById('appLimitsWrap');
+    var fields = document.getElementById('appLimitsFields');
+    if (!wrap || !fields) return;
+    if (!window.Auth || !window.Auth.isRegistered()) return;
 
-    var token  = window.Auth && window.Auth.getToken && window.Auth.getToken();
-    var claims = token ? parseJwt(token) : null;
-    if (!claims) return;
+    var rows = [
+      infoRow('Messages auto-delete after',   '4 hours'),
+      infoRow('Favourites expire after',       '30 days'),
+      infoRow('Message length limit',          '144 characters'),
+      infoRow('Guest session duration',        '15 minutes'),
+    ];
 
-    // Only show for registered users
-    if (!window.Auth.isRegistered()) return;
+    fields.innerHTML = rows.join('');
     wrap.style.display = '';
-
-    var accountType = claims.account_type || 'user';
-    var isVenue     = accountType === 'venue';
-
-    // Pre-fill from JWT
-    var nickEl = document.getElementById('profileNickname');
-    var ageEl  = document.getElementById('profileAge');
-    var sexEl  = document.getElementById('profileSex');
-    var ageWrap = document.getElementById('profileAgeWrap');
-    var sexWrap = document.getElementById('profileSexWrap');
-
-    if (nickEl) nickEl.value = claims.nickname || '';
-
-    if (isVenue) {
-      // Venues don't have age/sex
-      if (ageWrap) ageWrap.style.display = 'none';
-      if (sexWrap) sexWrap.style.display = 'none';
-    } else {
-      if (ageEl && claims.age) ageEl.value = claims.age;
-      if (sexEl && claims.sex) sexEl.value = claims.sex;
-    }
-
-    var form      = document.getElementById('profileForm');
-    var saveBtn   = document.getElementById('profileSaveBtn');
-    var statusEl  = document.getElementById('profileStatus');
-
-    if (!form) return;
-
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      if (saveBtn) saveBtn.disabled = true;
-      if (statusEl) { statusEl.textContent = ''; statusEl.style.color = ''; }
-
-      var fields = {};
-      if (nickEl) fields.nickname = nickEl.value.trim();
-      if (!isVenue) {
-        if (ageEl)  fields.age = parseInt(ageEl.value, 10);
-        if (sexEl)  fields.sex = sexEl.value;
-      }
-
-      try {
-        await window.Api.updateMe(fields);
-        if (window.Auth && window.Auth.updateProfile) {
-          window.Auth.updateProfile({ nickname: fields.nickname, sex: fields.sex });
-        }
-        if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--bbm-accent-green, #4c4)'; }
-      } catch (err) {
-        if (statusEl) { statusEl.textContent = err.message || 'Could not save.'; statusEl.style.color = 'var(--bbm-danger, #e05)'; }
-      } finally {
-        if (saveBtn) saveBtn.disabled = false;
-      }
-    });
   }
 
-  // ── Password Form ──────────────────────────────────────────────────────────
+  // ── User Preferences ───────────────────────────────────────────────────────
 
-  function initPasswordForm() {
-    var wrap = document.getElementById('passwordWrap');
-    if (!wrap) return;
+  function getPrefZoom()    { var v = localStorage.getItem(PREF_MAP_ZOOM);  return v !== null ? parseInt(v, 10) : 17; }
+  function getPrefFavPins() { var v = localStorage.getItem(PREF_FAV_PINS); return v !== 'false'; }
+
+  function initPreferences() {
+    var wrap    = document.getElementById('preferencesWrap');
+    var zoomEl  = document.getElementById('prefMapZoom');
+    var pinsEl  = document.getElementById('prefFavPins');
+    var saveBtn = document.getElementById('prefSaveBtn');
+    var statusEl = document.getElementById('prefStatus');
+    if (!wrap || !zoomEl || !pinsEl || !saveBtn) return;
     if (!window.Auth || !window.Auth.isRegistered()) return;
+
+    zoomEl.value = getPrefZoom();
+    pinsEl.checked = getPrefFavPins();
+
     wrap.style.display = '';
 
-    var form       = document.getElementById('passwordForm');
-    var saveBtn    = document.getElementById('passwordSaveBtn');
-    var statusEl   = document.getElementById('passwordStatus');
-    var currentEl  = document.getElementById('currentPassword');
-    var newEl      = document.getElementById('newPassword');
-
-    if (!form) return;
-
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      if (saveBtn) saveBtn.disabled = true;
-      if (statusEl) { statusEl.textContent = ''; statusEl.style.color = ''; }
-
-      var oldPass = currentEl ? currentEl.value : '';
-      var newPass = newEl     ? newEl.value     : '';
-
-      if (!oldPass || !newPass) {
-        if (statusEl) { statusEl.textContent = 'Both fields are required.'; statusEl.style.color = 'var(--bbm-danger, #e05)'; }
-        if (saveBtn) saveBtn.disabled = false;
+    saveBtn.addEventListener('click', function () {
+      var zoom = parseInt(zoomEl.value, 10);
+      if (isNaN(zoom) || zoom < 1 || zoom > 19) {
+        if (statusEl) { statusEl.textContent = 'Zoom must be 1–19.'; statusEl.style.color = 'var(--bbm-danger, #e05)'; }
         return;
       }
-      if (newPass.length < 8) {
-        if (statusEl) { statusEl.textContent = 'New password must be at least 8 characters.'; statusEl.style.color = 'var(--bbm-danger, #e05)'; }
-        if (saveBtn) saveBtn.disabled = false;
-        return;
-      }
-
-      try {
-        var updatePayload = { password: newPass, currentPassword: oldPass };
-
-        // Re-encrypt private key with new password so it stays accessible after login.
-        if (window.BBMCrypto) {
-          try {
-            var keys = await window.Api.getMyKeys();
-            if (keys && keys.encryptedPrivateKey) {
-              var newEncBlob = await window.BBMCrypto.reencrypt(oldPass, newPass, keys.encryptedPrivateKey);
-              updatePayload.publicKey            = keys.publicKey;
-              updatePayload.encryptedPrivateKey  = newEncBlob;
-            }
-          } catch (cryptoErr) {
-            // Re-encryption failed — proceed with password change only.
-            // Keys will need to be regenerated on next login.
-            console.warn('[Settings] Key re-encryption failed:', cryptoErr.message);
-          }
-        }
-
-        await window.Api.updateMe(updatePayload);
-
-        if (statusEl) { statusEl.textContent = 'Password changed. Logging out…'; statusEl.style.color = 'var(--bbm-accent-green, #4c4)'; }
-        if (currentEl) currentEl.value = '';
-        if (newEl)     newEl.value     = '';
-
-        // tokenVersion was incremented server-side — log out so the user
-        // re-authenticates with their new password.
-        setTimeout(function () {
-          if (window.Auth && window.Auth.logout) window.Auth.logout();
-        }, 1500);
-
-      } catch (err) {
-        if (statusEl) { statusEl.textContent = err.message || 'Could not change password.'; statusEl.style.color = 'var(--bbm-danger, #e05)'; }
-        if (saveBtn) saveBtn.disabled = false;
-      }
+      localStorage.setItem(PREF_MAP_ZOOM, zoom);
+      localStorage.setItem(PREF_FAV_PINS, pinsEl.checked ? 'true' : 'false');
+      if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--bbm-accent-green, #4c4)'; }
+      setTimeout(function () { if (statusEl) statusEl.textContent = ''; }, 2500);
     });
   }
 
@@ -296,12 +206,13 @@
     });
   }
 
+  // ── Danger Zone ────────────────────────────────────────────────────────────
+
   function initDangerZone() {
     var dangerWrap = document.getElementById('dangerZoneWrap');
     var deleteBtn  = document.getElementById('deleteAccountBtn');
     if (!dangerWrap || !deleteBtn) return;
 
-    // Only show for registered users
     if (window.Auth && window.Auth.getToken && window.Auth.getToken()) {
       dangerWrap.style.display = '';
     }
@@ -315,6 +226,8 @@
     });
   }
 
+  // ── Init ───────────────────────────────────────────────────────────────────
+
   async function init() {
     wrap = document.getElementById('blocksWrap');
     if (!wrap) return;
@@ -322,8 +235,8 @@
     wrap.innerHTML = '<p class="text-muted-bb small">Loading…</p>';
 
     initAccountInfo();
-    initProfileForm();
-    initPasswordForm();
+    initAppLimits();
+    initPreferences();
 
     try {
       var data = await window.Api.getBlocks();
@@ -336,5 +249,11 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
+
+  // ── Exported preference readers (used by map.js) ───────────────────────────
+  window.BbmPrefs = {
+    mapZoom:    function () { return getPrefZoom(); },
+    showFavPins: function () { return getPrefFavPins(); },
+  };
 
 })();
