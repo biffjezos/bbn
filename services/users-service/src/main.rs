@@ -748,6 +748,86 @@ async fn get_keys(
     }
 }
 
+// ── GET /users/me/preferences ────────────────────────────────────────────────
+
+async fn get_preferences(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let oid = match safe_object_id(&claims.sub) {
+        Some(id) => id,
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid user id." }))).into_response(),
+    };
+
+    let user: Option<Document> = match state.db.collection::<Document>("users")
+        .find_one(doc! { "_id": oid })
+        .projection(doc! { "preferences": 1 })
+        .await
+    {
+        Ok(u)  => u,
+        Err(e) => { eprintln!("[users/me/preferences GET] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+
+    let prefs        = user.as_ref().and_then(|d| d.get_document("preferences").ok());
+    let map_zoom     = prefs.and_then(|p| p.get_i32("mapZoom").ok()).unwrap_or(17);
+    let show_fav_pins = prefs.and_then(|p| p.get_bool("showFavPins").ok()).unwrap_or(true);
+
+    Json(json!({ "mapZoom": map_zoom, "showFavPins": show_fav_pins })).into_response()
+}
+
+// ── PUT /users/me/preferences ────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct PreferencesBody {
+    #[serde(rename = "mapZoom")]
+    map_zoom:      Option<serde_json::Value>,
+    #[serde(rename = "showFavPins")]
+    show_fav_pins: Option<bool>,
+}
+
+async fn put_preferences(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+    Json(body): Json<PreferencesBody>,
+) -> impl IntoResponse {
+    let oid = match safe_object_id(&claims.sub) {
+        Some(id) => id,
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid user id." }))).into_response(),
+    };
+
+    let mut update = doc! {};
+
+    if let Some(zoom_val) = body.map_zoom {
+        let zoom: i32 = match &zoom_val {
+            serde_json::Value::Number(n) => n.as_i64().unwrap_or(17) as i32,
+            serde_json::Value::String(s) => s.parse().unwrap_or(17),
+            _ => 17,
+        };
+        if zoom < 1 || zoom > 19 {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "mapZoom must be 1–19." }))).into_response();
+        }
+        update.insert("preferences.mapZoom", zoom);
+    }
+
+    if let Some(show) = body.show_fav_pins {
+        update.insert("preferences.showFavPins", show);
+    }
+
+    if update.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Nothing to update." }))).into_response();
+    }
+
+    match state.db.collection::<Document>("users")
+        .update_one(doc! { "_id": oid }, doc! { "$set": update })
+        .await
+    {
+        Ok(_)  => Json(json!({ "ok": true })).into_response(),
+        Err(e) => { eprintln!("[users/me/preferences PUT] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    }
+}
+
 // ── GET /admin/users ──────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -1274,6 +1354,7 @@ async fn main() {
         .route("/users/{user_id}/profile",   get(get_profile))
         .route("/users/me/keys",             put(put_keys))
         .route("/users/me/keys",             get(get_keys))
+        .route("/users/me/preferences",      get(get_preferences).put(put_preferences))
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
         .route("/admin/users/{id}/role",         patch(admin_patch_role))

@@ -124,6 +124,17 @@ const Api = {
     return apiFetch('/users/me/keys');
   },
 
+  getPreferences() {
+    return apiFetch('/users/me/preferences');
+  },
+
+  updatePreferences(prefs) {
+    return apiFetch('/users/me/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    });
+  },
+
   // ---- Location -------------------------------------------
 
   putLocation(lat, lon, accuracy) {

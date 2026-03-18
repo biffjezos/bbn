@@ -4,7 +4,7 @@
 
 (function () {
 
-  // ── Storage keys for user preferences ─────────────────────────────────────
+  // Preference keys — must match prefs.js
   var PREF_MAP_ZOOM  = 'bbm_pref_map_zoom';
   var PREF_FAV_PINS  = 'bbm_pref_show_fav_pins';
 
@@ -129,33 +129,54 @@
 
   // ── User Preferences ───────────────────────────────────────────────────────
 
+  // Write-through to localStorage via BbmPrefs (or directly if prefs.js not yet run)
+  function cachePrefs(zoom, showPins) {
+    if (window.BbmPrefs) window.BbmPrefs.cache(zoom, showPins);
+    else { localStorage.setItem(PREF_MAP_ZOOM, zoom); localStorage.setItem(PREF_FAV_PINS, showPins ? 'true' : 'false'); }
+  }
+
   function getPrefZoom()    { var v = localStorage.getItem(PREF_MAP_ZOOM);  return v !== null ? parseInt(v, 10) : 17; }
   function getPrefFavPins() { var v = localStorage.getItem(PREF_FAV_PINS); return v !== 'false'; }
 
-  function initPreferences() {
-    var wrap    = document.getElementById('preferencesWrap');
-    var zoomEl  = document.getElementById('prefMapZoom');
-    var pinsEl  = document.getElementById('prefFavPins');
-    var saveBtn = document.getElementById('prefSaveBtn');
+  async function initPreferences() {
+    var wrap     = document.getElementById('preferencesWrap');
+    var zoomEl   = document.getElementById('prefMapZoom');
+    var pinsEl   = document.getElementById('prefFavPins');
+    var saveBtn  = document.getElementById('prefSaveBtn');
     var statusEl = document.getElementById('prefStatus');
     if (!wrap || !zoomEl || !pinsEl || !saveBtn) return;
     if (!window.Auth || !window.Auth.isRegistered()) return;
 
-    zoomEl.value = getPrefZoom();
+    // Load from server; fall back to cached/default while loading
+    zoomEl.value  = getPrefZoom();
     pinsEl.checked = getPrefFavPins();
-
     wrap.style.display = '';
 
-    saveBtn.addEventListener('click', function () {
+    try {
+      var prefs = await window.Api.getPreferences();
+      zoomEl.value   = prefs.mapZoom;
+      pinsEl.checked = prefs.showFavPins;
+      cachePrefs(prefs.mapZoom, prefs.showFavPins);
+    } catch (_) { /* keep cached/default values */ }
+
+    saveBtn.addEventListener('click', async function () {
       var zoom = parseInt(zoomEl.value, 10);
       if (isNaN(zoom) || zoom < 1 || zoom > 19) {
         if (statusEl) { statusEl.textContent = 'Zoom must be 1–19.'; statusEl.style.color = 'var(--bbm-danger, #e05)'; }
         return;
       }
-      localStorage.setItem(PREF_MAP_ZOOM, zoom);
-      localStorage.setItem(PREF_FAV_PINS, pinsEl.checked ? 'true' : 'false');
-      if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--bbm-accent-green, #4c4)'; }
-      setTimeout(function () { if (statusEl) statusEl.textContent = ''; }, 2500);
+      saveBtn.disabled = true;
+      if (statusEl) { statusEl.textContent = ''; }
+      try {
+        await window.Api.updatePreferences({ mapZoom: zoom, showFavPins: pinsEl.checked });
+        cachePrefs(zoom, pinsEl.checked);
+        if (statusEl) { statusEl.textContent = 'Saved.'; statusEl.style.color = 'var(--bbm-accent-green, #4c4)'; }
+        setTimeout(function () { if (statusEl) statusEl.textContent = ''; }, 2500);
+      } catch (err) {
+        if (statusEl) { statusEl.textContent = err.message || 'Could not save.'; statusEl.style.color = 'var(--bbm-danger, #e05)'; }
+      } finally {
+        saveBtn.disabled = false;
+      }
     });
   }
 
@@ -250,10 +271,5 @@
 
   document.addEventListener('DOMContentLoaded', init);
 
-  // ── Exported preference readers (used by map.js) ───────────────────────────
-  window.BbmPrefs = {
-    mapZoom:    function () { return getPrefZoom(); },
-    showFavPins: function () { return getPrefFavPins(); },
-  };
 
 })();
