@@ -19,8 +19,8 @@ Before any marketing or scaling push, the order of priority is:
 6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
 7. **T-02** — Analytics (low-risk, can slot in any time)
 8. ~~**T-06 Phase 1**~~ — ✅ Done (2026-03-18): Core venue + manager role implemented. Details in TICKETS_DONE.md.
+   ~~**T-06c**~~ — ✅ Done (2026-03-18): Multiple venues per manager. Details in TICKETS_DONE.md.
    - **T-06b** — Venue messaging (deferred)
-   - **T-06c** — Multiple venues per manager (deferred)
 9. **T-07** — Settings page + device notifications (UX polish)
 10. ~~**T-04c**~~ — ✅ Done (2026-03-17). Details in TICKETS_DONE.md.
 11. **T-08** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c underway)
@@ -84,9 +84,10 @@ Note field (`note: "..."`) — storing free-text without proper client-side encr
 
 ## T-06 — Venue Accounts + Manager Role
 
-**Status:** Phase 1 ✅ complete (2026-03-18). T-06b and T-06c deferred.
+**Status:** Phase 1 ✅ complete (2026-03-18). T-06c ✅ complete (2026-03-18). T-06b deferred.
 
 Phase 1 implementation details are in TICKETS_DONE.md.
+T-06c (multiple venues per manager): venue limit lifted — `venue_manager` can create, manage, and delete multiple venues. Details in TICKETS_DONE.md.
 
 ### Axis definitions (agreed 2026-03-18)
 
@@ -113,10 +114,10 @@ These three axes are fully orthogonal. A venue manager is `accountType: "user", 
 
 ---
 
-### Phase 3 — Multiple venues per manager (T-06c, deferred)
+### Phase 3 — Multiple venues per manager (T-06c)
 
-- Lift one-venue limit; encode max via tier
-- Requires subscription model or admin-set override
+✅ Complete (2026-03-18). Venue limit lifted. Details in TICKETS_DONE.md.
+T-14 tracks future tiered quota (per-tier venue limits) — still deferred.
 
 ---
 

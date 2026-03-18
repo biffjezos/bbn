@@ -200,7 +200,7 @@ Rust tiers-service live on Railway. Static fallback active; migration 004 still 
 
 - Venues are `users` collection documents with `accountType: "venue"` — no credentials, no login
 - Managers are regular users with `role: "venue_manager"` granted by admin
-- One venue per manager (hard limit, server-enforced)
+- One venue per manager (hard limit, server-enforced) — lifted in T-06c (see below)
 - `venueName`, `address`, `fixedLat`, `fixedLon` — immutable after creation
 - Deletion cascade: venue deleted → wipe messages, favourites, blocks; manager deleted → cascade-delete their venue first
 - Message radius = min(user tier `messageRadiusM`, venue tier `messageRadiusM`)
@@ -212,3 +212,12 @@ Rust tiers-service live on Railway. Static fallback active; migration 004 still 
 - 2026-03-18: Design agreed. Venue has no credentials, no login. Manager is a regular user with an added role. One venue per manager for now. Venue name/address/location immutable after creation. Tier is fixed (admin-only), no subscription yet.
 - 2026-03-18: Deletion cascade, message radius, map visibility, favouriting, and profile page decisions recorded.
 - 2026-03-18: Phase 1 complete.
+- 2026-03-18: Phase 3 (T-06c) complete — multiple venues per manager enabled.
+
+---
+
+## T-06c — Multiple Venues per Manager
+
+**Status:** ✅ Complete (2026-03-18). Part of T-06.
+
+One-venue limit lifted. A `venue_manager` can now create, manage, and delete multiple venues. The effective per-manager limit is set to 9999 in `POST /manager/venues` (functionally unlimited). Tiered per-manager quotas are tracked separately as T-14 (deferred until T-08 authority service exists).

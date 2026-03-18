@@ -352,13 +352,22 @@
     if (meetControl) { meetControl.remove(); meetControl = null; }
     lastNearbyUsers = [];
     favIds = new Set();
-    viewRadius = 23_000;  // revert to guest radius immediately
+    viewRadius = 0;       // clear immediately; refreshRadius() restores correct guest value
     setSelfBearing(null); // clear compass needle — not reset when icon rebuilds via lastBearing
   }
 
   function refreshSelf() {
     const pos = window.GeoState?.pos;
     if (pos && map) placeSelfMarker(pos.lat, pos.lng);
+  }
+
+  function refreshRadius() {
+    const tier = window.Auth?.getTier?.() || 'guest';
+    window.Api.getNearbyRadius(tier).then(function (data) {
+      viewRadius = data.radiusM ?? 0;
+      const pos = window.GeoState?.pos;
+      if (map && pos) placeSelfMarker(pos.lat, pos.lng);
+    }).catch(function () {});
   }
 
   // ── Events ────────────────────────────────────────────────────
@@ -393,7 +402,7 @@
     }
   });
 
-  window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired, onLogout, refreshSelf };
+  window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired, onLogout, refreshSelf, refreshRadius };
 
   // GeoState may already have a position if geo resolved before map.js ran
   window.__authReady.then(function () {
