@@ -525,9 +525,54 @@ When a logged-in user has `role: "venue_manager"`, `/profile` renders an additio
 
 ---
 
+### Resolved Decisions (2026-03-18)
+
+**1. Deletion cascades**
+
+- Venue deleted → cascade delete: all messages where `senderId` or `recipientId` = venue `_id`, all favourites containing venue `_id`, all blocks involving venue `_id`. This is explicit, not relying on the auto-delete TTL.
+- Manager account deleted → delete all linked venues first (same cascade as above for each), then delete the manager account. No orphan venue is ever left in the DB.
+- Future: auto-reassignment of orphaned venues deferred to **T-09**.
+
+**2. Message radius — bi-directional, lower-tier governs**
+
+- User → venue: user must be within their own `nearbyRadiusM` of the venue's `fixedLat/fixedLon`.
+- Venue → user: user must be within the venue's `nearbyRadiusM` of the venue's `fixedLat/fixedLon`.
+- Effective radius = min(user tier `nearbyRadiusM`, venue tier `nearbyRadiusM`). Lower tier always wins.
+- User blocks venue → venue cannot see or message that user (same enforcement as user-to-user blocks).
+
+**3. Venue map visibility**
+
+- `GET /location/venues` filters server-side: returns only venues within the calling user's `nearbyRadiusM` of the user's current position. Same logic as nearby-users endpoint.
+
+**4. Favouriting a venue in Phase 1**
+
+- Users can favourite venues in Phase 1. The favourite is stored and the venue appears in the favourites list (quick access to opening hours, description, etc.). Messaging via the favourites channel is not enabled until Phase 2 (T-06b). No special UI state needed beyond the existing favourites card.
+
+**5. Venue profile page**
+
+- Reuses `/profile/:id`. The same route renders different content based on `accountType`. Venue variant shows: `venueName`, `locationType` badge, `openingHours`, `description`. No edit controls visible to non-managers.
+
 ### Owner's Comments
 
 - 2026-03-18: Design agreed. Venue has no credentials, no login. Manager is a regular user with an added role. One venue per manager for now. Venue name/address/location immutable after creation. Tier is fixed (admin-only), no subscription yet.
+- 2026-03-18: Deletion cascade, message radius, map visibility, favouriting, and profile page decisions recorded above.
+
+---
+
+## T-09 — Orphan Venue Reassignment
+
+**Status:** Not started. Deferred until multi-role support exists.
+
+**Prerequisite:** A user account must be able to hold more than one role simultaneously (e.g. `admin` + `venue_manager`). Currently the system supports a single role per account, so an admin cannot also be a `venue_manager`.
+
+**Problem:** When a `venue_manager` account is deleted, their venue(s) are currently cascade-deleted (T-06 decision). This is a data loss risk for venues that should persist under new management.
+
+**Proposed approach (to be designed):**
+- Option A: A configurable "fallback manager" per venue (set by admin at creation time). If the primary manager is deleted, ownership transfers to the fallback.
+- Option B: A new interim role (e.g. `orphan_manager`) that can hold venue documents without appearing on the map as a regular user. Admin can reassign from the orphan pool.
+- Option C: Venues are held in a soft-deleted / suspended state for N days after manager deletion, giving admin time to reassign before permanent deletion.
+
+No implementation until multi-role support is landed and a preferred option is chosen.
 
 ---
 
