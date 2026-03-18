@@ -39,6 +39,18 @@ Rules for moving:
 - **Do not change `var DEBUG` in `ui/scripts/api.js`** without explicit permission.
 - **Do not tell me what the project is about.** I already know.
 
+## On Session End
+
+When I say **"end the session"**, **"take a break"**, or any similar signal that we are wrapping up:
+
+1. **Update `.claude/AUDIT.md`** — add any new findings, remove resolved items, update existing entries.
+2. **Update `.claude/TICKETS.md`** — move completed tickets/phases to `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the session.
+3. **Commit all changes** to the session branch, including the updated ticket files.
+4. **Create a PR targeting `dev`** with a short summary of everything done this session.
+5. Inform me the PR is ready. I review, merge, and that is the last action of the session.
+
+Do not ask for permission to do any of the above — just do it.
+
 ## Things You Must Do
 
 - Only load files relevant to the task. If it means you have to read all of them you have the permission. Think first, be token-sparing. It's good for the environment.
