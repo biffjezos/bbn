@@ -215,6 +215,30 @@ const Api = {
     return apiFetch('/blocks');
   },
 
+  // ---- Manager ------------------------------------------------
+
+  getMyVenues() {
+    return apiFetch('/manager/venues');
+  },
+
+  createVenue(payload) {
+    return apiFetch('/manager/venues', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateVenue(venueId, payload) {
+    return apiFetch(`/manager/venues/${encodeURIComponent(venueId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteVenue(venueId) {
+    return apiFetch(`/manager/venues/${encodeURIComponent(venueId)}`, { method: 'DELETE' });
+  },
+
   // ---- Admin --------------------------------------------------
 
   adminSearchUsers({ q, by } = {}) {

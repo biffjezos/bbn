@@ -242,6 +242,21 @@ fn admin_guard(headers: &HeaderMap, secret: &str) -> Option<axum::response::Resp
     }
 }
 
+// ── Manager guard ─────────────────────────────────────────────────────────────
+
+fn manager_guard(headers: &HeaderMap, secret: &str) -> Option<axum::response::Response> {
+    let auth  = auth_hdr(headers);
+    let token = auth.strip_prefix("Bearer ").unwrap_or(&auth).trim();
+    if token.is_empty() {
+        return Some((StatusCode::UNAUTHORIZED, Json(json!({ "error": "No token provided." }))).into_response());
+    }
+    match decode_user_token(token, secret) {
+        Err(_)                                     => Some((StatusCode::UNAUTHORIZED, Json(json!({ "error": "Token invalid or expired." }))).into_response()),
+        Ok(c) if c.role != "venue_manager"         => Some((StatusCode::FORBIDDEN,   Json(json!({ "error": "Venue manager role required." }))).into_response()),
+        Ok(_)                                      => None,
+    }
+}
+
 // ── Tier check ────────────────────────────────────────────────────────────────
 
 async fn tier_guard(state: &AppState, headers: &HeaderMap, feature: &str) -> Option<axum::response::Response> {
@@ -530,6 +545,29 @@ async fn admin_tiers_delete(State(s): State<AppState>, headers: HeaderMap, axum:
     if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::DELETE, format!("{}/admin/tiers/{}", s.tiers_url, name), auth_hdr(&headers), None).await
+}
+
+// ── Manager ───────────────────────────────────────────────────────────────────
+
+async fn manager_venues_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
+    proxy(&s, Method::GET, format!("{}/manager/venues", s.user_url), auth_hdr(&headers), None).await
+}
+async fn manager_venues_post(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
+    proxy(&s, Method::POST, format!("{}/manager/venues", s.user_url), auth_hdr(&headers), Some(body)).await
+}
+async fn manager_venue_put(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
+    proxy(&s, Method::PUT, format!("{}/manager/venues/{}", s.user_url, id), auth_hdr(&headers), Some(body)).await
+}
+async fn manager_venue_delete(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
+    proxy(&s, Method::DELETE, format!("{}/manager/venues/{}", s.user_url, id), auth_hdr(&headers), None).await
 }
 
 // ── WebSocket helpers ─────────────────────────────────────────────────────────
@@ -1013,6 +1051,9 @@ async fn main() {
         .route("/api/admin/users/{id}/account-type", patch(admin_patch_account_type))
         .route("/api/admin/tiers",              get(admin_tiers_list).post(admin_tiers_post))
         .route("/api/admin/tiers/{name}",       put(admin_tiers_put).delete(admin_tiers_delete))
+        // Manager
+        .route("/api/manager/venues",           get(manager_venues_list).post(manager_venues_post))
+        .route("/api/manager/venues/{id}",      put(manager_venue_put).delete(manager_venue_delete))
         // WebSocket
         .route("/ws/location", get(ws_location))
         .route("/ws/messages", get(ws_messages))

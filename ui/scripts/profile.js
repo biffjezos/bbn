@@ -19,6 +19,8 @@ function getJwtField(field) {
   catch { return null; }
 }
 
+function getJwtRole() { return getJwtField('role') || 'user'; }
+
 function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'unknown'; }
 function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
 function sexLabel(sex)  { return sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—'; }
@@ -222,6 +224,11 @@ async function renderMyProfile() {
     new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
   });
 
+  // Render "My Venue" section for venue managers
+  if (getJwtRole() === 'venue_manager') {
+    renderManagerVenueSection(wrap);
+  }
+
   document.getElementById('changePasswordBtn').addEventListener('click', () => {
     const existing = document.getElementById('changePasswordSection');
     if (existing) { existing.remove(); return; }
@@ -269,6 +276,134 @@ async function renderMyProfile() {
       }
     });
   });
+}
+
+// ── Manager — My Venue ────────────────────────────────────
+
+async function renderManagerVenueSection(profileWrap) {
+  const section = document.createElement('div');
+  section.id = 'managerVenueSection';
+  section.className = 'bbm-profile-form mt-5 pt-4';
+  section.style.borderTop = '1px solid var(--bbm-border)';
+  section.innerHTML = `<h5 class="heading-serif mb-3" style="font-size:1.1rem"><i class="bi bi-house-fill me-2"></i>My Venue</h5>
+    <div id="venueLoading" class="text-muted-bb small">Loading…</div>`;
+
+  // Insert before the danger zone section (last .bbm-profile-form)
+  const forms = profileWrap.querySelectorAll('.bbm-profile-form');
+  const dangerZone = forms[forms.length - 1];
+  dangerZone.before(section);
+
+  let venues = [];
+  try {
+    const data = await window.Api.getMyVenues();
+    venues = data.venues || [];
+  } catch (err) {
+    section.querySelector('#venueLoading').textContent = 'Failed to load venues: ' + err.message;
+    return;
+  }
+
+  section.querySelector('#venueLoading').remove();
+
+  if (venues.length === 0) {
+    section.innerHTML += `
+      <p class="text-muted-bb small mb-3">No venue yet. Create one to appear on the map as a fixed location.</p>
+      <div id="venueCreateAlert" class="d-none mb-3"></div>
+      <div id="venueCreateForm">
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-sm-6">
+            <label class="form-label">Venue Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="vcName" placeholder="e.g. The Blue Parrot" maxlength="64" />
+          </div>
+          <div class="col-12 col-sm-6">
+            <label class="form-label">Address <span class="text-muted-bb" style="font-size:0.78rem">(display only)</span></label>
+            <input type="text" class="form-control" id="vcAddress" placeholder="e.g. 42 Main St" maxlength="128" />
+          </div>
+          <div class="col-6 col-sm-3">
+            <label class="form-label">Latitude <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="vcLat" placeholder="e.g. 51.505" step="any" />
+          </div>
+          <div class="col-6 col-sm-3">
+            <label class="form-label">Longitude <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="vcLon" placeholder="e.g. -0.09" step="any" />
+          </div>
+        </div>
+        <p class="text-muted-bb small mb-3">Venue name, address, and location cannot be changed after creation.</p>
+        <button class="btn btn-bbm-primary" id="vcSubmitBtn"><i class="bi bi-house-check me-2"></i>Create Venue</button>
+      </div>`;
+
+    document.getElementById('vcSubmitBtn').addEventListener('click', async () => {
+      const alertEl = document.getElementById('venueCreateAlert');
+      const name    = document.getElementById('vcName').value.trim();
+      const address = document.getElementById('vcAddress').value.trim();
+      const lat     = parseFloat(document.getElementById('vcLat').value);
+      const lon     = parseFloat(document.getElementById('vcLon').value);
+      alertEl.classList.add('d-none');
+      if (name.length < 2) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Venue name must be at least 2 characters.'; alertEl.classList.remove('d-none'); return; }
+      if (isNaN(lat) || isNaN(lon)) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Valid latitude and longitude required.'; alertEl.classList.remove('d-none'); return; }
+      try {
+        await window.Api.createVenue({ venueName: name, address, fixedLat: lat, fixedLon: lon });
+        renderManagerVenueSection(profileWrap);
+      } catch (err) {
+        alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
+      }
+    });
+  } else {
+    const venue = venues[0];
+    section.innerHTML += `
+      <div id="venueAlert" class="d-none mb-3"></div>
+      <div class="bbm-section mb-3">
+        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+          <strong>${escHtml(venue.venueName || '—')}</strong>
+          <span class="badge bg-secondary" style="font-size:0.72rem">${escHtml(venue.tier || 'regular')}</span>
+        </div>
+        <div class="text-muted-bb small mb-3"><i class="bi bi-geo-alt me-1"></i>${escHtml(venue.address || '—')}</div>
+        <div class="row g-3 mb-3">
+          <div class="col-12">
+            <label class="form-label">Description</label>
+            <textarea class="form-control" id="veDesc" rows="3" maxlength="500" placeholder="Tell people about your venue…">${escHtml(venue.description || '')}</textarea>
+          </div>
+          <div class="col-12 col-sm-6">
+            <label class="form-label">Opening Hours</label>
+            <input type="text" class="form-control" id="veHours" maxlength="128" placeholder="e.g. Mon–Fri 18:00–02:00" value="${escHtml(venue.openingHours || '')}" />
+          </div>
+          <div class="col-12 col-sm-6">
+            <label class="form-label">Type</label>
+            <input type="text" class="form-control" id="veType" maxlength="64" placeholder="e.g. Bar, Club, Restaurant" value="${escHtml(venue.locationType || '')}" />
+          </div>
+        </div>
+        <div class="d-flex gap-3 flex-wrap align-items-center">
+          <button class="btn btn-bbm-primary" id="veSaveBtn"><i class="bi bi-check2 me-2"></i>Save Venue</button>
+          <button class="btn btn-bbm-danger" id="veDeleteBtn"><i class="bi bi-trash3 me-2"></i>Delete Venue</button>
+        </div>
+      </div>`;
+
+    document.getElementById('veSaveBtn').addEventListener('click', async () => {
+      const alertEl = document.getElementById('venueAlert');
+      alertEl.classList.add('d-none');
+      try {
+        await window.Api.updateVenue(venue.id, {
+          description:   document.getElementById('veDesc').value.trim(),
+          openingHours:  document.getElementById('veHours').value.trim(),
+          locationType:  document.getElementById('veType').value.trim(),
+        });
+        alertEl.className = 'alert alert-success'; alertEl.textContent = 'Venue saved.'; alertEl.classList.remove('d-none');
+        setTimeout(() => alertEl.classList.add('d-none'), 3000);
+      } catch (err) {
+        alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
+      }
+    });
+
+    document.getElementById('veDeleteBtn').addEventListener('click', async () => {
+      if (!confirm(`Delete "${venue.venueName || 'this venue'}"? All messages and favourites will be permanently deleted.`)) return;
+      const alertEl = document.getElementById('venueAlert');
+      try {
+        await window.Api.deleteVenue(venue.id);
+        renderManagerVenueSection(profileWrap);
+      } catch (err) {
+        alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
+      }
+    });
+  }
 }
 
 // ── Public Profile ────────────────────────────────────────
@@ -347,7 +482,12 @@ async function renderPublicProfile() {
         </div>
       </div>
       <div class="container-fluid px-4 px-md-5 py-4">
-        <p class="text-faint small">More profile details coming soon.</p>
+        ${isVenue ? `
+          ${profile.locationType ? `<p class="text-muted-bb small mb-1"><i class="bi bi-tag me-1"></i>${escHtml(profile.locationType)}</p>` : ''}
+          ${profile.address      ? `<p class="text-muted-bb small mb-1"><i class="bi bi-geo-alt me-1"></i>${escHtml(profile.address)}</p>` : ''}
+          ${profile.openingHours ? `<p class="text-muted-bb small mb-1"><i class="bi bi-clock me-1"></i>${escHtml(profile.openingHours)}</p>` : ''}
+          ${profile.description  ? `<p class="mt-3">${escHtml(profile.description)}</p>` : ''}
+        ` : '<p class="text-faint small">More profile details coming soon.</p>'}
       </div>`;
 
     const blockBtn = document.getElementById('blockUserBtn');

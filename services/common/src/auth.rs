@@ -160,7 +160,7 @@ where
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserClaims {
     pub sub:          String,
-    pub role:         String, // "user" | "admin" | "guest"
+    pub role:         String, // "user" | "admin" | "venue_manager" | "guest"
     pub tier:         Option<String>,
     pub tv:           Option<u32>,   // tokenVersion
     pub email:        Option<String>,
@@ -274,7 +274,7 @@ where
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let AuthToken(claims) = AuthToken::from_request_parts(parts, state).await?;
-        if !matches!(claims.role.as_str(), "user" | "admin") {
+        if !matches!(claims.role.as_str(), "user" | "admin" | "venue_manager") {
             return Err((
                 StatusCode::FORBIDDEN,
                 Json(serde_json::json!({
@@ -344,7 +344,7 @@ where
 
         // Verify tokenVersion for registered users — rejects tokens invalidated by
         // password changes or admin role/tier changes.
-        if matches!(claims.role.as_str(), "user" | "admin") {
+        if matches!(claims.role.as_str(), "user" | "admin" | "venue_manager") {
             let oid = safe_object_id(&claims.sub).ok_or_else(|| (
                 StatusCode::UNAUTHORIZED,
                 Json(serde_json::json!({ "error": "Token revoked.", "code": "TOKEN_REVOKED" })),

@@ -175,7 +175,9 @@ function renderUserCard(u) {
     : '';
   var adminBadge = u.role === 'admin'
     ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem">admin</span>'
-    : '';
+    : u.role === 'venue_manager'
+      ? '<span class="badge bg-info ms-1" style="font-size:0.65rem">venue manager</span>'
+      : '';
   return [
     '<div class="bbm-section mb-3" id="ucard-' + escHtml(u.userId) + '">',
     '  <div class="d-flex align-items-center justify-content-between gap-3"',
@@ -215,8 +217,9 @@ function renderUserCard(u) {
     '      <div class="col-6 col-md-2">',
     '        <label class="form-label small mb-1" for="role-' + escHtml(u.userId) + '">Role</label>',
     '        <select class="form-select form-select-sm" id="role-' + escHtml(u.userId) + '">',
-    '          <option value="user"'  + (u.role === 'user'  ? ' selected' : '') + '>user</option>',
-    '          <option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>admin</option>',
+    '          <option value="user"'           + (u.role === 'user'           ? ' selected' : '') + '>user</option>',
+    '          <option value="venue_manager"'  + (u.role === 'venue_manager'  ? ' selected' : '') + '>venue_manager</option>',
+    '          <option value="admin"'          + (u.role === 'admin'          ? ' selected' : '') + '>admin</option>',
     '        </select>',
     '      </div>',
     '    </div>',
@@ -583,10 +586,16 @@ function renderRolesTab() {
     '    No server-side guard currently prevents an admin from modifying their own tier or role (AUDIT 1.4).',
     '  </div>',
     '</div>',
-    '<div class="alert alert-info small mt-3 mb-0" role="alert">',
-    '  <i class="bi bi-info-circle me-1"></i>',
-    '  Custom roles and per-role permission sets require backend changes (T-09).',
-    '  Until T-09 is implemented, roles are limited to <code>user</code> and <code>admin</code>.',
+    '<div class="bbm-section mb-3">',
+    '  <div class="d-flex align-items-center justify-content-between mb-2">',
+    '    <div><strong>venue_manager</strong> <span class="badge bg-info ms-2">elevated</span></div>',
+    '  </div>',
+    '  <ul class="text-muted-bb small mb-0" style="padding-left:1.2rem">',
+    '    <li>Regular user on the map — retains their own GPS presence, tier, and favourites/messaging.</li>',
+    '    <li>Can create, edit, and delete their linked venue account(s) via /profile.</li>',
+    '    <li>One venue per manager (current limit). Venue name, address, and location are immutable after creation.</li>',
+    '    <li>Cannot change a venue\'s tier (admin-only). Cannot grant themselves or others the venue_manager role.</li>',
+    '  </ul>',
     '</div>',
   ].join('');
 }
