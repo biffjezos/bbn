@@ -379,9 +379,8 @@
     const { lat, lng } = e.detail;
     if (!map) initMap(lat, lng);
     else placeSelfMarker(lat, lng);
-    // If geo:nearby already fired but pos was null at the time, the pill was skipped.
-    // Catch that here: only when the pill doesn't exist yet and we have nearby data.
-    if (!meetControl && lastNearbyUsers.length) {
+    if (lastNearbyUsers.length) {
+      drawFavLines({ lat, lng }, lastNearbyUsers);
       updateMeetingMode({ lat, lng }, lastNearbyUsers);
     }
   });
