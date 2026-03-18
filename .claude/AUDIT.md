@@ -105,14 +105,21 @@ only ~614 KB of data across all collections.
 **Confirmed 2026-03-18:** All collections inspected via `db.getCollectionNames()`.
 No bloated collections. The disk constraint is structural, not data-related.
 
-**Resolution: migrate MongoDB to Atlas free tier (M0).**
+**Attempted workarounds (all failed — 2026-03-18):**
+- `/migrate/reset` endpoint: same OutOfDiskSpace error (drop operations succeed,
+  but `createIndex` is a write op and is blocked by the same threshold).
+- Standalone Bun script connecting directly via `MONGO_URI`: identical error.
+  MongoDB code 14031 blocks **all** write operations below 524 MB free — there is
+  no way to run migrations against this instance without first freeing disk space
+  at the filesystem level.
+
+**Only remaining resolution: migrate MongoDB to Atlas free tier (M0).**
 - Atlas manages storage independently; WiredTiger journal overhead is not charged
   against the 512 MB data limit.
 - The dataset is ~614 KB / 53 documents — trivially small.
 - Update `MONGO_URI` in Railway env vars for all services.
 - Migration-service will apply all 6 pending migrations on next gateway boot.
-- The `/migrate/reset` endpoint (drops ephemeral collections, re-runs all migrations)
-  is available if a clean slate is preferred.
+- The `/migrate/reset` endpoint is available for a clean slate after migration.
 
 **Consequences while not running:**
 - MongoDB TTL indexes for `messages`, `locations`, `sessions` not applied — expired
