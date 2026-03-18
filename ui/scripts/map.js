@@ -15,6 +15,7 @@
   let selfCircle      = null;
   let markers         = {};
   let favIds          = new Set();
+  let favOnline       = new Map(); // userId → bool (from getFavourites response)
   let favLines        = {}; // userId → { polyline }
   let lastNearbyUsers = [];
   let meetControl     = null;
@@ -288,7 +289,7 @@
     else if (targetSex === 'f') pillEl.classList.add('bbm-meet-pill--female');
     const distHtml = partner
       ? `<span class="bbm-meet-dist">${fmtDist(haversineM(selfPos.lat, selfPos.lng, partner.lat, partner.lon ?? partner.lng))}</span>`
-      : `<span class="bbm-meet-dist bbm-meet-absent">not visible</span>`;
+      : `<span class="bbm-meet-dist bbm-meet-absent">${favOnline.get(meet.uid) === false ? 'offline' : 'out of range'}</span>`;
 
     pillEl.innerHTML =
       `<span class="bbm-meet-icon">🧭</span>` +
@@ -352,13 +353,22 @@
     if (meetControl) { meetControl.remove(); meetControl = null; }
     lastNearbyUsers = [];
     favIds = new Set();
-    viewRadius = 23_000;  // revert to guest radius immediately
+    favOnline = new Map();
     setSelfBearing(null); // clear compass needle — not reset when icon rebuilds via lastBearing
   }
 
   function refreshSelf() {
     const pos = window.GeoState?.pos;
     if (pos && map) placeSelfMarker(pos.lat, pos.lng);
+  }
+
+  function refreshRadius() {
+    const tier = window.Auth?.getTier?.() || 'guest';
+    window.Api.getNearbyRadius(tier).then(function (data) {
+      viewRadius = data.radiusM ?? 0;
+      const pos = window.GeoState?.pos;
+      if (map && pos) placeSelfMarker(pos.lat, pos.lng);
+    }).catch(function () {});
   }
 
   // ── Events ────────────────────────────────────────────────────
@@ -379,9 +389,8 @@
     const { lat, lng } = e.detail;
     if (!map) initMap(lat, lng);
     else placeSelfMarker(lat, lng);
-    // If geo:nearby already fired but pos was null at the time, the pill was skipped.
-    // Catch that here: only when the pill doesn't exist yet and we have nearby data.
-    if (!meetControl && lastNearbyUsers.length) {
+    if (lastNearbyUsers.length) {
+      drawFavLines({ lat, lng }, lastNearbyUsers);
       updateMeetingMode({ lat, lng }, lastNearbyUsers);
     }
   });
@@ -394,7 +403,7 @@
     }
   });
 
-  window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired, onLogout, refreshSelf };
+  window.MapModule = { centreOnSelf, refreshMarkers, onGuestExpired, onLogout, refreshSelf, refreshRadius };
 
   // GeoState may already have a position if geo resolved before map.js ran
   window.__authReady.then(function () {
@@ -413,6 +422,7 @@
     if (window.Auth?.isRegistered()) {
       window.Api.getFavourites().then(function (data) {
         favIds = new Set((data.favourites || []).map(f => f.userId));
+        favOnline = new Map((data.favourites || []).map(f => [f.userId, f.online]));
       }).catch(function () {});
     }
   });

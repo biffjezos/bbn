@@ -115,6 +115,7 @@
     if (DEBUG) console.log('[App] onLogin fired, sex:', Auth.getSex());
     if (window.MapModule) {
       window.MapModule.refreshMarkers();
+      window.MapModule.refreshRadius();
       setTimeout(function() { window.MapModule && window.MapModule.refreshMarkers(); }, 1000);
     }
   };
@@ -658,7 +659,8 @@
   Auth.onGuestReady = function () {
     if (_origOnGuestReady) _origOnGuestReady();
     connectLocWS();                               // reconnect as guest after logout/init
-    window.MapModule && window.MapModule.refreshSelf();  // update self-pin to guest style
+    window.MapModule && window.MapModule.refreshSelf();   // update self-pin to guest style
+    window.MapModule && window.MapModule.refreshRadius(); // fetch correct guest radius (500m)
   };
 
   var _origOnGuestExpired = Auth.onGuestExpired;

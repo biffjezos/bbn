@@ -381,7 +381,10 @@ async fn put_location(
         .collection::<Document>("locations")
         .update_one(
             doc! { "userId": user_id },
-            doc! { "$set": build_location_doc(user_id, lat, lon, is_user, &claims, accuracy) },
+            doc! {
+                "$set":         build_location_doc(user_id, lat, lon, is_user, &claims, accuracy),
+                "$setOnInsert": { "createdAt": BsonDateTime::now() },
+            },
         )
         .upsert(true)
         .await

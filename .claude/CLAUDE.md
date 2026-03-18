@@ -19,6 +19,16 @@ Contains: planned features, postponed work, architectural proposals, implementat
 You maintain it. The project owner may also add items directly.
 Do not remove tickets unless the owner explicitly says to.
 
+### `.claude/TICKETS_DONE.md` — Completed tickets archive
+Contains: tickets and phases that are fully implemented and deployed.
+Move tickets/phases here when complete — never delete them.
+Rules for moving:
+- Move a **whole ticket** only when **all its phases and sub-tasks are done**.
+- Move a **phase** (e.g. T-06 Phase 1) individually if it is self-contained and complete, even if other phases of the same ticket remain pending.
+- Never move a ticket or phase that has unresolved sub-tasks.
+- After moving, leave a one-line stub in TICKETS.md pointing to TICKETS_DONE.md (e.g. `Phase 1 ✅ complete (date). Details in TICKETS_DONE.md.`).
+- **Do not read TICKETS_DONE.md on session start.** Consult it only when you need historical context for a specific ticket.
+
 ## Things You Must Never Do
 
 - **Do not change the business model.** No changes to account types, tier definitions, or the features available per tier without explicit permission.
