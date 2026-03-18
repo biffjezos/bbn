@@ -143,6 +143,8 @@ struct AdminUserDoc {
     role:          Option<String>,
     #[serde(rename = "accountType")]
     account_type:  Option<String>,
+    #[serde(rename = "managerId")]
+    manager_id:    Option<String>,
     #[serde(rename = "tokenVersion")]
     token_version: Option<i32>,
     #[serde(rename = "createdAt")]
@@ -828,6 +830,7 @@ async fn admin_get_users(
             "role":         u.role.as_deref().unwrap_or("user"),
             "tokenVersion": u.token_version.unwrap_or(0),
             "accountType":  u.account_type.as_deref(),
+            "managerId":    u.manager_id.as_deref(),
             "online":       is_online,
             "createdAt":    u.created_at.map(|d| d.to_string()),
         })
@@ -924,6 +927,75 @@ async fn admin_patch_role(
     };
 
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
+}
+
+// ── PATCH /admin/venues/:id/manager ──────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct ReassignManagerBody {
+    #[serde(rename = "newManagerId")]
+    new_manager_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RoleOnlyDoc {
+    role: Option<String>,
+}
+
+async fn admin_patch_venue_manager(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+    State(state): State<AppState>,
+    Path(venue_id): Path<String>,
+    Json(body): Json<ReassignManagerBody>,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+
+    let venue_oid = match safe_object_id(&venue_id) {
+        Some(o) => o,
+        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid venue id." }))).into_response(),
+    };
+
+    let new_manager_id = match body.new_manager_id.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        Some(id) => id.to_string(),
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "newManagerId is required." }))).into_response(),
+    };
+
+    let manager_oid = match safe_object_id(&new_manager_id) {
+        Some(o) => o,
+        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid newManagerId." }))).into_response(),
+    };
+
+    // Verify new manager exists and has the venue_manager role.
+    let manager_doc = match state.db.collection::<RoleOnlyDoc>("users")
+        .find_one(doc! { "_id": manager_oid })
+        .projection(doc! { "role": 1 })
+        .await
+    {
+        Ok(Some(u)) => u,
+        Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "New manager account not found." }))).into_response(),
+        Err(e)      => { eprintln!("[admin/venues PATCH manager] manager lookup: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+    if manager_doc.role.as_deref() != Some("venue_manager") {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Target account does not have the venue_manager role." }))).into_response();
+    }
+
+    // Verify venue exists.
+    match state.db.collection::<Document>("users")
+        .update_one(
+            doc! { "_id": venue_oid, "accountType": "venue" },
+            doc! { "$set": { "managerId": &new_manager_id } },
+        )
+        .await
+    {
+        Ok(r) if r.matched_count == 0 => return (StatusCode::NOT_FOUND, Json(json!({ "error": "Venue not found." }))).into_response(),
+        Ok(_)  => {},
+        Err(e) => { eprintln!("[admin/venues PATCH manager] update: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    }
+
+    Json(json!({ "ok": true })).into_response()
 }
 
 // ── Manager venue endpoints ───────────────────────────────────────────────────
@@ -1188,6 +1260,7 @@ async fn main() {
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
         .route("/admin/users/{id}/role",         patch(admin_patch_role))
+        .route("/admin/venues/{id}/manager",     patch(admin_patch_venue_manager))
         .route("/manager/venues",            get(get_manager_venues).post(post_manager_venues))
         .route("/manager/venues/{id}",       put(put_manager_venue).delete(delete_manager_venue))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })

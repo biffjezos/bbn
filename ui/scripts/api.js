@@ -262,6 +262,13 @@ const Api = {
     });
   },
 
+  adminReassignVenueManager(venueId, newManagerId) {
+    return apiFetch(`/admin/venues/${encodeURIComponent(venueId)}/manager`, {
+      method: 'PATCH',
+      body: JSON.stringify({ newManagerId }),
+    });
+  },
+
   adminListTiers() {
     return apiFetch('/admin/tiers');
   },
