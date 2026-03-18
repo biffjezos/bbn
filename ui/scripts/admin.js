@@ -153,6 +153,9 @@ function renderUserCard(u) {
   var dot = u.online
     ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00e5a0;margin-right:6px;vertical-align:middle"></span>'
     : '';
+  var acctBadge  = u.accountType === 'venue'
+    ? '<span class="badge bg-secondary ms-1" style="font-size:0.65rem">venue</span>'
+    : '';
   var adminBadge = u.role === 'admin'
     ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem">admin</span>'
     : u.role === 'venue_manager'
@@ -166,7 +169,7 @@ function renderUserCard(u) {
     '      ' + dot + '<strong>' + escHtml(u.nickname) + '</strong>',
     '      <span class="text-muted-bb ms-2" style="font-size:0.78rem">' + escHtml(u.email) + '</span>',
     '      <span class="badge bg-' + escHtml(_tierCls(u.tier)) + ' ms-2" style="font-size:0.65rem">' + escHtml(u.tier) + '</span>',
-    '      ' + adminBadge,
+    '      ' + acctBadge + adminBadge,
     '    </div>',
     '    <i class="bi bi-chevron-down text-muted flex-shrink-0"></i>',
     '  </div>',

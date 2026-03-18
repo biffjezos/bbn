@@ -258,9 +258,18 @@ None for in-app extension. Web Push requires HTTPS (already satisfied) and VAPID
 5. Admin UI: show `accountType` as a read-only badge on every user row (alongside tier and role).
 6. Document tiers/venue interaction in tiers-service and admin UI tooltip: `messageRadiusM` applies to venues; `nearbyRadiusM` does not.
 
-**Prerequisites:** migration-service must be running (T-10) to apply migration 006.
+**Prerequisites:** migration-service must be running (T-10) to apply migration 007.
 
 **Note (owner, 2026-03-18):** `unrestricted` stays a tier. No `developer` role or accountType.
+
+**Deferred cleanup — remove once migration 007 has run (blocked on T-10):**
+
+Migration 007 (`007_default_account_type`) is written and registered in migration-service but will not execute until T-10 is resolved. Until then, existing accounts have `accountType: null` in the DB. Two fallback code paths must remain until the migration runs, then must be deleted:
+
+1. `services/auth-service/src/main.rs` — `auth_login`: `account_type: user.account_type.as_deref()` passes `None` for old accounts. Once migration runs all users have the field set, so `None` is impossible for registered accounts. At that point, make this field required (remove the `Option`) and reject tokens for accounts missing it.
+2. `services/common/src/auth.rs` — `UserClaims.account_type: Option<String>`: after migration, every registered-user JWT carries the field. Callers that pattern-match `None` as `"user"` fallback can be tightened.
+
+Do not remove this note until T-10 is resolved and migration 007 is confirmed applied.
 
 ---
 

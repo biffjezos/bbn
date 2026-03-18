@@ -246,6 +246,7 @@ async fn auth_register(
             "sex":          &sex,
             "tier":         "regular",
             "role":         "user",
+            "accountType":  "user",
             "tokenVersion": 0_i32,
             "createdAt":    DateTime::now(),
         })
@@ -287,7 +288,7 @@ async fn auth_register(
         role:         "user",
         tier:         "regular",
         tv:           0,
-        account_type: None, // new registrations are never venues
+        account_type: Some("user"), // always set; backfilled for old accounts by migration 007
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/register] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
