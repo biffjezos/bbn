@@ -55,7 +55,7 @@
         if ((payload.exp * 1000) > Date.now()) {
           valid = isAdmin
             ? payload.role === 'admin'
-            : ['user', 'admin'].includes(payload.role);
+            : ['user', 'admin', 'venue_manager'].includes(payload.role);
         }
       } catch (e) {}
     }
