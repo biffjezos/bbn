@@ -155,15 +155,13 @@ async function renderMyProfile() {
       <div id="profileAlert" class="d-none mb-4"></div>
 
       <div class="mb-4 d-flex align-items-center gap-2 flex-wrap">
-        ${isVenue ? `<span class="badge bg-secondary d-inline-flex align-items-center gap-1" style="font-size:0.8rem"><i class="bi bi-house-fill"></i>&nbsp;Venue account</span>` : ''}
-        ${roleBadgesHtml([getJwtRole()])}
-        <span class="text-muted-bb small">${isVenue ? 'Plan:' : 'Account type'}</span>
         <span id="tierBadge"
           class="badge bg-${escHtml(tierCls)} d-inline-flex align-items-center gap-1"
           style="cursor:pointer;font-size:0.8rem;user-select:none"
           tabindex="0" role="button" aria-label="Show tier features">
           ${escHtml(tierLabel)}&nbsp;<i class="bi bi-info-circle"></i>
         </span>
+        ${roleBadgesHtml([getJwtRole()])}
       </div>
 
       ${editableFields}
