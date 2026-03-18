@@ -427,7 +427,7 @@ async fn main() {
         .database(&cfg.db_name);
     println!("[auth] DB connected.");
 
-    // Ensure TTL index on sessions.createdAt — auto-expires guest sessions after 2 hours.
+    // Ensure TTL index on sessions.createdAt — auto-expires guest sessions after 20 minutes.
     // create_index is idempotent: MongoDB ignores the call if the index already exists.
     {
         let idx = IndexModel::builder()
