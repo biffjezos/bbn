@@ -6,6 +6,38 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-07a — Settings Page
+
+**Status:** ✅ Complete (2026-03-18).
+
+### What was implemented
+
+- Route: `/settings/` — full settings page loaded via the app layout
+- **Blocked users** — list of blocked accounts with unblock button (T-05 integration)
+- **Account info** — displays email, accountType, tier, role (read-only)
+- **App limits** — shows session duration, message TTL, other tier-derived limits
+- **Profile editing** — nickname, age, sex (same fields as registration)
+- **Password change** — current + new password form
+- **Preferences** — map default zoom and show-favourite-pins toggle; stored server-side in `users` document via `GET/PUT /users/me/preferences`; `prefs.js` added as global module (loads between `blocks.js` and `map.js`); localStorage used as synchronous read-through cache for `map.js`
+- **Danger zone** — account deletion and other destructive actions
+
+### Backend additions (users-service)
+
+- `GET /users/me/preferences` — returns `{ mapZoom, showFavPins }` with defaults (17, true) when sub-document absent
+- `PUT /users/me/preferences` — updates `preferences.mapZoom` and/or `preferences.showFavPins` via dot-notation `$set`
+
+### New files
+
+- `ui/settings/index.html`
+- `ui/scripts/settings.js`
+- `ui/scripts/prefs.js` (global preferences module)
+
+### Notes
+
+- T-16 `meta` entries for `map_default_zoom` and `show_favourite_pins_on_map` are now server-side per-user prefs (not admin-controlled `meta`). T-16 entry updated accordingly.
+
+---
+
 ## T-08 Phase 1 — Normalise accountType / tier / role (ex-T-13)
 
 **Status:** ✅ Complete (2026-03-18).

@@ -12,17 +12,14 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 Before any marketing or scaling push, the order of priority is:
 
 1. **T-10** — Fix migration-service (HIGH: privacy regression — TTL indexes not running, data not auto-purged)
-2. **T-11** — Enforce 144-char plaintext message limit on client (trivial, no prerequisites)
-3. **T-07a** — Settings page (self-contained, no prerequisites)
-4. **T-08 Phase 1** — Normalise accountType / tier / role data model (prerequisite: T-10 for migration 006)
-5. **T-08 Phase 2** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service
-6. **T-06b** — Venue messaging (ideally after T-08 Phase 2 for clean auth routing)
-7. **T-09** — Role CRUD with Permissions UI (prerequisite: T-08 Phase 2)
-8. **T-02** — Analytics (low-risk, can slot in any time)
-9. **T-05b** — Encrypted block note (blocked on OPAQUE implementation — see AUDIT.md 1.1)
-10. **T-14** — Manager-tier venue quota (deferred, prerequisite: T-08)
-11. **T-15** — Orphan venue reassignment (deferred, prerequisite: multi-role support)
-12. **T-07b** — Device notifications (low priority)
+2. **T-08 Phase 2** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (T-08 Phase 1 ✅ complete)
+3. **T-06b** — Venue messaging (ideally after T-08 Phase 2 for clean auth routing)
+4. **T-09** — Role CRUD with Permissions UI (prerequisite: T-08 Phase 2)
+5. **T-02** — Analytics (low-risk, can slot in any time)
+6. **T-05b** — Encrypted block note (blocked on OPAQUE implementation — see AUDIT.md 1.1)
+7. **T-14** — Manager-tier venue quota (deferred, prerequisite: T-08)
+8. **T-15** — Orphan venue reassignment (deferred, prerequisite: multi-role support)
+9. **T-07b** — Device notifications (low priority)
 
 ### Architectural Decision (2026-03-16)
 
@@ -168,23 +165,7 @@ No implementation until multi-role support is landed and a preferred option is c
 
 ## T-07a — Settings Page
 
-**Status:** Not started. **Priority: medium.**
-
-### Requirements
-
-- Route: `/settings/`
-- Managed options:
-  - View and remove blocked users (T-05).
-  - (future) Notification preferences (opt in/out per event type).
-  - (future) Privacy settings.
-
-### Prerequisites
-
-None — can be started independently.
-
-### Owner's Comments
-
-- Not a priority at the moment.
+✅ Complete (2026-03-18). Details in TICKETS_DONE.md.
 
 ---
 
@@ -449,9 +430,10 @@ Everything crypto, bcrypt cost, JWT structure, CORS — hard-code, no exceptions
 - T-08 Phase 2 (Authority service) ideally precedes the backend half, so
   there is a single place to read/cache `meta` values.
 - The `map_default_zoom` and `show_favourite_pins_on_map` user-scope keys are
-  **already implemented as localStorage** in T-07a (2026-03-18) — these two
-  entries in `meta` are pending only if a server-backed per-user preference
-  store is added later.
+  **already implemented as server-side per-user preferences** in T-07a (2026-03-18)
+  via `GET/PUT /users/me/preferences` — these two `meta` entries are obsolete for
+  the user scope. They remain listed here only for completeness; no further action
+  needed unless a global admin default (separate from per-user overrides) is wanted.
 
 ### Owner's Comments
 
