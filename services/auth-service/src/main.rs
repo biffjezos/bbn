@@ -4,7 +4,7 @@
 // Identical HTTP contract — gateway needs no changes.
 // ============================================================
 
-use std::env;
+use std::{env, time::Duration};
 
 use axum::{
     extract::{FromRef, State},
@@ -17,7 +17,8 @@ use common::auth::{issue_guest_token, issue_user_token, ServiceSecret, ServiceTo
 use common::mongo::safe_object_id;
 use mongodb::{
     bson::{doc, DateTime},
-    Client, Database,
+    options::IndexOptions,
+    Client, Database, IndexModel,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -165,7 +166,10 @@ async fn auth_guest(
         .collection::<mongodb::bson::Document>("sessions")
         .update_one(
             doc! { "guestId": &guest_id },
-            doc! { "$set": { "guestId": &guest_id, "createdAt": DateTime::now() } },
+            doc! {
+                "$set":         { "guestId": &guest_id },
+                "$setOnInsert": { "createdAt": DateTime::now() },
+            },
         )
         .upsert(true)
         .await;
@@ -424,6 +428,18 @@ async fn main() {
         .expect("Failed to connect to MongoDB")
         .database(&cfg.db_name);
     println!("[auth] DB connected.");
+
+    // Ensure TTL index on sessions.createdAt — auto-expires guest sessions after 2 hours.
+    // create_index is idempotent: MongoDB ignores the call if the index already exists.
+    {
+        let idx = IndexModel::builder()
+            .keys(doc! { "createdAt": 1 })
+            .options(IndexOptions::builder().expire_after(Duration::from_secs(2 * 3600)).build())
+            .build();
+        if let Err(e) = db.collection::<mongodb::bson::Document>("sessions").create_index(idx).await {
+            eprintln!("[auth] sessions TTL index: {e}");
+        }
+    }
 
     if let Some(ref uid) = cfg.admin_bootstrap_user_id {
         bootstrap_admin(&db, uid).await;

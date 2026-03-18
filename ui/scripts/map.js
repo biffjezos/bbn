@@ -352,7 +352,6 @@
     if (meetControl) { meetControl.remove(); meetControl = null; }
     lastNearbyUsers = [];
     favIds = new Set();
-    viewRadius = 0;       // clear immediately; refreshRadius() restores correct guest value
     setSelfBearing(null); // clear compass needle — not reset when icon rebuilds via lastBearing
   }
 
