@@ -120,7 +120,6 @@
       infoRow('Messages auto-delete after',   '4 hours'),
       infoRow('Favourites expire after',       '30 days'),
       infoRow('Message length limit',          '144 characters'),
-      infoRow('Guest session duration',        '15 minutes'),
     ];
 
     fields.innerHTML = rows.join('');
