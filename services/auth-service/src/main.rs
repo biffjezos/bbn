@@ -166,10 +166,7 @@ async fn auth_guest(
         .collection::<mongodb::bson::Document>("sessions")
         .update_one(
             doc! { "guestId": &guest_id },
-            doc! {
-                "$set":         { "guestId": &guest_id },
-                "$setOnInsert": { "createdAt": DateTime::now() },
-            },
+            doc! { "$set": { "guestId": &guest_id, "createdAt": DateTime::now() } },
         )
         .upsert(true)
         .await;
@@ -434,7 +431,7 @@ async fn main() {
     {
         let idx = IndexModel::builder()
             .keys(doc! { "createdAt": 1 })
-            .options(IndexOptions::builder().expire_after(Duration::from_secs(2 * 3600)).build())
+            .options(IndexOptions::builder().expire_after(Duration::from_secs(20 * 60)).build())
             .build();
         if let Err(e) = db.collection::<mongodb::bson::Document>("sessions").create_index(idx).await {
             eprintln!("[auth] sessions TTL index: {e}");
