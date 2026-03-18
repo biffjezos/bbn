@@ -125,6 +125,8 @@ struct ProfileDoc {
     #[serde(rename = "locationType")]
     location_type:         Option<String>,
     address:               Option<String>,
+    #[serde(rename = "canReceiveMessages")]
+    can_receive_messages:  Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -616,7 +618,7 @@ async fn get_profile(
             // Viewer blocked the target — return profile with flag
             let user = match state.db.collection::<ProfileDoc>("users")
                 .find_one(doc! { "_id": oid })
-                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "_id": 0 })
+                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
                 .await
             {
                 Ok(Some(u)) => u,
@@ -624,24 +626,25 @@ async fn get_profile(
                 Err(e)      => { eprintln!("[users/profile GET] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
             };
             return Json(json!({
-                "nickname":        user.nickname.as_deref(),
-                "age":             user.age,
-                "sex":             user.sex.as_deref(),
-                "publicKey":       user.public_key.as_deref(),
-                "accountType":     user.account_type.as_deref(),
-                "venueName":       user.venue_name.as_deref(),
-                "description":     user.description.as_deref(),
-                "openingHours":    user.opening_hours.as_deref(),
-                "locationType":    user.location_type.as_deref(),
-                "address":         user.address.as_deref(),
-                "blockedByViewer": true,
+                "nickname":            user.nickname.as_deref(),
+                "age":                 user.age,
+                "sex":                 user.sex.as_deref(),
+                "publicKey":           user.public_key.as_deref(),
+                "accountType":         user.account_type.as_deref(),
+                "venueName":           user.venue_name.as_deref(),
+                "description":         user.description.as_deref(),
+                "openingHours":        user.opening_hours.as_deref(),
+                "locationType":        user.location_type.as_deref(),
+                "address":             user.address.as_deref(),
+                "canReceiveMessages":  user.can_receive_messages.unwrap_or(true),
+                "blockedByViewer":     true,
             })).into_response();
         }
     }
 
     let user = match state.db.collection::<ProfileDoc>("users")
         .find_one(doc! { "_id": oid })
-        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "_id": 0 })
+        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
         .await
     {
         Ok(Some(u)) => u,
@@ -650,16 +653,17 @@ async fn get_profile(
     };
 
     Json(json!({
-        "nickname":     user.nickname.as_deref(),
-        "age":          user.age,
-        "sex":          user.sex.as_deref(),
-        "publicKey":    user.public_key.as_deref(),
-        "accountType":  user.account_type.as_deref(),
-        "venueName":    user.venue_name.as_deref(),
-        "description":  user.description.as_deref(),
-        "openingHours": user.opening_hours.as_deref(),
-        "locationType": user.location_type.as_deref(),
-        "address":      user.address.as_deref(),
+        "nickname":           user.nickname.as_deref(),
+        "age":                user.age,
+        "sex":                user.sex.as_deref(),
+        "publicKey":          user.public_key.as_deref(),
+        "accountType":        user.account_type.as_deref(),
+        "venueName":          user.venue_name.as_deref(),
+        "description":        user.description.as_deref(),
+        "openingHours":       user.opening_hours.as_deref(),
+        "locationType":       user.location_type.as_deref(),
+        "address":            user.address.as_deref(),
+        "canReceiveMessages": user.can_receive_messages.unwrap_or(true),
     })).into_response()
 }
 
@@ -935,6 +939,8 @@ struct VenueUpdateBody {
     opening_hours: Option<String>,
     #[serde(rename = "locationType")]
     location_type: Option<String>,
+    #[serde(rename = "canReceiveMessages")]
+    can_receive_messages: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -955,7 +961,9 @@ struct VenueDoc2 {
     #[serde(rename = "locationType")]
     location_type: Option<String>,
     #[serde(rename = "managerId")]
-    manager_id:    Option<String>,
+    manager_id:          Option<String>,
+    #[serde(rename = "canReceiveMessages")]
+    can_receive_messages: Option<bool>,
 }
 
 // ── GET /manager/venues ───────────────────────────────────────────────────────
@@ -979,15 +987,16 @@ async fn get_manager_venues(
     };
 
     let list: Vec<_> = venues.iter().map(|v| json!({
-        "id":           v.id.to_hex(),
-        "venueName":    v.venue_name.as_deref(),
-        "address":      v.address.as_deref(),
-        "fixedLat":     v.fixed_lat,
-        "fixedLon":     v.fixed_lon,
-        "tier":         v.tier.as_deref().unwrap_or("regular"),
-        "description":  v.description.as_deref(),
-        "openingHours": v.opening_hours.as_deref(),
-        "locationType": v.location_type.as_deref(),
+        "id":                 v.id.to_hex(),
+        "venueName":          v.venue_name.as_deref(),
+        "address":            v.address.as_deref(),
+        "fixedLat":           v.fixed_lat,
+        "fixedLon":           v.fixed_lon,
+        "tier":               v.tier.as_deref().unwrap_or("regular"),
+        "description":        v.description.as_deref(),
+        "openingHours":       v.opening_hours.as_deref(),
+        "locationType":       v.location_type.as_deref(),
+        "canReceiveMessages": v.can_receive_messages.unwrap_or(true),
     })).collect();
 
     Json(json!({ "venues": list })).into_response()
@@ -1035,14 +1044,15 @@ async fn post_manager_venues(
     let result = match state.db
         .collection::<Document>("users")
         .insert_one(doc! {
-            "accountType": "venue",
-            "venueName":   &venue_name,
-            "nickname":    &venue_name,
-            "address":     &address,
-            "fixedLat":    fixed_lat,
-            "fixedLon":    fixed_lon,
-            "managerId":   &claims.sub,
-            "tier":        "regular",
+            "accountType":        "venue",
+            "venueName":          &venue_name,
+            "nickname":           &venue_name,
+            "address":            &address,
+            "fixedLat":           fixed_lat,
+            "fixedLon":           fixed_lon,
+            "managerId":          &claims.sub,
+            "tier":               "regular",
+            "canReceiveMessages": true,
         })
         .await
     {
@@ -1087,9 +1097,10 @@ async fn put_manager_venue(
     }
 
     let mut update = doc! {};
-    if let Some(d) = body.description   { update.insert("description",   d.trim().to_string()); }
-    if let Some(o) = body.opening_hours { update.insert("openingHours",  o.trim().to_string()); }
-    if let Some(t) = body.location_type { update.insert("locationType",  t.trim().to_string()); }
+    if let Some(d) = body.description          { update.insert("description",        d.trim().to_string()); }
+    if let Some(o) = body.opening_hours        { update.insert("openingHours",       o.trim().to_string()); }
+    if let Some(t) = body.location_type        { update.insert("locationType",       t.trim().to_string()); }
+    if let Some(m) = body.can_receive_messages { update.insert("canReceiveMessages", m); }
 
     if update.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Nothing to update." }))).into_response();

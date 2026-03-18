@@ -342,6 +342,11 @@ async function renderManagerVenueSection(profileWrap) {
           </div>
         </div>
         <p class="text-muted-bb small mb-3">Venue name, address, and location cannot be changed after creation.</p>
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" id="vcCanMsg" checked />
+          <label class="form-check-label" for="vcCanMsg">Can receive messages</label>
+        </div>
+        <div class="text-muted-bb mb-3" style="font-size:0.78rem">If disabled, the venue won't be messageable by anyone (e.g. public parks).</div>
         <button class="btn btn-bbm-primary" id="vcSubmitBtn"><i class="bi bi-house-check me-2"></i>Create Venue</button>
       </div>`;
 
@@ -355,7 +360,8 @@ async function renderManagerVenueSection(profileWrap) {
       if (name.length < 2) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Venue name must be at least 2 characters.'; alertEl.classList.remove('d-none'); return; }
       if (isNaN(lat) || isNaN(lon)) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Valid latitude and longitude required.'; alertEl.classList.remove('d-none'); return; }
       try {
-        await window.Api.createVenue({ venueName: name, address, fixedLat: lat, fixedLon: lon });
+        const canMsg = document.getElementById('vcCanMsg').checked;
+        await window.Api.createVenue({ venueName: name, address, fixedLat: lat, fixedLon: lon, canReceiveMessages: canMsg });
         renderManagerVenueSection(profileWrap);
       } catch (err) {
         alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
@@ -384,6 +390,13 @@ async function renderManagerVenueSection(profileWrap) {
             <label class="form-label">Type</label>
             <input type="text" class="form-control" id="veType" maxlength="64" placeholder="e.g. Bar, Club, Restaurant" value="${escHtml(venue.locationType || '')}" />
           </div>
+          <div class="col-12">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="veCanMsg" ${venue.canReceiveMessages !== false ? 'checked' : ''} />
+              <label class="form-check-label" for="veCanMsg">Can receive messages</label>
+            </div>
+            <div class="text-muted-bb" style="font-size:0.78rem;margin-top:0.25rem">If disabled, the venue won't be messageable by anyone (e.g. public parks).</div>
+          </div>
         </div>
         <div class="d-flex gap-3 flex-wrap align-items-center">
           <button class="btn btn-bbm-primary" id="veSaveBtn"><i class="bi bi-check2 me-2"></i>Save Venue</button>
@@ -396,9 +409,10 @@ async function renderManagerVenueSection(profileWrap) {
       alertEl.classList.add('d-none');
       try {
         await window.Api.updateVenue(venue.id, {
-          description:   document.getElementById('veDesc').value.trim(),
-          openingHours:  document.getElementById('veHours').value.trim(),
-          locationType:  document.getElementById('veType').value.trim(),
+          description:        document.getElementById('veDesc').value.trim(),
+          openingHours:       document.getElementById('veHours').value.trim(),
+          locationType:       document.getElementById('veType').value.trim(),
+          canReceiveMessages: document.getElementById('veCanMsg').checked,
         });
         alertEl.className = 'alert alert-success'; alertEl.textContent = 'Venue saved.'; alertEl.classList.remove('d-none');
         setTimeout(() => alertEl.classList.add('d-none'), 3000);

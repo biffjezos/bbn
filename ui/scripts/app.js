@@ -275,7 +275,7 @@
       if ($('pinAge'))      $('pinAge').textContent      = isVenuePin ? '—' : (age ? age + ' yrs' : '—');
       if ($('pinSex'))      $('pinSex').textContent      = isVenuePin ? 'Venue' : (sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—');
 
-      if (targetIsReg && userId && !age) {
+      if (targetIsReg && userId && !age && !isVenuePin) {
         window.Api.getProfile(userId).then(function(profile) {
           if (profile.age && $('pinAge')) $('pinAge').textContent = profile.age + ' yrs';
         }).catch(function() {});
@@ -301,9 +301,18 @@
         if (msgLink) {
           msgLink.href = BASE + '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
           msgLink.classList.add('d-none');
-          window.Api.isMutualFavourite(userId).then(function(data) {
-            if (data.mutual) msgLink.classList.remove('d-none');
-          }).catch(function() { /* leave hidden on error */ });
+          if (isVenuePin) {
+            window.Api.getProfile(userId).then(function(profile) {
+              if (profile.canReceiveMessages === false) return;
+              window.Api.isMutualFavourite(userId).then(function(data) {
+                if (data.mutual) msgLink.classList.remove('d-none');
+              }).catch(function() {});
+            }).catch(function() {});
+          } else {
+            window.Api.isMutualFavourite(userId).then(function(data) {
+              if (data.mutual) msgLink.classList.remove('d-none');
+            }).catch(function() { /* leave hidden on error */ });
+          }
         }
 
         var favBtn   = $('pinFavBtn');
