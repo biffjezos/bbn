@@ -2,6 +2,7 @@
 // bOOmbOOm.NOW! — blocks-service (Rust)
 // Replaces services/blocks-service.js.
 // Identical HTTP contract — gateway needs no changes.
+// Rebuild: venue_manager accepted by RequireRegistered (common).
 // ============================================================
 
 use std::env;

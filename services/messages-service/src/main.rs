@@ -2,6 +2,7 @@
 // bOOmbOOm.NOW! — messages-service (Rust)
 // Replaces services/messages-service.js.
 // Identical HTTP contract — gateway needs no changes.
+// Rebuild: venue_manager accepted by RequireRegistered (common).
 // ============================================================
 
 use std::{env, sync::Arc, time::Duration};
