@@ -295,17 +295,19 @@ async function renderMyProfile() {
 // ── Manager — My Venue ────────────────────────────────────
 
 async function renderManagerVenueSection(profileWrap) {
+  const existing = document.getElementById('managerVenueSection');
+  if (existing) existing.remove();
+
   const section = document.createElement('div');
   section.id = 'managerVenueSection';
   section.className = 'bbm-profile-form mt-5 pt-4';
   section.style.borderTop = '1px solid var(--bbm-border)';
-  section.innerHTML = `<h5 class="heading-serif mb-3" style="font-size:1.1rem"><i class="bi bi-house-fill me-2"></i>My Venue</h5>
+  section.innerHTML = `<h5 class="heading-serif mb-3" style="font-size:1.1rem"><i class="bi bi-house-fill me-2"></i>My Venues</h5>
     <div id="venueLoading" class="text-muted-bb small">Loading…</div>`;
 
   // Insert before the danger zone section (last .bbm-profile-form)
   const forms = profileWrap.querySelectorAll('.bbm-profile-form');
-  const dangerZone = forms[forms.length - 1];
-  dangerZone.before(section);
+  forms[forms.length - 1].before(section);
 
   let venues = [];
   try {
@@ -315,115 +317,166 @@ async function renderManagerVenueSection(profileWrap) {
     section.querySelector('#venueLoading').textContent = 'Failed to load venues: ' + err.message;
     return;
   }
-
   section.querySelector('#venueLoading').remove();
 
-  if (venues.length === 0) {
-    section.innerHTML += `
-      <p class="text-muted-bb small mb-3">No venue yet. Create one to appear on the map as a fixed location.</p>
+  // ── Create-venue panel (always available at top) ──────────────────────────
+  const createWrap = document.createElement('div');
+  createWrap.className = 'mb-4';
+  createWrap.innerHTML = `
+    <button class="btn btn-bbm-secondary btn-sm" id="vcToggleBtn">
+      <i class="bi bi-plus-lg me-1"></i>Add Venue
+    </button>
+    <div id="venueCreatePanel" class="d-none mt-3 bbm-section">
       <div id="venueCreateAlert" class="d-none mb-3"></div>
-      <div id="venueCreateForm">
-        <div class="row g-3 mb-3">
-          <div class="col-12 col-sm-6">
-            <label class="form-label">Venue Name <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="vcName" placeholder="e.g. The Blue Parrot" maxlength="64" />
-          </div>
-          <div class="col-12 col-sm-6">
-            <label class="form-label">Address <span class="text-muted-bb" style="font-size:0.78rem">(display only)</span></label>
-            <input type="text" class="form-control" id="vcAddress" placeholder="e.g. 42 Main St" maxlength="128" />
-          </div>
-          <div class="col-6 col-sm-3">
-            <label class="form-label">Latitude <span class="text-danger">*</span></label>
-            <input type="number" class="form-control" id="vcLat" placeholder="e.g. 51.505" step="any" />
-          </div>
-          <div class="col-6 col-sm-3">
-            <label class="form-label">Longitude <span class="text-danger">*</span></label>
-            <input type="number" class="form-control" id="vcLon" placeholder="e.g. -0.09" step="any" />
-          </div>
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-sm-6">
+          <label class="form-label">Venue Name <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="vcName" placeholder="e.g. The Blue Parrot" maxlength="64" />
         </div>
-        <p class="text-muted-bb small mb-3">Venue name, address, and location cannot be changed after creation.</p>
-        <div class="form-check form-switch mb-3">
-          <input class="form-check-input" type="checkbox" id="vcCanMsg" checked />
-          <label class="form-check-label" for="vcCanMsg">Can receive messages</label>
+        <div class="col-12 col-sm-6">
+          <label class="form-label">Address <span class="text-muted-bb" style="font-size:0.78rem">(display only)</span></label>
+          <input type="text" class="form-control" id="vcAddress" placeholder="e.g. 42 Main St" maxlength="128" />
         </div>
-        <div class="text-muted-bb mb-3" style="font-size:0.78rem">If disabled, the venue won't be messageable by anyone (e.g. public parks).</div>
-        <button class="btn btn-bbm-primary" id="vcSubmitBtn"><i class="bi bi-house-check me-2"></i>Create Venue</button>
-      </div>`;
+        <div class="col-6 col-sm-3">
+          <label class="form-label">Latitude <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="vcLat" placeholder="e.g. 51.505" step="any" />
+        </div>
+        <div class="col-6 col-sm-3">
+          <label class="form-label">Longitude <span class="text-danger">*</span></label>
+          <input type="number" class="form-control" id="vcLon" placeholder="e.g. -0.09" step="any" />
+        </div>
+        <div class="col-12">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="vcCanMsg" checked />
+            <label class="form-check-label" for="vcCanMsg">Can receive messages</label>
+          </div>
+          <div class="text-muted-bb" style="font-size:0.78rem;margin-top:0.25rem">If disabled, the venue won't be messageable by anyone (e.g. public parks).</div>
+        </div>
+      </div>
+      <p class="text-muted-bb small mb-3">Venue name, address, and location cannot be changed after creation.</p>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-bbm-primary btn-sm" id="vcSubmitBtn"><i class="bi bi-house-check me-1"></i>Create Venue</button>
+        <button class="btn btn-secondary btn-sm" id="vcCancelBtn">Cancel</button>
+      </div>
+    </div>`;
+  section.appendChild(createWrap);
 
-    document.getElementById('vcSubmitBtn').addEventListener('click', async () => {
-      const alertEl = document.getElementById('venueCreateAlert');
-      const name    = document.getElementById('vcName').value.trim();
-      const address = document.getElementById('vcAddress').value.trim();
-      const lat     = parseFloat(document.getElementById('vcLat').value);
-      const lon     = parseFloat(document.getElementById('vcLon').value);
-      alertEl.classList.add('d-none');
-      if (name.length < 2) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Venue name must be at least 2 characters.'; alertEl.classList.remove('d-none'); return; }
-      if (isNaN(lat) || isNaN(lon)) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Valid latitude and longitude required.'; alertEl.classList.remove('d-none'); return; }
-      try {
-        const canMsg = document.getElementById('vcCanMsg').checked;
-        await window.Api.createVenue({ venueName: name, address, fixedLat: lat, fixedLon: lon, canReceiveMessages: canMsg });
-        renderManagerVenueSection(profileWrap);
-      } catch (err) {
-        alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
-      }
-    });
-  } else {
-    const venue = venues[0];
-    section.innerHTML += `
-      <div id="venueAlert" class="d-none mb-3"></div>
-      <div class="bbm-section mb-3">
-        <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-          <strong>${escHtml(venue.venueName || '—')}</strong>
-          <span class="badge bg-secondary" style="font-size:0.72rem">${escHtml(venue.tier || 'regular')}</span>
-        </div>
-        <div class="text-muted-bb small mb-3"><i class="bi bi-geo-alt me-1"></i>${escHtml(venue.address || '—')}</div>
+  const toggleBtn  = createWrap.querySelector('#vcToggleBtn');
+  const createPanel = createWrap.querySelector('#venueCreatePanel');
+
+  toggleBtn.addEventListener('click', () => {
+    const opening = createPanel.classList.toggle('d-none');
+    toggleBtn.innerHTML = opening
+      ? '<i class="bi bi-plus-lg me-1"></i>Add Venue'
+      : '<i class="bi bi-x-lg me-1"></i>Cancel';
+  });
+
+  createWrap.querySelector('#vcCancelBtn').addEventListener('click', () => {
+    createPanel.classList.add('d-none');
+    toggleBtn.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Add Venue';
+  });
+
+  createWrap.querySelector('#vcSubmitBtn').addEventListener('click', async () => {
+    const alertEl = createWrap.querySelector('#venueCreateAlert');
+    const name    = createWrap.querySelector('#vcName').value.trim();
+    const address = createWrap.querySelector('#vcAddress').value.trim();
+    const lat     = parseFloat(createWrap.querySelector('#vcLat').value);
+    const lon     = parseFloat(createWrap.querySelector('#vcLon').value);
+    const canMsg  = createWrap.querySelector('#vcCanMsg').checked;
+    alertEl.classList.add('d-none');
+    if (name.length < 2) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Venue name must be at least 2 characters.'; alertEl.classList.remove('d-none'); return; }
+    if (isNaN(lat) || isNaN(lon)) { alertEl.className = 'alert alert-danger'; alertEl.textContent = 'Valid latitude and longitude required.'; alertEl.classList.remove('d-none'); return; }
+    try {
+      await window.Api.createVenue({ venueName: name, address, fixedLat: lat, fixedLon: lon, canReceiveMessages: canMsg });
+      renderManagerVenueSection(profileWrap);
+    } catch (err) {
+      alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
+    }
+  });
+
+  // ── Venue list ────────────────────────────────────────────────────────────
+  if (venues.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'text-muted-bb small';
+    empty.textContent = 'No venues yet. Create one to appear on the map as a fixed location.';
+    section.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.id = 'venueList';
+  section.appendChild(list);
+
+  venues.forEach(function(venue) {
+    const sid = escHtml(venue.id);
+    const card = document.createElement('div');
+    card.className = 'bbm-section mb-3';
+    card.id = 'venueCard-' + sid;
+    card.innerHTML = `
+      <div class="d-flex align-items-center gap-2 flex-wrap" style="cursor:pointer" id="venueCardHeader-${sid}">
+        <strong>${escHtml(venue.venueName || '—')}</strong>
+        <span class="badge bg-secondary" style="font-size:0.72rem">${escHtml(venue.tier || 'regular')}</span>
+        <span class="text-muted-bb small"><i class="bi bi-geo-alt me-1"></i>${escHtml(venue.address || '—')}</span>
+        <i class="bi bi-chevron-down ms-auto" id="venueCardChevron-${sid}"></i>
+      </div>
+      <div class="d-none mt-3" id="venueCardBody-${sid}">
+        <div id="venueAlert-${sid}" class="d-none mb-2"></div>
         <div class="row g-3 mb-3">
           <div class="col-12">
             <label class="form-label">Description</label>
-            <textarea class="form-control" id="veDesc" rows="3" maxlength="500" placeholder="Tell people about your venue…">${escHtml(venue.description || '')}</textarea>
+            <textarea class="form-control" id="veDesc-${sid}" rows="3" maxlength="500" placeholder="Tell people about your venue…">${escHtml(venue.description || '')}</textarea>
           </div>
           <div class="col-12 col-sm-6">
             <label class="form-label">Opening Hours</label>
-            <input type="text" class="form-control" id="veHours" maxlength="128" placeholder="e.g. Mon–Fri 18:00–02:00" value="${escHtml(venue.openingHours || '')}" />
+            <input type="text" class="form-control" id="veHours-${sid}" maxlength="128" placeholder="e.g. Mon–Fri 18:00–02:00" value="${escHtml(venue.openingHours || '')}" />
           </div>
           <div class="col-12 col-sm-6">
             <label class="form-label">Type</label>
-            <input type="text" class="form-control" id="veType" maxlength="64" placeholder="e.g. Bar, Club, Restaurant" value="${escHtml(venue.locationType || '')}" />
+            <input type="text" class="form-control" id="veType-${sid}" maxlength="64" placeholder="e.g. Bar, Club, Restaurant" value="${escHtml(venue.locationType || '')}" />
           </div>
           <div class="col-12">
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="veCanMsg" ${venue.canReceiveMessages !== false ? 'checked' : ''} />
-              <label class="form-check-label" for="veCanMsg">Can receive messages</label>
+              <input class="form-check-input" type="checkbox" id="veCanMsg-${sid}" ${venue.canReceiveMessages !== false ? 'checked' : ''} />
+              <label class="form-check-label" for="veCanMsg-${sid}">Can receive messages</label>
             </div>
             <div class="text-muted-bb" style="font-size:0.78rem;margin-top:0.25rem">If disabled, the venue won't be messageable by anyone (e.g. public parks).</div>
           </div>
         </div>
-        <div class="d-flex gap-3 flex-wrap align-items-center">
-          <button class="btn btn-bbm-primary" id="veSaveBtn"><i class="bi bi-check2 me-2"></i>Save Venue</button>
-          <button class="btn btn-bbm-danger" id="veDeleteBtn"><i class="bi bi-trash3 me-2"></i>Delete Venue</button>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-bbm-primary btn-sm" id="veSaveBtn-${sid}"><i class="bi bi-check2 me-1"></i>Save</button>
+          <button class="btn btn-bbm-danger btn-sm" id="veDeleteBtn-${sid}"><i class="bi bi-trash3 me-1"></i>Delete Venue</button>
         </div>
       </div>`;
+    list.appendChild(card);
 
-    document.getElementById('veSaveBtn').addEventListener('click', async () => {
-      const alertEl = document.getElementById('venueAlert');
+    // Toggle expand/collapse
+    card.querySelector('#venueCardHeader-' + sid).addEventListener('click', function() {
+      const body    = card.querySelector('#venueCardBody-' + sid);
+      const chevron = card.querySelector('#venueCardChevron-' + sid);
+      const opening = body.classList.toggle('d-none');
+      chevron.className = 'bi ms-auto ' + (opening ? 'bi-chevron-down' : 'bi-chevron-up');
+    });
+
+    card.querySelector('#veSaveBtn-' + sid).addEventListener('click', async function() {
+      const alertEl = card.querySelector('#venueAlert-' + sid);
       alertEl.classList.add('d-none');
       try {
         await window.Api.updateVenue(venue.id, {
-          description:        document.getElementById('veDesc').value.trim(),
-          openingHours:       document.getElementById('veHours').value.trim(),
-          locationType:       document.getElementById('veType').value.trim(),
-          canReceiveMessages: document.getElementById('veCanMsg').checked,
+          description:        card.querySelector('#veDesc-'   + sid).value.trim(),
+          openingHours:       card.querySelector('#veHours-'  + sid).value.trim(),
+          locationType:       card.querySelector('#veType-'   + sid).value.trim(),
+          canReceiveMessages: card.querySelector('#veCanMsg-' + sid).checked,
         });
         alertEl.className = 'alert alert-success'; alertEl.textContent = 'Venue saved.'; alertEl.classList.remove('d-none');
-        setTimeout(() => alertEl.classList.add('d-none'), 3000);
+        setTimeout(function() { alertEl.classList.add('d-none'); }, 3000);
       } catch (err) {
         alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
       }
     });
 
-    document.getElementById('veDeleteBtn').addEventListener('click', async () => {
-      if (!confirm(`Delete "${venue.venueName || 'this venue'}"? All messages and favourites will be permanently deleted.`)) return;
-      const alertEl = document.getElementById('venueAlert');
+    card.querySelector('#veDeleteBtn-' + sid).addEventListener('click', async function() {
+      if (!confirm('Delete "' + (venue.venueName || 'this venue') + '"? All messages and favourites will be permanently deleted.')) return;
+      const alertEl = card.querySelector('#venueAlert-' + sid);
       try {
         await window.Api.deleteVenue(venue.id);
         renderManagerVenueSection(profileWrap);
@@ -431,7 +484,7 @@ async function renderManagerVenueSection(profileWrap) {
         alertEl.className = 'alert alert-danger'; alertEl.textContent = err.message; alertEl.classList.remove('d-none');
       }
     });
-  }
+  });
 }
 
 // ── Public Profile ────────────────────────────────────────

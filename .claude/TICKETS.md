@@ -920,3 +920,30 @@ retired, then remove the `localStorage.removeItem('bbm_meet')` line from
 ### Prerequisites
 
 None.
+
+## T-14 — Manager-tier venue quota (tiered multi-venue)
+
+**Status:** Deferred — no tier infrastructure exists for managers yet.
+
+### Idea
+
+Combine the user `tier` concept with manager roles so that a "regular manager"
+can manage up to N venues and a "premium manager" can manage more. This would
+require:
+
+1. A manager-specific tier dimension (separate from or layered on top of the
+   existing user tiers which are for consumers).
+2. The tiers-service to know about manager quotas.
+3. `POST /manager/venues` to query the manager's quota from tiers-service
+   before allowing creation.
+
+### Current state
+
+Venue limit is set to 9999 (effectively unlimited) in `POST /manager/venues`.
+Becoming a venue manager requires a manual approval process, so abuse is
+low-risk for now.
+
+### Prerequisites
+
+T-08 (Authority service) should land first so there is a single source of
+truth for roles + tiers before adding a second tier dimension.

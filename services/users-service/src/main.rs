@@ -1028,7 +1028,7 @@ async fn post_manager_venues(
     };
     let address = body.address.unwrap_or_default().trim().to_string();
 
-    // One venue per manager limit
+    // Venue limit per manager (9999 = effectively unlimited; see T-14 for tiered quotas)
     let existing_count = match state.db
         .collection::<Document>("users")
         .count_documents(doc! { "accountType": "venue", "managerId": &claims.sub })
@@ -1037,8 +1037,8 @@ async fn post_manager_venues(
         Ok(n)  => n,
         Err(e) => { eprintln!("[manager/venues POST] count: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
-    if existing_count > 0 {
-        return (StatusCode::CONFLICT, Json(json!({ "error": "You already manage a venue. Multiple venues per manager are not supported yet." }))).into_response();
+    if existing_count >= 9999 {
+        return (StatusCode::CONFLICT, Json(json!({ "error": "Venue limit reached." }))).into_response();
     }
 
     let result = match state.db
