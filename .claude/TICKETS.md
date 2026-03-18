@@ -17,12 +17,12 @@ Before any marketing or scaling push, the order of priority is:
 4. **T-08 Phase 1** — Normalise accountType / tier / role data model (prerequisite: T-10 for migration 006)
 5. **T-08 Phase 2** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service
 6. **T-06b** — Venue messaging (ideally after T-08 Phase 2 for clean auth routing)
-7. **T-07b** — Device notifications (medium priority)
-8. **T-09** — Role CRUD with Permissions UI (prerequisite: T-08 Phase 2)
-9. **T-02** — Analytics (low-risk, can slot in any time)
-10. **T-05b** — Encrypted block note (blocked on OPAQUE implementation — see AUDIT.md 1.1)
-11. **T-14** — Manager-tier venue quota (deferred, prerequisite: T-08)
-12. **T-15** — Orphan venue reassignment (deferred, prerequisite: multi-role support)
+7. **T-09** — Role CRUD with Permissions UI (prerequisite: T-08 Phase 2)
+8. **T-02** — Analytics (low-risk, can slot in any time)
+9. **T-05b** — Encrypted block note (blocked on OPAQUE implementation — see AUDIT.md 1.1)
+10. **T-14** — Manager-tier venue quota (deferred, prerequisite: T-08)
+11. **T-15** — Orphan venue reassignment (deferred, prerequisite: multi-role support)
+12. **T-07b** — Device notifications (low riority)
 
 ### Architectural Decision (2026-03-16)
 
