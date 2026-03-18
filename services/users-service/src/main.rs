@@ -915,102 +915,6 @@ async fn admin_patch_role(
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
 }
 
-// ── PATCH /admin/users/:id/account-type ──────────────────────────────────────
-
-#[derive(Deserialize)]
-struct AccountTypeBody {
-    #[serde(rename = "accountType")]
-    account_type: Option<String>, // "venue" to convert; null/"" to revert to regular
-    #[serde(rename = "venueName")]
-    venue_name:   Option<String>,
-    address:      Option<String>,
-    #[serde(rename = "fixedLat")]
-    fixed_lat:    Option<f64>,
-    #[serde(rename = "fixedLon")]
-    fixed_lon:    Option<f64>,
-}
-
-async fn admin_patch_account_type(
-    _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(body): Json<AccountTypeBody>,
-) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
-
-    let oid = match safe_object_id(&id) {
-        Some(o) => o,
-        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid userId." }))).into_response(),
-    };
-
-    let is_venue = body.account_type.as_deref() == Some("venue");
-
-    if is_venue {
-        let venue_name = match body.venue_name.as_ref().map(|s| s.trim().to_string()) {
-            Some(s) if s.len() >= 2 => s,
-            _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "venueName (min 2 chars) is required for venue accounts." }))).into_response(),
-        };
-        let address   = body.address.unwrap_or_default();
-        let fixed_lat = match body.fixed_lat {
-            Some(v) => v,
-            None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "fixedLat is required for venue accounts." }))).into_response(),
-        };
-        let fixed_lon = match body.fixed_lon {
-            Some(v) => v,
-            None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "fixedLon is required for venue accounts." }))).into_response(),
-        };
-
-        let result = match state.db.collection::<TvDoc>("users")
-            .find_one_and_update(
-                doc! { "_id": oid },
-                doc! {
-                    "$set": {
-                        "accountType": "venue",
-                        "venueName":   &venue_name,
-                        "nickname":    &venue_name,
-                        "address":     &address,
-                        "fixedLat":    fixed_lat,
-                        "fixedLon":    fixed_lon,
-                    },
-                    "$inc": { "tokenVersion": 1 }
-                },
-            )
-            .return_document(ReturnDocument::After)
-            .projection(doc! { "tokenVersion": 1 })
-            .await
-        {
-            Ok(Some(u)) => u,
-            Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
-            Err(e)      => { eprintln!("[admin/account-type PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
-
-        Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
-    } else {
-        // Revert to regular account — remove venue fields
-        let result = match state.db.collection::<TvDoc>("users")
-            .find_one_and_update(
-                doc! { "_id": oid },
-                doc! {
-                    "$unset": { "accountType": "", "venueName": "", "address": "", "fixedLat": "", "fixedLon": "" },
-                    "$inc":   { "tokenVersion": 1 }
-                },
-            )
-            .return_document(ReturnDocument::After)
-            .projection(doc! { "tokenVersion": 1 })
-            .await
-        {
-            Ok(Some(u)) => u,
-            Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
-            Err(e)      => { eprintln!("[admin/account-type PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
-
-        Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
-    }
-}
-
 // ── Manager venue endpoints ───────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -1266,7 +1170,6 @@ async fn main() {
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
         .route("/admin/users/{id}/role",         patch(admin_patch_role))
-        .route("/admin/users/{id}/account-type", patch(admin_patch_account_type))
         .route("/manager/venues",            get(get_manager_venues).post(post_manager_venues))
         .route("/manager/venues/{id}",       put(put_manager_venue).delete(delete_manager_venue))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
