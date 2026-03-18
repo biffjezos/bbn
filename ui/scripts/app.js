@@ -898,10 +898,13 @@
     if (dot) dot.classList.remove('d-none');
 
     container.innerHTML = notifications.map(function (n) {
+      var body = n.alreadyFav
+        ? '<strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites.'
+        : '<strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites. ' +
+          '<a href="#" class="alert-link fav-back-link">Add them back</a> to start chatting!';
       return '<div class="alert alert-info alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0" role="alert" data-notif-id="' + esc(n.id) + '" data-from-user-id="' + esc(n.fromUserId) + '" style="border-left:none;border-right:none;border-top:none">' +
         '<i class="bi bi-star-fill flex-shrink-0"></i>' +
-        '<span><strong>' + esc(n.fromNickname) + '</strong> added you to ' + sexPronoun(n.fromSex) + ' favourites. ' +
-        '<a href="#" class="alert-link fav-back-link">Add them back</a> to start chatting!</span>' +
+        '<span>' + body + '</span>' +
         '<button type="button" class="btn-close ms-auto flex-shrink-0" aria-label="Dismiss"></button>' +
         '</div>';
     }).join('');

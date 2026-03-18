@@ -474,7 +474,7 @@ async function renderPublicProfile() {
   page.innerHTML = loadingHtml('Loading profile…');
 
   const viewerIsReg = isRegistered();
-  const isOwnProfile = viewerIsReg && userId === getMyId();
+  const isOwnProfile = viewerIsReg && userId === getJwtField('sub');
 
   try {
     const profile   = await window.Api.getProfile(userId);
@@ -506,7 +506,20 @@ async function renderPublicProfile() {
            <i class="bi bi-slash-circle me-1"></i>Block User
          </button>`;
 
-    const actionBlock = (viewerIsReg && !isOwnProfile) ? `
+    const actionBlock = !viewerIsReg ? `
+      <div class="mt-4">
+        <p class="text-muted-bb mb-3">Create an account to message and favourite people nearby.</p>
+        <div class="d-flex gap-3 flex-wrap">
+          <button class="btn btn-bbm-primary" data-bs-toggle="modal" data-bs-target="#registerModal">
+            <i class="bi bi-person-plus me-2"></i>Create Account</button>
+          <button class="btn btn-bbm-ghost" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>
+        </div>
+      </div>`
+    : isOwnProfile ? `
+      <div class="d-flex gap-3 flex-wrap mt-4 align-items-center">
+        <a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message yourself</a>
+      </div>`
+    : `
       <div class="d-flex gap-3 flex-wrap mt-4 align-items-center">
         ${msgBtnHtml}
         <button class="btn ${isFav ? 'btn-bbm-outline-pink' : 'btn-bbm-ghost'}" id="favToggleBtn"
@@ -517,14 +530,6 @@ async function renderPublicProfile() {
       </div>
       <div class="mt-3">
         ${blockToggleHtml}
-      </div>` : `
-      <div class="mt-4">
-        <p class="text-muted-bb mb-3">Create an account to message and favourite people nearby.</p>
-        <div class="d-flex gap-3 flex-wrap">
-          <button class="btn btn-bbm-primary" data-bs-toggle="modal" data-bs-target="#registerModal">
-            <i class="bi bi-person-plus me-2"></i>Create Account</button>
-          <button class="btn btn-bbm-ghost" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>
-        </div>
       </div>`;
 
     page.innerHTML = `

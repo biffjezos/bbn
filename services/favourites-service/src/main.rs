@@ -627,6 +627,26 @@ async fn get_notifications(
         Err(e) => { eprintln!("[notifications GET] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
+    // Check which senders are already in the recipient's favourites (single query).
+    let sender_ids: Vec<&str> = items.iter().map(|n| n.from_user_id.as_str()).collect();
+    let already_fav_ids: HashSet<String> = if sender_ids.is_empty() {
+        HashSet::new()
+    } else {
+        match state.db.collection::<Document>("favourites")
+            .find(doc! { "ownerUserId": &claims.sub, "favouriteUserId": { "$in": &sender_ids } })
+            .projection(doc! { "favouriteUserId": 1 })
+            .await
+        {
+            Ok(cursor) => {
+                let docs: Vec<Document> = cursor.try_collect().await.unwrap_or_default();
+                docs.into_iter()
+                    .filter_map(|d| d.get_str("favouriteUserId").ok().map(String::from))
+                    .collect()
+            }
+            Err(_) => HashSet::new(),
+        }
+    };
+
     let notifications: Vec<_> = items.iter().map(|n| json!({
         "id":           n.id.to_hex(),
         "fromUserId":   n.from_user_id,
@@ -634,6 +654,7 @@ async fn get_notifications(
         "fromSex":      n.from_sex.as_deref(),
         "type":         n.type_,
         "createdAt":    n.created_at.map(|d| d.to_string()),
+        "alreadyFav":   already_fav_ids.contains(&n.from_user_id),
     })).collect();
 
     Json(json!({ "notifications": notifications })).into_response()

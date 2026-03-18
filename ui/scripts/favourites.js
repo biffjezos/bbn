@@ -27,6 +27,10 @@ function getMeetUid() {
   try { return JSON.parse(localStorage.getItem('bbm_meet') || 'null')?.uid || null; } catch { return null; }
 }
 
+function getMyId() {
+  try { return JSON.parse(atob(window.Auth.getToken().split('.')[1])).sub; } catch { return null; }
+}
+
 function toggleMeet(uid, nickname, sex) {
   if (getMeetUid() === uid) {
     localStorage.removeItem('bbm_meet');
@@ -121,7 +125,8 @@ function favItemHtml(f, isFav, unreadIds = new Set(), blockedIds = new Set()) {
   const threadHref  = `${_base}/messages/thread/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
   const meetUid     = getMeetUid();
   const isMeet      = meetUid === f.userId;
-  const isBlocked   = blockedIds.has(f.userId);
+  const isSelf      = f.userId === getMyId();
+  const isBlocked   = !isSelf && blockedIds.has(f.userId);
   const badge       = f.online
     ? '<span class="badge badge-online">online</span>'
     : '<span class="badge badge-offline">offline</span>';
@@ -131,9 +136,9 @@ function favItemHtml(f, isFav, unreadIds = new Set(), blockedIds = new Set()) {
   const meetIcon    = isMeet ? 'bi-compass-fill' : 'bi-compass';
   const hasUnread   = unreadIds.has(f.userId);
   const msgCls      = `fav-msg-btn${hasUnread ? ' fav-msg--unread' : ''}`;
-  const canMsg      = !isBlocked && f.withinRange === true;
+  const canMsg      = isSelf || (!isBlocked && f.withinRange === true);
   const msgBtnHtml  = canMsg
-    ? `<a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="Message"><i class="bi bi-chat-dots"></i></a>`
+    ? `<a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="${isSelf ? 'Message yourself' : 'Message'}"><i class="bi bi-chat-dots"></i></a>`
     : `<span class="btn fav-action-btn fav-msg--disabled" title="${isBlocked ? 'User blocked' : 'Not in range'}"><i class="bi bi-chat-dots"></i></span>`;
 
   let rangeLine = '';
