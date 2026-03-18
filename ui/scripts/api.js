@@ -215,6 +215,30 @@ const Api = {
     return apiFetch('/blocks');
   },
 
+  // ---- Manager ------------------------------------------------
+
+  getMyVenues() {
+    return apiFetch('/manager/venues');
+  },
+
+  createVenue(payload) {
+    return apiFetch('/manager/venues', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateVenue(venueId, payload) {
+    return apiFetch(`/manager/venues/${encodeURIComponent(venueId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteVenue(venueId) {
+    return apiFetch(`/manager/venues/${encodeURIComponent(venueId)}`, { method: 'DELETE' });
+  },
+
   // ---- Admin --------------------------------------------------
 
   adminSearchUsers({ q, by } = {}) {
@@ -235,13 +259,6 @@ const Api = {
     return apiFetch(`/admin/users/${encodeURIComponent(userId)}/role`, {
       method: 'PATCH',
       body: JSON.stringify({ role }),
-    });
-  },
-
-  adminSetAccountType(userId, payload) {
-    return apiFetch(`/admin/users/${encodeURIComponent(userId)}/account-type`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
     });
   },
 

@@ -86,6 +86,7 @@ const MIGRATIONS: &[&str] = &[
     "003_blocks_indexes",
     "004_tiers_seed",
     "005_rename_developer_tier",
+    "006_email_index_sparse",
 ];
 
 async fn migration_001(db: &Database) -> Result<(), mongodb::error::Error> {
@@ -218,6 +219,23 @@ async fn migration_005(db: &Database) -> Result<(), mongodb::error::Error> {
     Ok(())
 }
 
+async fn migration_006(db: &Database) -> Result<(), mongodb::error::Error> {
+    // The email unique index was created non-sparse in 001.  Venue accounts
+    // are inserted into the same collection without an email field, so two
+    // venue documents both end up with email=null and collide on the unique
+    // constraint.  Drop and recreate the index as sparse so that only
+    // documents that actually carry an email value are constrained.
+    let users = db.collection::<Document>("users");
+    let _ = users.drop_index("email_1").await; // ignore error if already gone
+    users.create_index(
+        IndexModel::builder()
+            .keys(doc! { "email": 1 })
+            .options(IndexOptions::builder().unique(true).sparse(true).build())
+            .build(),
+    ).await?;
+    Ok(())
+}
+
 async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Error> {
     match id {
         "001_indexes"                => migration_001(db).await,
@@ -225,6 +243,7 @@ async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Er
         "003_blocks_indexes"         => migration_003(db).await,
         "004_tiers_seed"             => migration_004(db).await,
         "005_rename_developer_tier"  => migration_005(db).await,
+        "006_email_index_sparse"     => migration_006(db).await,
         _                            => Ok(()), // unknown migration — skip
     }
 }

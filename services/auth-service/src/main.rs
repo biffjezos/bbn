@@ -65,7 +65,7 @@ fn sanitize_tier(tier: Option<&str>) -> &str {
 }
 
 /// Roles that may be stored in the DB and reflected in the JWT.
-const VALID_USER_ROLES: &[&str] = &["user", "admin"];
+const VALID_USER_ROLES: &[&str] = &["user", "admin", "venue_manager"];
 
 fn sanitize_role(role: Option<&str>) -> &str {
     role.filter(|r| VALID_USER_ROLES.contains(r))

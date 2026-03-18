@@ -115,6 +115,18 @@ struct ProfileDoc {
     sex:                   Option<String>,
     #[serde(rename = "publicKey")]
     public_key:            Option<String>,
+    #[serde(rename = "accountType")]
+    account_type:          Option<String>,
+    #[serde(rename = "venueName")]
+    venue_name:            Option<String>,
+    description:           Option<String>,
+    #[serde(rename = "openingHours")]
+    opening_hours:         Option<String>,
+    #[serde(rename = "locationType")]
+    location_type:         Option<String>,
+    address:               Option<String>,
+    #[serde(rename = "canReceiveMessages")]
+    can_receive_messages:  Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -167,7 +179,7 @@ fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
             nickname:     user.nickname.as_deref().unwrap_or(""),
             sex:          user.sex.as_deref().unwrap_or(""),
             age:          user.age.map(|a| a.max(0) as u32),
-            role:         match user.role.as_deref() { Some("admin") => "admin", _ => "user" },
+            role:         match user.role.as_deref() { Some("admin") => "admin", Some("venue_manager") => "venue_manager", _ => "user" },
             tier:         user.tier.as_deref().unwrap_or("regular"),
             tv:           user.token_version.unwrap_or(0).max(0) as u32,
             account_type: user.account_type.as_deref(),
@@ -406,6 +418,23 @@ async fn put_me(
 
 // ── DELETE /users/me ──────────────────────────────────────────────────────────
 
+async fn cascade_delete_venue(db: &mongodb::Database, venue_id_str: &str) {
+    let c_messages  = db.collection::<Document>("messages");
+    let c_favourites = db.collection::<Document>("favourites");
+    let c_blocks    = db.collection::<Document>("blocks");
+    let c_users     = db.collection::<Document>("users");
+    let oid = match safe_object_id(venue_id_str) {
+        Some(id) => id,
+        None     => return,
+    };
+    let _ = tokio::join!(
+        c_messages.delete_many(doc! { "$or": [{ "fromUserId": venue_id_str }, { "toUserId": venue_id_str }] }),
+        c_favourites.delete_many(doc! { "$or": [{ "ownerUserId": venue_id_str }, { "favouriteUserId": venue_id_str }] }),
+        c_blocks.delete_many(doc! { "$or": [{ "blockerUserId": venue_id_str }, { "blockedUserId": venue_id_str }] }),
+        c_users.delete_one(doc! { "_id": oid }),
+    );
+}
+
 async fn delete_me(
     _svc: ServiceToken,
     RequireRegistered(claims): RequireRegistered,
@@ -416,6 +445,25 @@ async fn delete_me(
         None     => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(),
     };
     let id = &claims.sub;
+
+    // If this is a venue manager, cascade-delete all linked venues first.
+    if claims.role == "venue_manager" {
+        #[derive(Deserialize)]
+        struct VenueIdDoc { #[serde(rename = "_id")] id: mongodb::bson::oid::ObjectId }
+        let venue_ids: Vec<String> = match state.db
+            .collection::<VenueIdDoc>("users")
+            .find(doc! { "accountType": "venue", "managerId": id })
+            .projection(doc! { "_id": 1 })
+            .await
+        {
+            Ok(cursor) => cursor.try_collect::<Vec<_>>().await.unwrap_or_default()
+                .into_iter().map(|v| v.id.to_hex()).collect(),
+            Err(e) => { eprintln!("[users/me DELETE] venue lookup: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+        };
+        for vid in venue_ids {
+            cascade_delete_venue(&state.db, &vid).await;
+        }
+    }
 
     let c_users     = state.db.collection::<Document>("users");
     let c_locs      = state.db.collection::<Document>("locations");
@@ -546,7 +594,7 @@ async fn get_profile(
     };
 
     // Block check — registered viewers only (guests cannot block or be blocked)
-    if claims.role == "user" {
+    if matches!(claims.role.as_str(), "user" | "venue_manager") {
         let viewer_id = &claims.sub;
         let target_id = &user_id;
         let block = match state.db.collection::<Document>("blocks")
@@ -570,7 +618,7 @@ async fn get_profile(
             // Viewer blocked the target — return profile with flag
             let user = match state.db.collection::<ProfileDoc>("users")
                 .find_one(doc! { "_id": oid })
-                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "_id": 0 })
+                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
                 .await
             {
                 Ok(Some(u)) => u,
@@ -578,18 +626,25 @@ async fn get_profile(
                 Err(e)      => { eprintln!("[users/profile GET] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
             };
             return Json(json!({
-                "nickname":        user.nickname.as_deref(),
-                "age":             user.age,
-                "sex":             user.sex.as_deref(),
-                "publicKey":       user.public_key.as_deref(),
-                "blockedByViewer": true,
+                "nickname":            user.nickname.as_deref(),
+                "age":                 user.age,
+                "sex":                 user.sex.as_deref(),
+                "publicKey":           user.public_key.as_deref(),
+                "accountType":         user.account_type.as_deref(),
+                "venueName":           user.venue_name.as_deref(),
+                "description":         user.description.as_deref(),
+                "openingHours":        user.opening_hours.as_deref(),
+                "locationType":        user.location_type.as_deref(),
+                "address":             user.address.as_deref(),
+                "canReceiveMessages":  user.can_receive_messages.unwrap_or(true),
+                "blockedByViewer":     true,
             })).into_response();
         }
     }
 
     let user = match state.db.collection::<ProfileDoc>("users")
         .find_one(doc! { "_id": oid })
-        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "_id": 0 })
+        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
         .await
     {
         Ok(Some(u)) => u,
@@ -598,10 +653,17 @@ async fn get_profile(
     };
 
     Json(json!({
-        "nickname":  user.nickname.as_deref(),
-        "age":       user.age,
-        "sex":       user.sex.as_deref(),
-        "publicKey": user.public_key.as_deref(),
+        "nickname":           user.nickname.as_deref(),
+        "age":                user.age,
+        "sex":                user.sex.as_deref(),
+        "publicKey":          user.public_key.as_deref(),
+        "accountType":        user.account_type.as_deref(),
+        "venueName":          user.venue_name.as_deref(),
+        "description":        user.description.as_deref(),
+        "openingHours":       user.opening_hours.as_deref(),
+        "locationType":       user.location_type.as_deref(),
+        "address":            user.address.as_deref(),
+        "canReceiveMessages": user.can_receive_messages.unwrap_or(true),
     })).into_response()
 }
 
@@ -836,8 +898,8 @@ async fn admin_patch_role(
     };
 
     let role = match body.role.as_deref() {
-        Some("user") | Some("admin") => body.role.unwrap(),
-        _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "role must be 'user' or 'admin'." }))).into_response(),
+        Some("user") | Some("admin") | Some("venue_manager") => body.role.unwrap(),
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "role must be 'user', 'admin', or 'venue_manager'." }))).into_response(),
     };
 
     let result = match state.db.collection::<TvDoc>("users")
@@ -857,100 +919,235 @@ async fn admin_patch_role(
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
 }
 
-// ── PATCH /admin/users/:id/account-type ──────────────────────────────────────
+// ── Manager venue endpoints ───────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct AccountTypeBody {
-    #[serde(rename = "accountType")]
-    account_type: Option<String>, // "venue" to convert; null/"" to revert to regular
+struct VenueCreateBody {
     #[serde(rename = "venueName")]
-    venue_name:   Option<String>,
-    address:      Option<String>,
+    venue_name: Option<String>,
+    address:    Option<String>,
     #[serde(rename = "fixedLat")]
-    fixed_lat:    Option<f64>,
+    fixed_lat:  Option<f64>,
     #[serde(rename = "fixedLon")]
-    fixed_lon:    Option<f64>,
+    fixed_lon:  Option<f64>,
 }
 
-async fn admin_patch_account_type(
+#[derive(Deserialize)]
+struct VenueUpdateBody {
+    description:   Option<String>,
+    #[serde(rename = "openingHours")]
+    opening_hours: Option<String>,
+    #[serde(rename = "locationType")]
+    location_type: Option<String>,
+    #[serde(rename = "canReceiveMessages")]
+    can_receive_messages: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct VenueDoc2 {
+    #[serde(rename = "_id")]
+    id:            mongodb::bson::oid::ObjectId,
+    #[serde(rename = "venueName")]
+    venue_name:    Option<String>,
+    address:       Option<String>,
+    #[serde(rename = "fixedLat")]
+    fixed_lat:     f64,
+    #[serde(rename = "fixedLon")]
+    fixed_lon:     f64,
+    tier:          Option<String>,
+    description:   Option<String>,
+    #[serde(rename = "openingHours")]
+    opening_hours: Option<String>,
+    #[serde(rename = "locationType")]
+    location_type: Option<String>,
+    #[serde(rename = "managerId")]
+    manager_id:          Option<String>,
+    #[serde(rename = "canReceiveMessages")]
+    can_receive_messages: Option<bool>,
+}
+
+// ── GET /manager/venues ───────────────────────────────────────────────────────
+
+async fn get_manager_venues(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    RequireRegistered(claims): RequireRegistered,
     State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(body): Json<AccountTypeBody>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    if claims.role != "venue_manager" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Venue manager role required." }))).into_response();
     }
 
-    let oid = match safe_object_id(&id) {
-        Some(o) => o,
-        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid userId." }))).into_response(),
+    let venues: Vec<VenueDoc2> = match state.db
+        .collection::<VenueDoc2>("users")
+        .find(doc! { "accountType": "venue", "managerId": &claims.sub })
+        .await
+    {
+        Ok(c)  => c.try_collect().await.unwrap_or_default(),
+        Err(e) => { eprintln!("[manager/venues GET] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
-    let is_venue = body.account_type.as_deref() == Some("venue");
+    let list: Vec<_> = venues.iter().map(|v| json!({
+        "id":                 v.id.to_hex(),
+        "venueName":          v.venue_name.as_deref(),
+        "address":            v.address.as_deref(),
+        "fixedLat":           v.fixed_lat,
+        "fixedLon":           v.fixed_lon,
+        "tier":               v.tier.as_deref().unwrap_or("regular"),
+        "description":        v.description.as_deref(),
+        "openingHours":       v.opening_hours.as_deref(),
+        "locationType":       v.location_type.as_deref(),
+        "canReceiveMessages": v.can_receive_messages.unwrap_or(true),
+    })).collect();
 
-    if is_venue {
-        let venue_name = match body.venue_name.as_ref().map(|s| s.trim().to_string()) {
-            Some(s) if s.len() >= 2 => s,
-            _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "venueName (min 2 chars) is required for venue accounts." }))).into_response(),
-        };
-        let address   = body.address.unwrap_or_default();
-        let fixed_lat = match body.fixed_lat {
-            Some(v) => v,
-            None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "fixedLat is required for venue accounts." }))).into_response(),
-        };
-        let fixed_lon = match body.fixed_lon {
-            Some(v) => v,
-            None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "fixedLon is required for venue accounts." }))).into_response(),
-        };
+    Json(json!({ "venues": list })).into_response()
+}
 
-        let result = match state.db.collection::<TvDoc>("users")
-            .find_one_and_update(
-                doc! { "_id": oid },
-                doc! {
-                    "$set": {
-                        "accountType": "venue",
-                        "venueName":   &venue_name,
-                        "nickname":    &venue_name,
-                        "address":     &address,
-                        "fixedLat":    fixed_lat,
-                        "fixedLon":    fixed_lon,
-                    },
-                    "$inc": { "tokenVersion": 1 }
-                },
-            )
-            .return_document(ReturnDocument::After)
-            .projection(doc! { "tokenVersion": 1 })
-            .await
-        {
-            Ok(Some(u)) => u,
-            Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
-            Err(e)      => { eprintln!("[admin/account-type PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
+// ── POST /manager/venues ──────────────────────────────────────────────────────
 
-        Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
-    } else {
-        // Revert to regular account — remove venue fields
-        let result = match state.db.collection::<TvDoc>("users")
-            .find_one_and_update(
-                doc! { "_id": oid },
-                doc! {
-                    "$unset": { "accountType": "", "venueName": "", "address": "", "fixedLat": "", "fixedLon": "" },
-                    "$inc":   { "tokenVersion": 1 }
-                },
-            )
-            .return_document(ReturnDocument::After)
-            .projection(doc! { "tokenVersion": 1 })
-            .await
-        {
-            Ok(Some(u)) => u,
-            Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
-            Err(e)      => { eprintln!("[admin/account-type PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
-
-        Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
+async fn post_manager_venues(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+    Json(body): Json<VenueCreateBody>,
+) -> impl IntoResponse {
+    if claims.role != "venue_manager" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Venue manager role required." }))).into_response();
     }
+
+    let venue_name = match body.venue_name.as_ref().map(|s| s.trim().to_string()) {
+        Some(s) if s.len() >= 2 && s.len() <= 64 => s,
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "venueName must be 2–64 characters." }))).into_response(),
+    };
+    let fixed_lat = match body.fixed_lat {
+        Some(v) if (-90.0..=90.0).contains(&v) => v,
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Valid fixedLat required." }))).into_response(),
+    };
+    let fixed_lon = match body.fixed_lon {
+        Some(v) if (-180.0..=180.0).contains(&v) => v,
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Valid fixedLon required." }))).into_response(),
+    };
+    let address = body.address.unwrap_or_default().trim().to_string();
+
+    // Venue limit per manager (9999 = effectively unlimited; see T-14 for tiered quotas)
+    let existing_count = match state.db
+        .collection::<Document>("users")
+        .count_documents(doc! { "accountType": "venue", "managerId": &claims.sub })
+        .await
+    {
+        Ok(n)  => n,
+        Err(e) => { eprintln!("[manager/venues POST] count: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+    if existing_count >= 9999 {
+        return (StatusCode::CONFLICT, Json(json!({ "error": "Venue limit reached." }))).into_response();
+    }
+
+    let result = match state.db
+        .collection::<Document>("users")
+        .insert_one(doc! {
+            "accountType":        "venue",
+            "venueName":          &venue_name,
+            "nickname":           &venue_name,
+            "address":            &address,
+            "fixedLat":           fixed_lat,
+            "fixedLon":           fixed_lon,
+            "managerId":          &claims.sub,
+            "tier":               "regular",
+            "canReceiveMessages": true,
+        })
+        .await
+    {
+        Ok(r)  => r,
+        Err(e) => { eprintln!("[manager/venues POST] insert: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+
+    let id = result.inserted_id.as_object_id().map(|o| o.to_hex()).unwrap_or_default();
+    (StatusCode::CREATED, Json(json!({ "ok": true, "id": id }))).into_response()
+}
+
+// ── PUT /manager/venues/:id ───────────────────────────────────────────────────
+
+async fn put_manager_venue(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+    Path(venue_id): Path<String>,
+    Json(body): Json<VenueUpdateBody>,
+) -> impl IntoResponse {
+    if claims.role != "venue_manager" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Venue manager role required." }))).into_response();
+    }
+
+    let oid = match safe_object_id(&venue_id) {
+        Some(id) => id,
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid venue id." }))).into_response(),
+    };
+
+    // Ownership check
+    let existing = match state.db
+        .collection::<VenueDoc2>("users")
+        .find_one(doc! { "_id": oid, "accountType": "venue" })
+        .await
+    {
+        Ok(Some(v)) => v,
+        Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "Venue not found." }))).into_response(),
+        Err(e)      => { eprintln!("[manager/venues PUT] find: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+    if existing.manager_id.as_deref() != Some(&claims.sub) {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Not your venue." }))).into_response();
+    }
+
+    let mut update = doc! {};
+    if let Some(d) = body.description          { update.insert("description",        d.trim().to_string()); }
+    if let Some(o) = body.opening_hours        { update.insert("openingHours",       o.trim().to_string()); }
+    if let Some(t) = body.location_type        { update.insert("locationType",       t.trim().to_string()); }
+    if let Some(m) = body.can_receive_messages { update.insert("canReceiveMessages", m); }
+
+    if update.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Nothing to update." }))).into_response();
+    }
+
+    match state.db.collection::<Document>("users")
+        .update_one(doc! { "_id": oid }, doc! { "$set": update })
+        .await
+    {
+        Ok(_)  => Json(json!({ "ok": true })).into_response(),
+        Err(e) => { eprintln!("[manager/venues PUT] update: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    }
+}
+
+// ── DELETE /manager/venues/:id ────────────────────────────────────────────────
+
+async fn delete_manager_venue(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+    Path(venue_id): Path<String>,
+) -> impl IntoResponse {
+    if claims.role != "venue_manager" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Venue manager role required." }))).into_response();
+    }
+
+    let oid = match safe_object_id(&venue_id) {
+        Some(id) => id,
+        None     => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid venue id." }))).into_response(),
+    };
+
+    // Ownership check
+    let existing = match state.db
+        .collection::<VenueDoc2>("users")
+        .find_one(doc! { "_id": oid, "accountType": "venue" })
+        .await
+    {
+        Ok(Some(v)) => v,
+        Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "Venue not found." }))).into_response(),
+        Err(e)      => { eprintln!("[manager/venues DELETE] find: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+    if existing.manager_id.as_deref() != Some(&claims.sub) {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Not your venue." }))).into_response();
+    }
+
+    cascade_delete_venue(&state.db, &venue_id).await;
+    Json(json!({ "ok": true })).into_response()
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -984,7 +1181,8 @@ async fn main() {
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
         .route("/admin/users/{id}/role",         patch(admin_patch_role))
-        .route("/admin/users/{id}/account-type", patch(admin_patch_account_type))
+        .route("/manager/venues",            get(get_manager_venues).post(post_manager_venues))
+        .route("/manager/venues/{id}",       put(put_manager_venue).delete(delete_manager_venue))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
         .with_state(state);
 

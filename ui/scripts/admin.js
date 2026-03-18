@@ -144,26 +144,6 @@ async function runUserSearch() {
         }).catch(function () {});
       });
     });
-    out.querySelectorAll('[data-convert-venue]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var uid = btn.dataset.convertVenue;
-        var form = document.getElementById('venue-form-' + uid);
-        if (form) form.classList.toggle('d-none');
-      });
-    });
-    out.querySelectorAll('[data-cancel-venue]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var uid = btn.dataset.cancelVenue;
-        var form = document.getElementById('venue-form-' + uid);
-        if (form) form.classList.add('d-none');
-      });
-    });
-    out.querySelectorAll('[data-save-venue]').forEach(function (btn) {
-      btn.addEventListener('click', function () { saveVenueConversion(btn.dataset.saveVenue); });
-    });
-    out.querySelectorAll('[data-revert-venue]').forEach(function (btn) {
-      btn.addEventListener('click', function () { revertVenue(btn.dataset.revertVenue); });
-    });
   } catch (err) {
     out.innerHTML = '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
   }
@@ -175,7 +155,9 @@ function renderUserCard(u) {
     : '';
   var adminBadge = u.role === 'admin'
     ? '<span class="badge bg-danger ms-1" style="font-size:0.65rem">admin</span>'
-    : '';
+    : u.role === 'venue_manager'
+      ? '<span class="badge bg-info ms-1" style="font-size:0.65rem">venue manager</span>'
+      : '';
   return [
     '<div class="bbm-section mb-3" id="ucard-' + escHtml(u.userId) + '">',
     '  <div class="d-flex align-items-center justify-content-between gap-3"',
@@ -215,8 +197,9 @@ function renderUserCard(u) {
     '      <div class="col-6 col-md-2">',
     '        <label class="form-label small mb-1" for="role-' + escHtml(u.userId) + '">Role</label>',
     '        <select class="form-select form-select-sm" id="role-' + escHtml(u.userId) + '">',
-    '          <option value="user"'  + (u.role === 'user'  ? ' selected' : '') + '>user</option>',
-    '          <option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>admin</option>',
+    '          <option value="user"'           + (u.role === 'user'           ? ' selected' : '') + '>user</option>',
+    '          <option value="venue_manager"'  + (u.role === 'venue_manager'  ? ' selected' : '') + '>venue_manager</option>',
+    '          <option value="admin"'          + (u.role === 'admin'          ? ' selected' : '') + '>admin</option>',
     '        </select>',
     '      </div>',
     '    </div>',
@@ -226,68 +209,9 @@ function renderUserCard(u) {
     '      </button>',
     '      <span id="save-status-' + escHtml(u.userId) + '" style="font-size:0.8rem"></span>',
     '    </div>',
-    '    <div class="mt-3 pt-3" style="border-top:1px solid var(--bbm-border)">',
-    '      <div class="d-flex align-items-center gap-2 mb-2">',
-    '        <span class="small text-muted-bb">Account type:</span>',
-    u.accountType === 'venue'
-      ? '        <span class="badge bg-secondary"><i class="bi bi-house-fill me-1"></i>Venue</span>'
-      : '        <span class="badge bg-secondary">Regular</span>',
-    '      </div>',
-    u.accountType === 'venue'
-      ? '      <button class="btn btn-bbm-danger btn-sm" data-revert-venue="' + escHtml(u.userId) + '"><i class="bi bi-person me-1"></i>Revert to Regular</button>'
-        + '      <span id="venue-status-' + escHtml(u.userId) + '" class="ms-2" style="font-size:0.8rem"></span>'
-      : '      <button class="btn btn-bbm-ghost btn-sm" data-convert-venue="' + escHtml(u.userId) + '"><i class="bi bi-house me-1"></i>Convert to Venue</button>'
-        + '      <span id="venue-status-' + escHtml(u.userId) + '" class="ms-2" style="font-size:0.8rem"></span>'
-        + '      <div id="venue-form-' + escHtml(u.userId) + '" class="d-none mt-3">'
-        + '        <div class="row g-2">'
-        + '          <div class="col-12 col-md-6"><input type="text" class="form-control form-control-sm" id="vf-name-' + escHtml(u.userId) + '" placeholder="Venue name *" /></div>'
-        + '          <div class="col-12 col-md-6"><input type="text" class="form-control form-control-sm" id="vf-address-' + escHtml(u.userId) + '" placeholder="Address (display only)" /></div>'
-        + '          <div class="col-6 col-md-3"><input type="number" class="form-control form-control-sm" id="vf-lat-' + escHtml(u.userId) + '" placeholder="Latitude *" step="any" /></div>'
-        + '          <div class="col-6 col-md-3"><input type="number" class="form-control form-control-sm" id="vf-lon-' + escHtml(u.userId) + '" placeholder="Longitude *" step="any" /></div>'
-        + '        </div>'
-        + '        <div class="d-flex gap-2 mt-2">'
-        + '          <button class="btn btn-bbm-primary btn-sm" data-save-venue="' + escHtml(u.userId) + '"><i class="bi bi-house-check me-1"></i>Confirm Conversion</button>'
-        + '          <button class="btn btn-bbm-ghost btn-sm" data-cancel-venue="' + escHtml(u.userId) + '">Cancel</button>'
-        + '        </div>'
-        + '      </div>',
-    '    </div>',
     '  </div>',
     '</div>',
   ].join('');
-}
-
-async function saveVenueConversion(userId) {
-  var statusEl = document.getElementById('venue-status-' + userId);
-  var name     = (document.getElementById('vf-name-'    + userId) || {}).value || '';
-  var address  = (document.getElementById('vf-address-' + userId) || {}).value || '';
-  var lat      = parseFloat((document.getElementById('vf-lat-' + userId) || {}).value);
-  var lon      = parseFloat((document.getElementById('vf-lon-' + userId) || {}).value);
-
-  if (!name.trim())          { if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Venue name required.'; } return; }
-  if (isNaN(lat) || isNaN(lon)) { if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Valid lat/lon required.'; } return; }
-
-  if (statusEl) { statusEl.className = 'ms-2 text-muted-bb'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Saving…'; }
-  try {
-    await window.Api.adminSetAccountType(userId, { accountType: 'venue', venueName: name.trim(), address: address.trim(), fixedLat: lat, fixedLon: lon });
-    if (statusEl) { statusEl.className = 'ms-2 text-success'; statusEl.textContent = 'Converted. User session invalidated.'; }
-    // Refresh the card after a moment
-    setTimeout(runUserSearch, 1200);
-  } catch (err) {
-    if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.textContent = err.message; }
-  }
-}
-
-async function revertVenue(userId) {
-  if (!confirm('Revert this account to a regular account? Venue fields will be removed.')) return;
-  var statusEl = document.getElementById('venue-status-' + userId);
-  if (statusEl) { statusEl.className = 'ms-2 text-muted-bb'; statusEl.style.fontSize='0.8rem'; statusEl.textContent = 'Saving…'; }
-  try {
-    await window.Api.adminSetAccountType(userId, { accountType: null });
-    if (statusEl) { statusEl.className = 'ms-2 text-success'; statusEl.textContent = 'Reverted. User session invalidated.'; }
-    setTimeout(runUserSearch, 1200);
-  } catch (err) {
-    if (statusEl) { statusEl.className = 'ms-2 text-danger'; statusEl.textContent = err.message; }
-  }
 }
 
 function toggleUserCard(userId) {
@@ -583,10 +507,16 @@ function renderRolesTab() {
     '    No server-side guard currently prevents an admin from modifying their own tier or role (AUDIT 1.4).',
     '  </div>',
     '</div>',
-    '<div class="alert alert-info small mt-3 mb-0" role="alert">',
-    '  <i class="bi bi-info-circle me-1"></i>',
-    '  Custom roles and per-role permission sets require backend changes (T-09).',
-    '  Until T-09 is implemented, roles are limited to <code>user</code> and <code>admin</code>.',
+    '<div class="bbm-section mb-3">',
+    '  <div class="d-flex align-items-center justify-content-between mb-2">',
+    '    <div><strong>venue_manager</strong> <span class="badge bg-info ms-2">elevated</span></div>',
+    '  </div>',
+    '  <ul class="text-muted-bb small mb-0" style="padding-left:1.2rem">',
+    '    <li>Regular user on the map — retains their own GPS presence, tier, and favourites/messaging.</li>',
+    '    <li>Can create, edit, and delete their linked venue account(s) via /profile.</li>',
+    '    <li>One venue per manager (current limit). Venue name, address, and location are immutable after creation.</li>',
+    '    <li>Cannot change a venue\'s tier (admin-only). Cannot grant themselves or others the venue_manager role.</li>',
+    '  </ul>',
     '</div>',
   ].join('');
 }

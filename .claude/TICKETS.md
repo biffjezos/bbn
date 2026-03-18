@@ -402,63 +402,178 @@ single-instance deployment.
 
 ---
 
-## T-06 — Venue Accounts
+## T-06 — Venue Accounts + Manager Role
 
-**Status:** Not started. Requires T-01 (admin UI) and T-03 (DB tiers).
+**Status:** Design complete (2026-03-18). Not started. Requires T-01 (admin UI) and T-03 (DB tiers).
 
-### Requirements
+### Axis definitions (agreed 2026-03-18)
 
-- Account type `venue`. Cannot be self-registered — admin converts a regular
-  account to `venue` type via the admin UI (T-01).
-- Venue profile fields replace `sex` and `age` with:
-  - `venueName` (string)
-  - `description` (text)
-  - `address` (string, display only)
-  - `fixedLat`, `fixedLon` (stored location — does not move with GPS)
-- On map: venue appears as a house icon (`bi-house-fill` or similar), always
-  visible to users within range (uses the venue's `fixedLat/fixedLon`).
-- Map pin modal for venues shows name + description + link to venue profile page.
-- Messaging: standard two-sided favourites required. Venues can send messages to
-  users; users can message venues. Future: Either auto-add-to-favourites if a user has added venue as favourite, or implicit-favourite: venue can send messages to all users that have added venue as favourites, without adding them as favourites
-- Venues can be blocked by regular users (T-05). Blocked venues see nothing
-  about that user.
-- Admin flow: user registers normally → admin changes `accountType` to `venue`
-  in admin UI → admin fills venue-specific fields → token is re-issued (see T-01
-  + AUDIT.md 1.2).
-- Venue login: same email/password, same JWT flow. Frontend detects
-  `accountType: 'venue'` from the token and renders the venue profile view.
+| Axis | Purpose | Example |
+|---|---|---|
+| `accountType` | What the entity IS — determines profile shape, location behaviour, UI rendering | `"venue"` has `venueName`, fixed GPS, `openingHours`; `"user"` has age, sex, live GPS |
+| `tier` | What the account can REACH — feature gates and radius limits | `"premium"` = wider nearby radius, messaging enabled *(actual values are admin-configured in the DB; not defined here)* |
+| `role` | What the account can DO to the system — privileged actions on other accounts | `"venue_manager"` = edit linked venue accounts (venues only); `"admin"` = full system access |
 
-### Venue profile editable fields — clarification (2026-03-17)
+These three axes are fully orthogonal. A venue manager is `accountType: "user", role: "venue_manager"` — a regular human on the map with their own tier, who additionally has management rights over their linked venue account(s). Venues are `accountType: "venue", role: "user"`. The `venue_manager` role is scoped exclusively to `accountType: "venue"` documents — it confers no rights over other user accounts.
 
-**Admin-only fields (set via admin UI, not editable by venue itself):**
-- `venueName` — display name, set by admin on conversion. Currently editable
-  by the venue in `/profile` — **this must be removed**. Venue should not be
-  able to rename itself.
-- `address` — already read-only in the UI. Correct.
-- `fixedLat` / `fixedLon` — already read-only. Correct.
+---
 
-**Venue-editable fields (venue manages via `/profile`):**
-- `openingHours` (string or structured, TBD) — e.g. "Mon–Fri 18:00–02:00".
-- `locationType` (string enum, TBD) — e.g. "bar", "club", "café", "restaurant",
-  "gallery", "other".
+### The Manager Role
 
-**Implementation scope:**
-- `users-service`: accept `openingHours` and `locationType` in `PUT /users/me`
-  for venue accounts; reject `venueName` changes from venue self (admin-only).
-- `users-service GET /users/:id/profile`: include `openingHours` and
-  `locationType` in the public profile response for venue accounts.
-- `profile.js renderMyProfile`: remove `venueName` input; add `openingHours`
-  textarea and `locationType` select.
-- `profile.js renderPublicProfile`: show `openingHours` and `locationType`
-  when present on a venue profile.
-- `app.js openPinModal`: show `locationType` badge and `openingHours` line
-  in the map pin popup for venues.
-- **No admin UI changes required** — admin already sets `venueName` /
-  `address` / `fixedLat` / `fixedLon` on conversion.
+A manager is a human user account (`accountType: "user"`) with `role: "venue_manager"` granted by an admin via the admin UI. The manager retains their own GPS presence, tier, and map behaviour — they appear exactly like any other user. The `manager` role only adds the ability to administer linked venue accounts.
+
+**What a manager can do:**
+- Create a venue (see scope limits below)
+- Edit `openingHours`, `locationType`, `description` on linked venues
+- Delete a venue they manage
+
+**What a manager cannot do:**
+- Change `venueName`, `address`, `fixedLat`, `fixedLon` — set once on creation, immutable thereafter
+- Change a venue's `tier` — admin-only
+- Change their own `accountType` or `role`
+
+**What only admin can do:**
+- Grant or revoke `role: "venue_manager"` on a user account
+- Reassign a venue to a different manager (if the manager account is deleted or demoted)
+- Change a venue's tier
+
+---
+
+### Venue Accounts
+
+A venue is a document in the `users` collection with `accountType: "venue"`. It has **no credentials** — no email address, no password hash, no tokenVersion. It never logs in. It is addressed by its standard MongoDB `_id` (the same `id` field every account has) — no separate venue-specific key is needed.
+
+**Venue document fields:**
+
+| Field | Set by | Mutable after creation |
+|---|---|---|
+| `accountType` | System on creation | No |
+| `venueName` | Manager on creation | No |
+| `address` | Manager on creation | No |
+| `fixedLat` / `fixedLon` | Manager on creation | No |
+| `tier` | Admin | Yes (admin only) |
+| `managerId` | System on creation | Admin can reassign |
+| `description` | Manager | Yes |
+| `openingHours` | Manager | Yes |
+| `locationType` | Manager | Yes |
+
+**Immutability rule:** `venueName`, `address`, `fixedLat`, `fixedLon` are written once at creation. The `users-service` must reject any subsequent `PUT`/`PATCH` attempt to change these fields, regardless of caller role.
+
+---
+
+### Venue Creation Scope
+
+For the initial implementation: **one venue per manager** (hard limit enforced server-side). The manager creates, edits, and deletes their single linked venue via `/profile`.
+
+Future sub-task (T-06b): allow multiple venues per manager. The tier system is the natural place to encode this limit (e.g. a future `venue_manager` tier could allow up to N venues). This is deferred until a subscription model exists.
+
+---
+
+### Messaging Architecture Note
+
+Venues have no JWT and therefore no active session. A message to a venue is stored identically to any other message: `{ senderId, recipientId }` where `recipientId` is the venue's `_id`. No schema change to the messages collection is needed.
+
+At delivery time the messages-service resolves the recipient's `accountType`. If `"venue"`, it notifies `venue.managerId` (the linked manager's session) instead of expecting an active venue session. The routing concern is isolated to delivery — the stored document is type-agnostic.
+
+The venue manager reads venue messages via a dedicated endpoint that:
+
+1. Verifies `role: "venue_manager"` on the requesting JWT.
+2. Verifies `venue.managerId === req.auth.sub`.
+3. Returns messages where `recipientId = venue._id`.
+
+The messages UI must support an "acting as venue X" context — a separate inbox panel within `/profile`. The manager's own inbox and the venue's inbox are distinct.
+
+---
+
+### Map Behaviour
+
+- Venue appears as a house icon (`bi-house-fill` or similar) at `fixedLat/fixedLon`.
+- Always visible to users whose nearby radius includes the venue's coordinates (uses the *user's* own nearby radius — the venue's `nearbyRadiusM` from its tier is irrelevant for visibility; it only governs message radius).
+- Map pin modal shows: `venueName`, `locationType` badge, `openingHours`, link to venue profile page.
+- Venues can be blocked by regular users (T-05). Blocked venues see nothing about that user.
+
+---
+
+### `/profile` — Manager View
+
+When a logged-in user has `role: "venue_manager"`, `/profile` renders an additional section below their own profile: **"My Venue"** (or "My Venues" in the future). Layout mirrors `/favourites` — a card per venue with expand-to-edit. Clicking the venue card expands an edit form for `description`, `openingHours`, `locationType`. A "Create Venue" button is shown if no venue exists yet (and the limit has not been reached).
+
+---
+
+### Implementation Phases
+
+**Phase 1 — Core venue + manager (this ticket):**
+- New `role: "venue_manager"` added to role enum in auth/users-service
+- Admin UI: grant/revoke manager role (same as existing role CRUD)
+- New endpoint `POST /manager/venues` — create a venue (manager only, enforces one-venue limit)
+- New endpoint `PUT /manager/venues/:id` — edit mutable fields (manager only, ownership check)
+- New endpoint `DELETE /manager/venues/:id` — delete venue (manager only, ownership check)
+- `GET /manager/venues` — list manager's venues
+- `/profile` manager section: create/edit/delete venue UI
+- Map: render venue pins from `GET /location/venues` (new endpoint — returns all `accountType: "venue"` documents with `fixedLat/fixedLon`)
+- Pin modal: venue-specific display
+
+**Phase 2 — Venue messaging (T-06b, deferred):**
+- Manager inbox context ("acting as venue X")
+- `GET /manager/venues/:id/messages`
+- `POST /manager/venues/:id/messages` — send as venue
+- Favourites: user adds venue as favourite → messaging channel opens
+
+**Phase 3 — Multiple venues per manager (T-06c, deferred):**
+- Lift one-venue limit; encode max via tier
+- Requires subscription model or admin-set override
+
+---
+
+### Resolved Decisions (2026-03-18)
+
+**1. Deletion cascades**
+
+- Venue deleted → cascade delete: all messages where `senderId` or `recipientId` = venue `_id`, all favourites containing venue `_id`, all blocks involving venue `_id`. This is explicit, not relying on the auto-delete TTL.
+- Manager account deleted → delete all linked venues first (same cascade as above for each), then delete the manager account. No orphan venue is ever left in the DB.
+- Future: auto-reassignment of orphaned venues deferred to **T-09**.
+
+**2. Message radius — bi-directional, lower-tier governs**
+
+- User → venue: user must be within their own `messageRadiusM` of the venue's `fixedLat/fixedLon`.
+- Venue → user: user must be within the venue's `messageRadiusM` of the venue's `fixedLat/fixedLon`.
+- Effective radius = min(user tier `messageRadiusM`, venue tier `messageRadiusM`). Lower tier always wins.
+- The existing `GET /tiers/radius/message/:tier` endpoint (tiers-service) and the `get_message_radius` helper in favourites-service must be reused — same pattern as user-to-user messaging.
+- User blocks venue → venue cannot see or message that user (same enforcement as user-to-user blocks).
+
+**3. Venue map visibility**
+
+- `GET /location/venues` filters server-side: returns only venues within the calling user's `nearbyRadiusM` of the user's current position. Same logic as nearby-users endpoint.
+
+**4. Favouriting a venue in Phase 1**
+
+- Users can favourite venues in Phase 1. The favourite is stored and the venue appears in the favourites list (quick access to opening hours, description, etc.). Messaging via the favourites channel is not enabled until Phase 2 (T-06b). No special UI state needed beyond the existing favourites card.
+
+**5. Venue profile page**
+
+- Reuses `/profile/:id`. The same route renders different content based on `accountType`. Venue variant shows: `venueName`, `locationType` badge, `openingHours`, `description`. No edit controls visible to non-managers.
 
 ### Owner's Comments
 
-- Not a high priority. Postponed until the rest is done. Remind me.
+- 2026-03-18: Design agreed. Venue has no credentials, no login. Manager is a regular user with an added role. One venue per manager for now. Venue name/address/location immutable after creation. Tier is fixed (admin-only), no subscription yet.
+- 2026-03-18: Deletion cascade, message radius, map visibility, favouriting, and profile page decisions recorded above.
+
+---
+
+## T-09 — Orphan Venue Reassignment
+
+**Status:** Not started. Deferred until multi-role support exists.
+
+**Prerequisite:** A user account must be able to hold more than one role simultaneously (e.g. `admin` + `venue_manager`). Currently the system supports a single role per account, so an admin cannot also be a `venue_manager`.
+
+**Problem:** When a `venue_manager` account is deleted, their venue(s) are currently cascade-deleted (T-06 decision). This is a data loss risk for venues that should persist under new management.
+
+**Proposed approach (to be designed):**
+- Option A: A configurable "fallback manager" per venue (set by admin at creation time). If the primary manager is deleted, ownership transfers to the fallback.
+- Option B: A new interim role (e.g. `orphan_manager`) that can hold venue documents without appearing on the map as a regular user. Admin can reassign from the orphan pool.
+- Option C: Venues are held in a soft-deleted / suspended state for N days after manager deletion, giving admin time to reassign before permanent deletion.
+
+No implementation until multi-role support is landed and a preferred option is chosen.
 
 ---
 
@@ -707,7 +822,7 @@ it so every service, every JWT claim, and every UI check is consistent.
 |---|---|---|---|---|
 | `accountType` | `"user"` (not `null`), `"venue"` | **What kind of entity** the account represents. Determines which profile fields exist, how location is handled, and which UI view renders. | Admin only (admin UI convert-to-venue / revert). New registrations always `"user"`. | Yes — `account_type` claim |
 | `tier` | `guest`, `regular`, `premium`, `unrestricted`, … | **What features and radii** the account is allowed. Fully DB-backed; admin-configurable. Venue accounts can have a tier (controls their message radius). | Admin only. New registrations default to `regular`. Guests always `guest`. | Yes — `tier` claim |
-| `role` | `"user"`, `"admin"` | **What system actions** the account may perform (read/write other users' data, call admin endpoints). Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent promotions. | Yes — `role` claim |
+| `role` | `"user"`, `"admin"`, `"venue_manager"` | **What system actions** the account may perform (read/write other users' data, call admin endpoints, manage linked venue accounts). Orthogonal to tier and accountType. | Bootstrap env var for first admin; admin UI for subsequent promotions. `venue_manager` granted by admin. | Yes — `role` claim |
 
 ### Concrete changes required
 
@@ -736,7 +851,7 @@ it so every service, every JWT claim, and every UI check is consistent.
    Document this in the tiers-service and in the admin UI tooltip.
 
 5. **Role enum validation**: `users-service` `PATCH /admin/users/:id/role`
-   currently accepts any string. Restrict to `["user", "admin"]` (or the
+   currently accepts any string. Restrict to `["user", "admin", "venue_manager"]` (or the
    DB-backed roles list if T-09 is implemented first).
 
 6. **Admin UI**: show `accountType` field as a read-only badge on every user
@@ -755,11 +870,7 @@ it so every service, every JWT claim, and every UI check is consistent.
 
 ### Owner's note to self
 
-Before implementing: agree on whether `unrestricted` stays a tier or becomes
-a role (or a special accountType for internal/developer accounts). Currently
-it is a tier with unlimited radii, which leaks into the tier UI. A cleaner
-split might be: `role: "developer"` with a bypass in the radius check, leaving
-tiers exclusively for user-facing feature control.
+`unrestricted` stays a tier (agreed 2026-03-18). No `developer` role or accountType will be introduced. Admin role provides sufficient developer access.
 
 ---
 
@@ -809,3 +920,30 @@ retired, then remove the `localStorage.removeItem('bbm_meet')` line from
 ### Prerequisites
 
 None.
+
+## T-14 — Manager-tier venue quota (tiered multi-venue)
+
+**Status:** Deferred — no tier infrastructure exists for managers yet.
+
+### Idea
+
+Combine the user `tier` concept with manager roles so that a "regular manager"
+can manage up to N venues and a "premium manager" can manage more. This would
+require:
+
+1. A manager-specific tier dimension (separate from or layered on top of the
+   existing user tiers which are for consumers).
+2. The tiers-service to know about manager quotas.
+3. `POST /manager/venues` to query the manager's quota from tiers-service
+   before allowing creation.
+
+### Current state
+
+Venue limit is set to 9999 (effectively unlimited) in `POST /manager/venues`.
+Becoming a venue manager requires a manual approval process, so abuse is
+low-risk for now.
+
+### Prerequisites
+
+T-08 (Authority service) should land first so there is a single source of
+truth for roles + tiers before adding a second tier dimension.

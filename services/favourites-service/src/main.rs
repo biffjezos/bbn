@@ -2,6 +2,7 @@
 // bOOmbOOm.NOW! — favourites-service (Rust)
 // Replaces services/favourites-service.js.
 // Identical HTTP contract — gateway needs no changes.
+// Rebuild: venue_manager accepted by RequireRegistered (common).
 // ============================================================
 
 use std::{
