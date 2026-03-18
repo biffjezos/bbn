@@ -53,7 +53,7 @@ on T-04b.
 
 ### 1.2 Gateway send-rate limit bypassable at messages-service level
 
-**File:** `services/server.js` (`_wsSendCounts`), `services/messages-service.js`
+**File:** `services/gateway/src/main.rs` (`_wsSendCounts`), `services/messages-service/src/main.rs`
 
 The per-user send rate (10 msg / 10 s) is enforced only at the WebSocket layer
 in the gateway. The messages-service HTTP endpoint has no independent rate
@@ -61,14 +61,14 @@ limit. A client with a valid JWT hitting the HTTP endpoint directly (or via
 multiple tabs) can exceed the per-user budget. messages-service needs its own
 per-userId in-memory rate check.
 
-**Priority:** Medium — T-05 (blocking) is now live which reduces abuse risk, but the HTTP bypass remains. Address in T-03 iteration or as a standalone fix.
+**Priority:** Medium — T-05 (blocking) is now live which reduces abuse risk, but the HTTP bypass remains.
 
 ---
 
 ### 1.4 Admin can modify their own tier and role (self-promotion guard missing)
 
 **Date:** 2026-03-16
-**Files:** `services/users-service.js` (`PATCH /admin/users/:id/tier`, `PATCH /admin/users/:id/role`)
+**Files:** `services/users-service/src/main.rs` (`PATCH /admin/users/:id/tier`, `PATCH /admin/users/:id/role`)
 
 No server-side check prevents an admin from using the admin API to change their own tier or role. A rogue or compromised admin account could self-promote without a second approval. The fix is one line per handler: if `targetId === req.auth.sub`, reject with 403.
 
@@ -156,15 +156,15 @@ The gateway will recreate it with `expireAfterSeconds: 1200` on next boot.
 
 
 
-### 3.1 `haversineDistance` duplicated across three files
+### 3.1 `haversine_distance` duplicated across three Rust services
 
 ***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
-**Files:** `services/server.js`, `services/messages-service.js`, `services/location-service.js`
+**Files:** `services/gateway/src/main.rs`, `services/messages-service/src/main.rs`, `services/location-service/src/main.rs`
 
-Three independent copy-paste implementations of the same function. If a precision bug is found, all three need patching. `services/lib/geo.js` exists but is not imported by the services that need it.
+Three independent copy-paste implementations of the same function. If a precision bug is found, all three need patching. All services now in Rust — consolidation into a `common` crate is possible but deferred.
 
-**Context:** A shared internal library is not currently possible (no private package registry, no monorepo tooling). Each service is intentionally self-contained. Consolidation is deferred until the infrastructure to support a shared lib is in place. MongoDB geospatial indexes are also unavailable (free tier RAM limits + migration 002 failure), so haversine-in-JS is the correct approach for distance filtering regardless.
+**Context:** Each service is intentionally self-contained. MongoDB geospatial indexes are unavailable (free tier RAM limits), so haversine-in-Rust is the correct approach for distance filtering. Consolidation deferred.
 
 ### 3.2 Tier badge in /profile has hard-coded values
 
@@ -180,7 +180,7 @@ a pre-existing bug where location-service had guest radius at 23,000 m instead o
 
 ***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
-**File:** `services/server.js` (in-memory `_wsSendCounts`)
+**File:** `services/gateway/src/main.rs` (in-memory rate bucket)
 
 The per-user send-rate bucket is stored in-process:
 
@@ -211,31 +211,26 @@ would be more efficient. Acceptable for now.
 
 ## 6. Maintainability
 
-### 6.1 Core utilities duplicated across all services
+### 6.1 Core utilities duplicated across all Rust services
 
 ***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
-**Files:** All services
+**Files:** All services (now all Rust, using the shared `common` crate for auth — partial consolidation already exists)
 
-The following utilities are copy-pasted across 3–4 files each:
-
-**Note:** All duplication is intentional at this stage. A shared internal library is not currently possible (no private package registry, no monorepo tooling). Each service is intentionally self-contained. Consolidation is deferred until the infrastructure to support a shared lib is in place.
+The following utilities are copy-pasted across services. The `common` crate (`services/common/src/`) already centralises JWT types and `issue_user_token` / `issue_guest_token`. Remaining duplication:
 
 | Utility | Duplicated in |
 |---|---|
-| `verifyToken` | auth, users, messages, location, favourites — intentional copy per service |
-| `requireServiceToken` | all 6 services — intentional copy per service |
-| `serviceToken` (caching) | server.js, messages-service.js — intentional copy per service |
-| `haversineDistance` | server.js, messages-service.js, location-service.js — intentional: MongoDB geospatial indexes unavailable (free tier RAM + migration 002 failure), distance filtering must run in JS per service; deferred with 3.1 |
-| `safeObjectId` | users, messages, favourites — intentional copy per service |
-| `issueUserToken` | auth-service.js, users-service.js — intentional copy per service |
+| `verify_token` | messages, location, favourites, blocks, users — each service re-verifies the JWT independently |
+| `require_service_token` | all Rust services |
+| `haversine_distance` | gateway, messages-service, location-service — see 3.1 |
 
-If the JWT payload structure changes (e.g., adding a field), every `issueUserToken` and `verifyToken` in every service must be updated. This is a recurring maintenance risk.
+T-08 Phase 2 (authority service + gateway-centralised verification) will eliminate `verify_token` duplication entirely. Remaining items deferred until T-08 is complete.
 
 ### 6.3 Auth validation is duplicated across every service (root cause of the admin-role bug cascade)
 
-**Date:** 2026-03-16
-**Files:** `services/messages-service.js`, `services/favourites-service.js`, `services/blocks-service.js`, `services/users-service.js`, `services/server.js`, `ui/_layouts/default.html`
+**Date:** 2026-03-16 (updated 2026-03-18: all services now in Rust)
+**Files:** `services/messages-service/src/main.rs`, `services/favourites-service/src/main.rs`, `services/blocks-service/src/main.rs`, `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
 
 **What happened.**
 Adding a second privileged role (`admin`) required changes in 6 separate files. The bug had *three* distinct failure layers, all hit in sequence:
@@ -250,13 +245,13 @@ None of these components communicates with each other. Each enforces its own aut
 The microservice architecture was chosen to allow services to be deployed and scaled independently. Each service is intentionally self-contained (no shared library, no private package registry — see 6.1). The consequence is that shared logic like token validation must be replicated verbatim. This is a well-known microservice trade-off and was noted in 6.1 as deferred. The admin role was added *after* the pattern was established, so the role check in every existing `verifyToken` was never updated.
 
 **Root cause (design).**
-There is no single point of auth enforcement. The gateway (`server.js`) already sits in front of all services and already decodes the JWT for tier checks. But it does not validate role or tokenVersion — it passes the raw `Authorization` header to each service. Each service therefore re-implements the same auth logic independently.
+There is no single point of auth enforcement. The gateway (`services/gateway/src/main.rs`) already sits in front of all services and already decodes the JWT for tier checks. But it does not validate role or tokenVersion — it passes the raw `Authorization` header to each service. Each Rust service therefore re-implements the same auth logic independently.
 
 **Suggested solution — centralise auth validation in the gateway.**
 
 The gateway already:
 - Holds the JWT secret
-- Decodes the token for `checkTier`
+- Decodes the token for tier checks
 - Forwards the raw `Authorization` header to services
 
 The minimal change: add a `verifyUserToken` step in the gateway proxy that validates signature + role + tokenVersion, then injects `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers. Services would read these headers instead of re-verifying the JWT. They are already protected from external callers by `X-Service-Token`.
@@ -310,16 +305,9 @@ Evaluate in which way it's feasible to:
 - geo location sent out encrypted to all other `/location/nearby..`)
 - decrypted by various clients (users) with different private keys.
 
-### 7.3 Evaluate a port of all `/services` to Rust
+### 7.3 ✅ Port of all `/services` to Rust — complete (2026-03-17)
 
-***Note:*** added by project owner (12 March 2026)
-
-In the medium-term I want to port the node.js `/services` to rust and have railway pull the project without manual work. Evaluate the prerequisites, milestones to guarantee an uninterrupted service of the app.
-
-- Is it necessary to create a new project on github / railway?
-- Can node.js and rust.rs services be included in the same repository?
-- Which service is the easiest to port, which utility, and models modules should be ported first?
-- What performance improvement can be expected?
+All services ported. See T-04 in TICKETS_DONE.md. migration-service intentionally remains the only exception (Node.js, by design).
 
 ### 7.4 Question: Is there a secure way to prove that the running service matches the public repo?
 

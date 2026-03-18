@@ -11,21 +11,18 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 Before any marketing or scaling push, the order of priority is:
 
-1. ~~**T-05 Phase 1**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-2. ~~**T-03**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-3. ~~**T-04a**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-4. ~~**T-04b**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-5. ~~**T-01**~~ — ✅ Done (2026-03-16). Details in TICKETS_DONE.md.
-6. **T-05b** — Add encrypted note field to blocks (still waiting on OPAQUE; existing BBMCrypto is a candidate but original privacy decision stands — revisit after OPAQUE lands)
-7. **T-02** — Analytics (low-risk, can slot in any time)
-8. ~~**T-06 Phase 1**~~ — ✅ Done (2026-03-18): Core venue + manager role implemented. Details in TICKETS_DONE.md.
-   ~~**T-06c**~~ — ✅ Done (2026-03-18): Multiple venues per manager. Details in TICKETS_DONE.md.
-   - **T-06b** — Venue messaging (deferred)
-9. **T-07a** — Settings page (UX polish)
-   **T-07b** — Device notifications (UX polish, deferred until after Rust port)
-10. ~~**T-04c**~~ — ✅ Done (2026-03-17). Details in TICKETS_DONE.md.
-11. **T-08 Phase 1** — Normalise accountType / tier / role data model (ex-T-13, prerequisite for Phase 2)
-    **T-08 Phase 2** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service (after T-01 + T-04c + Phase 1)
+1. **T-10** — Fix migration-service (HIGH: privacy regression — TTL indexes not running, data not auto-purged)
+2. **T-11** — Enforce 144-char plaintext message limit on client (trivial, no prerequisites)
+3. **T-07a** — Settings page (self-contained, no prerequisites)
+4. **T-08 Phase 1** — Normalise accountType / tier / role data model (prerequisite: T-10 for migration 006)
+5. **T-08 Phase 2** — Authority service: merge auth + tiers → single authority, centralise RBAC in gateway, retire tiers-service
+6. **T-06b** — Venue messaging (ideally after T-08 Phase 2 for clean auth routing)
+7. **T-07b** — Device notifications (medium priority)
+8. **T-09** — Role CRUD with Permissions UI (prerequisite: T-08 Phase 2)
+9. **T-02** — Analytics (low-risk, can slot in any time)
+10. **T-05b** — Encrypted block note (blocked on OPAQUE implementation — see AUDIT.md 1.1)
+11. **T-14** — Manager-tier venue quota (deferred, prerequisite: T-08)
+12. **T-15** — Orphan venue reassignment (deferred, prerequisite: multi-role support)
 
 ### Architectural Decision (2026-03-16)
 
@@ -73,12 +70,13 @@ requires no new infrastructure.
 
 ## T-05b — Encrypted note field in blocks
 
-**Status:** Not started. Blocked on OPAQUE (T-04b followup).
+**Status:** Not started. Blocked on OPAQUE implementation.
 
 T-05 Phase 1 (block mechanism + reason enum) is complete — see TICKETS_DONE.md.
+T-04b (Rust auth-service port) is complete, but OPAQUE/PAKE was deferred during the port — see AUDIT.md 1.1.
 
 Add optional encrypted note field once OPAQUE-based key derivation is in place.
-Note field (`note: "..."`) — storing free-text without proper client-side encryption (pending OPAQUE) would be a privacy regression. Reason enum is not sensitive.
+Note field (`note: "..."`) — storing free-text without proper client-side encryption would be a privacy regression. Reason enum is not sensitive.
 
 **Prerequisite:** OPAQUE / PAKE client-side key derivation (AUDIT.md 1.1).
 
@@ -120,6 +118,7 @@ These three axes are fully orthogonal. A venue manager is `accountType: "user", 
 
 ✅ Complete (2026-03-18). Venue limit lifted. Details in TICKETS_DONE.md.
 T-14 tracks future tiered quota (per-tier venue limits) — still deferred.
+T-15 tracks orphan venue reassignment (when manager is deleted) — still deferred.
 
 ---
 
@@ -129,7 +128,7 @@ T-14 tracks future tiered quota (per-tier venue limits) — still deferred.
 
 - Venue deleted → cascade delete: all messages where `senderId` or `recipientId` = venue `_id`, all favourites containing venue `_id`, all blocks involving venue `_id`.
 - Manager account deleted → delete all linked venues first (same cascade), then delete the manager account. No orphan venue is ever left in the DB.
-- Future: auto-reassignment of orphaned venues deferred to **T-09**.
+- Future: auto-reassignment of orphaned venues deferred to **T-15**.
 
 **2. Venue map visibility**
 
@@ -145,12 +144,12 @@ T-14 tracks future tiered quota (per-tier venue limits) — still deferred.
 
 ### Owner's Comments
 
-- 2026-03-18: Design agreed. Venue has no credentials, no login. Manager is a regular user with an added role. One venue per manager for now. Venue name/address/location immutable after creation. Tier is fixed (admin-only), no subscription yet.
-- 2026-03-18: Phase 1 complete.
+- 2026-03-18: Design agreed. Venue has no credentials, no login. Manager is a regular user with an added role. Venue name/address/location immutable after creation. Tier is fixed (admin-only), no subscription yet.
+- 2026-03-18: Phase 1 + T-06c complete. T-06b (venue messaging) deferred.
 
 ---
 
-## T-09 — Orphan Venue Reassignment
+## T-15 — Orphan Venue Reassignment
 
 **Status:** Not started. Deferred until multi-role support exists.
 
@@ -191,7 +190,7 @@ None — can be started independently.
 
 ## T-07b — Device Notifications
 
-**Status:** Not started. **Priority: medium.** Deferred until after the Rust port.
+**Status:** Not started. **Priority: medium.**
 
 ### Requirements
 
@@ -220,7 +219,7 @@ None for in-app extension. Web Push requires HTTPS (already satisfied) and VAPID
 
 ### Owner's Comments
 
-- Not a priority at the moment. May be postponed until after the Rust port. Remind me.
+- Not a priority at the moment.
 
 ---
 
@@ -273,9 +272,9 @@ None for in-app extension. Web Push requires HTTPS (already satisfied) and VAPID
 |---|---|
 | JWT issue & tokenVersion | `auth-service` (Rust) |
 | Tier definitions & feature flags | `tiers-service` (Rust) |
-| Radius lookups | `tiers-service` (Rust) + hardcoded table in `location-service.js` |
-| Token verification | Copy-pasted `verifyToken` in every JS service (×5) |
-| Role enforcement | Copy-pasted role check in every JS service (×5) |
+| Radius lookups | `tiers-service` (Rust) + hardcoded table in `location-service/src/main.rs` |
+| Token verification | Copy-pasted `verifyToken` in every Rust service (×5) |
+| Role enforcement | Copy-pasted role check in every Rust service (×5) |
 
 Any role model change currently requires edits in 6+ places. Root cause of the admin-role cascade bug (AUDIT.md 6.3).
 
@@ -317,21 +316,21 @@ Each service reads `X-Auth-*` headers. `X-Service-Token` still protects services
 
 **Prerequisites:**
 - T-08 Phase 1 complete and deployed
-- T-01 complete (admin CRUD for tiers established)
-- T-04c in progress (JS→Rust port; authority header pattern adopted as services are ported)
+- T-01 ✅ complete
+- T-04c ✅ complete (all services now in Rust)
 - No new infrastructure required
 
 **Implementation order:**
 1. Extend auth-service to absorb tiers-service routes (same binary, same DB).
 2. Add `POST /authority/verify` endpoint.
 3. Update gateway to call authority and inject headers.
-4. Update each JS service to read headers (one at a time, backwards-compatible).
+4. Update each Rust service to read `X-Auth-*` headers (one at a time, backwards-compatible).
 5. Retire tiers-service on Railway.
 
 ### Owner's Comments
 
-- 2026-03-16: Proposed by Claude based on admin-role cascade bug post-mortem (AUDIT.md 6.3). Feasible once T-01 done and T-04c underway.
-- 2026-03-18: T-13 merged into T-08 as Phase 1 — data model normalisation is prerequisite for the authority service.
+- 2026-03-16: Proposed by Claude based on admin-role cascade bug post-mortem (AUDIT.md 6.3).
+- 2026-03-18: T-13 merged into T-08 as Phase 1 — data model normalisation is prerequisite for the authority service. All prerequisites met (T-01 ✅, T-04c ✅). Ready to begin Phase 1.
 
 ---
 
