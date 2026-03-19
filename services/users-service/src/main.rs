@@ -26,6 +26,15 @@ use mongodb::{
 use serde::Deserialize;
 use serde_json::json;
 
+// ── Email validation ──────────────────────────────────────────────────────────
+
+fn is_valid_email(email: &str) -> bool {
+    let mut parts = email.splitn(2, '@');
+    let local  = parts.next().unwrap_or("");
+    let domain = match parts.next() { Some(d) => d, None => return false };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 struct Config {
@@ -310,7 +319,12 @@ async fn put_me(
     }
 
     if let Some(email) = body.email {
-        update.insert("email", email.to_lowercase().trim().to_string());
+        let email = email.to_lowercase();
+        let email = email.trim().to_string();
+        if !is_valid_email(&email) {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid email address." }))).into_response();
+        }
+        update.insert("email", email);
     }
 
     let changing_password = body.password.as_ref().map(|p| p.len() >= 8).unwrap_or(false);
@@ -1351,7 +1365,9 @@ async fn delete_manager_venue(
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let cfg = Config::from_env().unwrap_or_else(|e| {
         eprintln!("{e}");

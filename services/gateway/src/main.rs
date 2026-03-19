@@ -952,7 +952,9 @@ async fn push_thread(state: &AppState, token: &str, uid: &str, tx: &mpsc::Unboun
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let cfg = Config::from_env().unwrap_or_else(|e| { eprintln!("{e}"); std::process::exit(1); });
 
