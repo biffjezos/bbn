@@ -8,7 +8,7 @@
 
 ## Open Items
 
-### 3.1 Users enter password twice in the cold login → messages flow
+### UX-3.1 Users enter password twice in the cold login → messages flow
 
 **File:** `ui/scripts/auth.js`, `ui/scripts/crypto-worker.js`
 
@@ -31,6 +31,6 @@ Login authenticates the user (issues JWT) but does **not** load the E2EE crypto 
 
 | Status | ID | Severity | Finding |
 |---|---|---|---|
-| 🔲 | 3.1 | MEDIUM | Users enter password twice in cold login → messages flow |
+| 🔲 | UX-3.1 | MEDIUM | Users enter password twice in cold login → messages flow |
 
 Resolved items → AUDIT_DONE.md

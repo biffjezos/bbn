@@ -8,15 +8,15 @@
 
 ## Resolved (see AUDIT_DONE.md)
 
-### 2.1 `haversine_distance` — resolved, see AUDIT_DONE.md
+### MAINT-2.1 `haversine_distance` — resolved, see AUDIT_DONE.md
 
-### 2.2 Core utilities duplication — resolved, see AUDIT_DONE.md
+### MAINT-2.2 Core utilities duplication — resolved, see AUDIT_DONE.md
 
 ---
 
 ## Open Items
 
-### 2.3 Per-handler role guards still scattered across services
+### MAINT-2.3 Per-handler role guards still scattered across services
 
 **Date:** 2026-03-16 (updated 2026-03-19)
 **Files:** `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
@@ -31,7 +31,7 @@
 
 ---
 
-### 2.4 `app.js` mixes six distinct module concerns
+### MAINT-2.4 `app.js` mixes six distinct module concerns
 
 **Date updated:** 2026-03-19 (split completed)
 **File:** `ui/scripts/app.js` (formerly ~990 lines; now split)
@@ -51,7 +51,7 @@ The original file contained **6 IIFEs** with distinct responsibilities. Each has
 
 ---
 
-### 2.5 No explicit WebSocket disconnect on message-page navigation
+### MAINT-2.5 No explicit WebSocket disconnect on message-page navigation
 
 **File:** `ui/scripts/messages.js`
 
@@ -61,7 +61,7 @@ The `beforeunload` handler sends `{ type: 'view', userId: null }` to clear the t
 
 ---
 
-### 2.6 Per-service Config struct duplication — acceptable, not worth refactoring now
+### MAINT-2.6 Per-service Config struct duplication — acceptable, not worth refactoring now
 
 **Date:** 2026-03-19
 **Files:** `services/*/src/main.rs` (all 9 services)
@@ -80,11 +80,11 @@ Each service defines its own `Config` struct with a `from_env()` impl. All share
 
 | Status | ID | Severity | Finding |
 |---|---|---|---|
-| ✅ | 2.1 | LOW | haversineDistance — resolved, single impl in common/src/geo.rs |
-| ✅ | 2.2 | MEDIUM | Core utilities — resolved, all in common/src/auth.rs extractors |
-| 🔲 | 2.3 | LOW | Per-handler role guards still scattered; token verification now centralised |
-| ✅ | 2.4 | LOW | app.js split into 6 focused files — 2026-03-19 |
-| 🔲 | 2.5 | LOW | No explicit WS close on message-page navigation |
-| 🔲 | 2.6 | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
+| ✅ | MAINT-2.1 | LOW | haversineDistance — resolved, single impl in common/src/geo.rs |
+| ✅ | MAINT-2.2 | MEDIUM | Core utilities — resolved, all in common/src/auth.rs extractors |
+| 🔲 | MAINT-2.3 | LOW | Per-handler role guards still scattered; token verification now centralised |
+| ✅ | MAINT-2.4 | LOW | app.js split into 6 focused files — 2026-03-19 |
+| 🔲 | MAINT-2.5 | LOW | No explicit WS close on message-page navigation |
+| 🔲 | MAINT-2.6 | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
 
 Resolved items → AUDIT_DONE.md

@@ -8,7 +8,7 @@
 
 ## Open Items
 
-### 1.1 migration-service not running — root cause: Railway disk too small
+### INFRA-1.1 migration-service not running — root cause: Railway disk too small
 
 **Date:** 2026-03-17 (updated 2026-03-18)
 **Files:** `services/migration-service/src/main.rs` (Rust port),
@@ -38,15 +38,15 @@ The migration-service itself is working correctly (responds, connects to MongoDB
 
 ---
 
-### 1.0 MongoDB disk space — superseded by 1.1
+### INFRA-1.0 MongoDB disk space — superseded by INFRA-1.1
 
 **Date:** 2026-03-16 (superseded 2026-03-18)
 
-Merged into 1.1. Root cause confirmed: Railway volume is structurally too small (454 MB total). Upgrading the plan to 1 GB is not available on the current Railway tier. Resolution: migrate to MongoDB Atlas (see 1.1).
+Merged into INFRA-1.1. Root cause confirmed: Railway volume is structurally too small (454 MB total). Upgrading the plan to 1 GB is not available on the current Railway tier. Resolution: migrate to MongoDB Atlas (see INFRA-1.1).
 
 ---
 
-### 1.2 Sessions TTL index must be dropped and recreated after guest-TTL change
+### INFRA-1.2 Sessions TTL index must be dropped and recreated after guest-TTL change
 
 **Date:** 2026-03-18
 **File:** MongoDB `sessions` collection
@@ -69,8 +69,8 @@ The gateway will recreate it with `expireAfterSeconds: 1200` on next boot.
 
 | Status | ID | Severity | Finding |
 |---|---|---|---|
-| 🔲 | 1.1 | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
-| ~~🔲~~ | ~~1.0~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by 1.1 |
-| 🔲 | 1.2 | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
+| 🔲 | INFRA-1.1 | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
+| ~~🔲~~ | ~~INFRA-1.0~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by INFRA-1.1 |
+| 🔲 | INFRA-1.2 | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
 
 Resolved items → AUDIT_DONE.md
