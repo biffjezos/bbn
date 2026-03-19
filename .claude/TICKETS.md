@@ -474,17 +474,4 @@ truth for roles + tiers before adding a second tier dimension.
 
 ---
 
-### T-17 - .unwrap() + email validation + logging in auth-service
-
-**Note:** Added by Project Owner
-**Status:** Open.
-
-### Problem
-
-1. line 256: uncheck unwrap `r.inserted_id.as_object_id().unwrap()`
-2. lines 228, 342: no email format validation (@ .) `let email = email.to_lowercase();`
-3. lines (several): tracing-subscriber without log levels. As the app matures, I want to switch of verbose logging (especially of sensitive information). Should check env variable then set max log level.
-
-### Owner's Comments
-
-You may want to expand this ticket to all rust services and work fix it in one go, as they may have the same or similar issues. Please check if this ticket would be resolved by another ticket. If it's an easy fix, move it higher in the implementation order, otherwise it's not really important until we move from a dev stage to a staging or production stage.
+### T-17 ✅ Complete (2026-03-19). Details in TICKETS_DONE.md.
