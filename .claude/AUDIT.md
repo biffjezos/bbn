@@ -100,6 +100,21 @@ The file contains **6 IIFEs** with distinct responsibilities: Debug console (~24
 
 ---
 
+### 2.6 Per-service Config struct duplication — acceptable, not worth refactoring now
+
+**Date:** 2026-03-19
+**Files:** `services/*/src/main.rs` (all 9 services)
+
+Each service defines its own `Config` struct with a `from_env()` impl. All share a common core (`port`, `jwt_secret`, `service_secret`, `mongo_uri`, `db_name`); some add service-specific URL fields (`fav_service_url`, `tiers_service_url`, etc.).
+
+**Assessment:** The duplication is intentional and appropriate for independent microservices. Rust has no inheritance; the alternatives (shared `common` crate, proc macros) add build coupling and complexity without meaningful benefit at the current scale (~30 lines per service). The `from_env()` impls are not identical — port defaults and required fields differ per service.
+
+**When this becomes worth revisiting:** If a new standard env var must be added to all services simultaneously (e.g., `OTEL_ENDPOINT` for tracing) and the manual update across 9 files becomes painful, a shared `common::BaseConfig` struct would be justified at that point.
+
+**Priority:** LOW — not a maintenance burden today; reassess at ~15+ services or frequent cross-service config drift.
+
+---
+
 ### 2.5 No explicit WebSocket disconnect on message-page navigation
 
 **File:** `ui/scripts/messages.js`
@@ -197,4 +212,5 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 | 🔲 | 2.3 | Maintainability | LOW | Per-handler role guards still scattered; token verification now centralised |
 | 🔲 | 2.4 | Maintainability | LOW | app.js mixes six module concerns (~990 lines) |
 | 🔲 | 2.5 | Maintainability | LOW | No explicit WS close on message-page navigation |
+| 🔲 | 2.6 | Maintainability | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
 | 🔲 | 3.1 | Usability | MEDIUM | Users enter password twice in cold login → messages flow |
