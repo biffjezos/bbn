@@ -28,6 +28,20 @@ Run this on every session-start signal, in order:
 
 ---
 
+## Friction Awareness
+
+Before acting on any task, scan the Friction Label Taxonomy in `.claude/CHANGELOG.md`
+and ask whether the current situation matches a known pattern. This is a pre-action
+check, not a retrospective. Examples:
+
+- Splitting or creating files → check for **pattern blindness** (scan existing conventions first)
+- Writing output for the owner → check for **mixed scope** (is everything here their action?)
+- Adding structure or content → check for **redundancy** (does this already exist?)
+
+If a match is found, apply the known fix before proceeding.
+
+---
+
 ## Ticket Workflow
 
 Before writing any code for a ticket:
