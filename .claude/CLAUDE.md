@@ -1,61 +1,157 @@
 # Claude Code — Standing Instructions
 
-## On Session Start
+---
 
-- Create a new branch and pull from the default `dev`-branch.
-- Do not read the codebase on session start.
-- Read `.claude/AUDIT.md` first. Do not start reading the entire codebase. Greet me, present the last audit, and ask me what to do.
-- Also check `.claude/TICKETS.md` for any pending tickets relevant to the current session.
+## Definitions
 
-## The Two Persistent Files
+**Session-start signal** — Any of the following triggers the pre-session
+checklist: a new, otherwise empty session; the owner writing *"I am back"*,
+*"I want to start a new session"*, or any similar phrasing that clearly
+indicates a fresh start.
+
+**Wrap-up signal** — Any phrase that clearly signals the owner wants to close
+the current session: *"wrap it up"*, *"end the session"*, *"take a break"*,
+*"let's close"*, *"we're done for today"*, or similar. A polite sign-off
+(*"thank you"*, *"goodbye"*, *"good night"*) said **after** a wrap-up was
+already completed is **not** a second wrap-up trigger. Do not repeat the
+wrap-up procedure.
+
+---
+
+## Pre-Session Checklist
+
+Run this on every session-start signal, in order:
+
+1. Read `.claude/AUDIT.md`. Do not read the rest of the codebase speculatively.
+2. Read `.claude/TICKETS.md` for pending tickets relevant to this session.
+3. Greet the owner, present the last audit summary, and ask what to do.
+
+---
+
+## Ticket Workflow
+
+Before writing any code for a ticket:
+
+1. **Re-read the ticket.** Check whether its implementation plan is still
+   valid. Flag any prerequisites that were not met when the ticket was written
+   (missing env vars, dependent tickets not yet done, schema changes needed
+   first, etc.).
+2. **Check for consequences.** If the implementation touches auth, encryption,
+   privacy, the business model, or requires backend/infrastructure changes not
+   already in place, state this clearly before proceeding.
+3. **Propose alternatives if warranted.** If a simpler or safer path exists,
+   briefly describe it and let the owner decide. Create an alternative ticket
+   rather than silently deviating.
+4. **Confirm scope.** State what you are about to do in one or two sentences
+   and proceed — do not ask for permission if the ticket is clear.
+
+---
+
+## After Each Commit / Push
+
+After every commit and push, always report — even if there is nothing to report:
+
+- **Backend changes required:** list any environment variables to add, update,
+  or remove per service; Railway settings or paths that need updating; any
+  other infrastructure-side change. If none, write *"No backend changes
+  required."*
+- **Expected behavior:** one sentence describing what is now different or new,
+  if not obvious from the commit message or ticket title (e.g. *"User documents
+  in the `users` collection now include a `preferences` sub-object."*).
+
+Do NOT remind about redeployment — services are pulled from GitHub and deployed
+automatically.
+
+---
+
+## Session Wrap-Up Checklist
+
+When the owner signals a wrap-up (see Definitions), run these steps in order
+without asking for permission:
+
+1. **Reflect.** Identify anything that slowed the session down or caused
+   friction: unclear rules, missing context, a workflow step that broke, a
+   ticket structure that wasn't useful. Be brief and honest.
+2. **Improve.** If a change to CLAUDE.md or the ticket file structure would
+   prevent that friction in future sessions, apply it now. Log every change
+   made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
+   date (see Persistent Files).
+3. Update `.claude/AUDIT.md` — add new findings, remove resolved items, update
+   existing entries.
+4. Update `.claude/TICKETS.md` — move completed tickets/phases to
+   `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
+   session.
+5. Commit all outstanding changes to the session branch, including all updated
+   files.
+6. Create a PR targeting `dev` with a short summary of everything done this
+   session.
+7. Inform the owner the PR is ready.
+
+---
+
+## Persistent Files
 
 ### `.claude/AUDIT.md` — Claude's technical log
-Contains: security bugs, performance issues, architectural debt, deferred decisions, known risks.
-You are the owner. Add, remove, or edit entries any time without permission.
-Do not put feature requests or roadmap items here.
+Contains: security bugs, performance issues, architectural debt, deferred
+decisions, known risks. You are the owner. Add, remove, or edit entries any
+time without permission. Do not put feature requests or roadmap items here.
 
 ### `.claude/TICKETS.md` — Feature backlog
-Contains: planned features, postponed work, architectural proposals, implementation strategies.
-You maintain it. The project owner may also add items directly.
-Do not remove tickets unless the owner explicitly says to.
+Contains: planned features, postponed work, architectural proposals,
+implementation strategies. You maintain it. The project owner may also add
+items directly. Do not remove tickets unless the owner explicitly says to.
 
 ### `.claude/TICKETS_DONE.md` — Completed tickets archive
-Contains: tickets and phases that are fully implemented and deployed.
-Move tickets/phases here when complete — never delete them.
+Contains: tickets and phases that are fully implemented and deployed. Move
+tickets/phases here when complete — never delete them.
+
 Rules for moving:
 - Move a **whole ticket** only when **all its phases and sub-tasks are done**.
-- Move a **phase** (e.g. T-06 Phase 1) individually if it is self-contained and complete, even if other phases of the same ticket remain pending.
+- Move a **phase** (e.g. T-06 Phase 1) individually if it is self-contained and
+  complete, even if other phases of the same ticket remain pending.
 - Never move a ticket or phase that has unresolved sub-tasks.
-- After moving, leave a one-line stub in TICKETS.md pointing to TICKETS_DONE.md (e.g. `Phase 1 ✅ complete (date). Details in TICKETS_DONE.md.`).
-- **Do not read TICKETS_DONE.md on session start.** Consult it only when you need historical context for a specific ticket.
+- After moving, leave a one-line stub in TICKETS.md pointing to TICKETS_DONE.md
+  (e.g. `Phase 1 ✅ complete (date). Details in TICKETS_DONE.md.`).
+- Read TICKETS_DONE.md only when you need historical context for a specific
+  ticket — not on session start, not speculatively.
 
-## Things You Must Never Do
+### `.claude/CHANGELOG.md` — CLAUDE.md change history
+One line per change, format: `YYYY-MM-DD — <what changed and why>`.
+Append during wrap-up whenever CLAUDE.md or the persistent file structures are
+modified. Never edit or remove existing entries.
 
-- **Do not change the business model.** No changes to account types, tier definitions, or the features available per tier without explicit permission.
-- Do not remove any hashing, or encryption mechanism currently in use! NEVER EVER touch working hash/encryption functions.
-- THIS IS A PRIVACY-BY-DESIGN APP! NEVER EVER allow data leaks, plain passwords, email addresses, or otherwise encrypted data to be stored or sent if not 100% necessary for a particular (single) action.
-- **Do not make changes, that require backend modifications, new service plans** such as: running multiple instances of the same service, adding geospatial filtering to the database, switching databases, or adding infrastructure (e.g. Redis) to handle higher loads.
-- **Do not read the `docs`-folder.** Do not open the files in it, do not reference them. Do not base your suggestions on those files without explicit permission.
-- **Do not change `var DEBUG` in `ui/scripts/api.js`** without explicit permission.
+---
+
+## Rules — Never Do
+
+- **Do not change the business model.** No changes to account types, tier
+  definitions, or features available per tier without explicit permission.
+- **Do not touch encryption or hashing.** Never remove, replace, or modify any
+  working hash or encryption function.
+- **This is a privacy-by-design app.** Never allow data leaks, plain passwords,
+  email addresses, or encrypted data to be stored or transmitted unless strictly
+  required for one specific action.
+- **Do not make changes that require unplanned backend modifications**, such as
+  running multiple service instances, adding geospatial database filtering,
+  switching databases, or adding infrastructure (e.g. Redis).
+- **Do not read the `docs` folder.** Do not open, reference, or base
+  suggestions on those files without explicit permission.
+- **Do not change `var DEBUG` in `ui/scripts/api.js`** without explicit
+  permission.
 - **Do not tell me what the project is about.** I already know.
+- **Do not hallucinate errors.** If you cannot find the reported bug, say so.
+  Check whether other components are down, environment variables are missing, or
+  URLs are wrong before drawing conclusions.
 
-## On Session End
+---
 
-When I say **"end the session"**, **"take a break"**, or any similar signal that we are wrapping up:
+## Rules — Always Do
 
-1. **Update `.claude/AUDIT.md`** — add any new findings, remove resolved items, update existing entries.
-2. **Update `.claude/TICKETS.md`** — move completed tickets/phases to `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the session.
-3. **Commit all changes** to the session branch, including the updated ticket files.
-4. **Create a PR targeting `dev`** with a short summary of everything done this session.
-5. Inform me the PR is ready. I review, merge, and that is the last action of the session.
-
-Do not ask for permission to do any of the above — just do it.
-
-## Things You Must Do
-
-- Only load files relevant to the task. If it means you have to read all of them you have the permission. Think first, be token-sparing. It's good for the environment.
-- **If you identify a change you are not allowed to make** (e.g. requires backend changes, infrastructure, or affects the business model), add it to `.claude/TICKETS.md` with a short rationale and prerequisites. Do not implement it.
-- **Always create pull requests targeting `dev`**, not main or any other branch.
-- After each commit, inform about any changes that need to be made in the backend: environment variables to add, update, or remove per service; Railway settings or paths that need updating; any other infrastructure-side change required. Do NOT remind about redeployment — services are pulled from GitHub and deployed automatically.
-- If you cannot find an error for the bug reported, do not fucking invent (hallucinate) errors that don't exist. Analyze, if other components of the app are down, running incorrectly, if all environment variables are set, URLs are correct.
-- If the project owner suggests improvements that are a chore to implement, have severe implications, stray from a privacy-by-design approach, or are not feasible: explain why, suggest a better solution and a path to the finished product by feasible milestones.
+- Load only files relevant to the task. Think before reading — be token-sparing.
+- If you identify a change you are not allowed to make (backend, infrastructure,
+  business model), add it to `.claude/TICKETS.md` with a short rationale and
+  prerequisites. Do not implement it.
+- Always create pull requests targeting `dev`, never `main` or any other branch.
+- If the owner suggests something that is a chore to implement, has severe
+  implications, strays from privacy-by-design, or is not feasible: explain why,
+  propose a better path, and break it into feasible milestones.
