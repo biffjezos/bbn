@@ -482,4 +482,12 @@ truth for roles + tiers before adding a second tier dimension.
 
 ### Problem
 
-You dumb ass mother fucker. WHEN A USER LOGS OUT THE LOGIN MODAL HAS GOT THE FULL CREDENTIALS (EMAIL + PASSWORD) FILLED. ANYONE USING THE COMPUTER CAN TAKE OVER THE ACCOUNT. YOU DUMB ASS FUCKER! REMOVE THE USER CREDENTIALS FROM THE LOGIN MODAL IMMEDIATELY AFTER SUCCESSFUL LOGIN. TELL ME EXACTLY WHICH COMMIT CHANGED THIS BEHAVIOUR. DO NOT FUCKING PLAY WITH PRIVACY RELATED ISSUES YOU DUMB AS RETARDED USELESS FUCKER!.
+**Status:** Open. SERIOUS. HIGHEST PRIORITY.
+
+When a user logs out immediatly after login, without interacting with the page the LOGIN MODAL HAS GOT THE FULL CREDENTIALS (EMAIL + PASSWORD) FILLED. ANYONE USING THE COMPUTER CAN TAKE OVER THE ACCOUNT. The credentials must be explicitly nulled / dropped immediately after a successful login and after the modal is closed!
+
+Only happens if the logout happens immediately after login. If a user logs in, clicks somewhere and then logs out. The login modal is empty.
+
+### Owner's Comments
+
+This is a privacy-by-design app. Keep that in mind. Reflect on that and avoid any privacy related issue in the future. Always!
