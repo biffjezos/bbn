@@ -5,6 +5,26 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ---
 
+## From AUDIT.md (maintainability, 2026-03-19)
+
+### DONE — 2.1 `haversine_distance` duplicated across three Rust services
+
+**Original severity:** LOW
+**Resolved:** 2026-03-19 (confirmed in code)
+
+`haversine_distance` is implemented exactly once in `services/common/src/geo.rs` and exported via the `common` crate. `gateway`, `messages-service`, `location-service`, and `favourites-service` are all callers — there are no independent copy-paste implementations. Audit item was already resolved before it was written (the Rust port included the consolidation).
+
+---
+
+### DONE — 2.2 Core utilities (`verify_token`, `require_service_token`) duplicated across services
+
+**Original severity:** MEDIUM
+**Resolved:** 2026-03-19 (confirmed in code)
+
+All token utilities are centralised in `services/common/src/auth.rs` as Axum extractors: `ServiceToken` (replaces `require_service_token`), `AuthToken` (replaces per-service `verify_token`), `RequireRegistered`, `AdminUser`. No per-service re-implementations exist. The duplication described in the audit was eliminated as part of T-04 (Rust port). T-08 Phase 2 (gateway header injection) is still a future improvement but is no longer required to eliminate duplication.
+
+---
+
 ## From AUDIT.md (active audit, 2026-03-18)
 
 ### DONE — JWT tier claim goes stale after admin tier change
