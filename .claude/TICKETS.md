@@ -325,6 +325,9 @@ None — this is a pure restoration. The gateway already expects it.
 **HIGH** — data at rest is not being auto-purged from MongoDB; this is a
 privacy regression in a privacy-by-design app.
 
+### Owner's Comment
+
+You stupid mother fucker. We have ported to rust. The migration-service is written in rust! DO NOT RESTORE ANY FUCKING NODE.JS SERVICE. CLOSE THIS FUCKING TICKET.
 ---
 
 ## T-13 — ✅ Merged into T-08 Phase 1 (2026-03-18)
