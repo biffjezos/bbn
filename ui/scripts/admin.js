@@ -15,6 +15,13 @@ function getAdminRole() {
   } catch (e) { return null; }
 }
 
+function getAdminSub() {
+  try {
+    var p = JSON.parse(atob(window.Auth.getToken().split('.')[1]));
+    return p.sub || null;
+  } catch (e) { return null; }
+}
+
 // ── Tier cache (for user card dropdown) ──────────────────────
 
 var _cachedTiers = [];
@@ -33,10 +40,11 @@ function _tierCls(tierName) {
   return t && t.cls ? t.cls : 'secondary';
 }
 
-function _buildTierSelect(uid, currentTier) {
+function _buildTierSelect(uid, currentTier, disabled) {
+  var dis = disabled ? ' disabled' : '';
   if (!_cachedTiers.length) {
     return '<input type="text" class="form-control form-control-sm" id="tier-' + escHtml(uid) + '"'
-      + ' value="' + escHtml(currentTier) + '" placeholder="e.g. premium" />';
+      + ' value="' + escHtml(currentTier) + '" placeholder="e.g. premium"' + dis + ' />';
   }
   var opts = _cachedTiers.map(function (t) {
     return '<option value="' + escHtml(t.name) + '"' + (t.name === currentTier ? ' selected' : '') + '>'
@@ -45,7 +53,7 @@ function _buildTierSelect(uid, currentTier) {
   if (!_cachedTiers.some(function (t) { return t.name === currentTier; })) {
     opts.unshift('<option value="' + escHtml(currentTier) + '" selected>' + escHtml(currentTier) + '</option>');
   }
-  return '<select class="form-select form-select-sm" id="tier-' + escHtml(uid) + '">' + opts.join('') + '</select>';
+  return '<select class="form-select form-select-sm" id="tier-' + escHtml(uid) + '"' + dis + '>' + opts.join('') + '</select>';
 }
 
 // ── Bootstrap ────────────────────────────────────────────────
@@ -179,6 +187,11 @@ function renderUserCard(u) {
       : '';
 
   var isVenue = u.accountType === 'venue';
+  var isSelf  = u.userId === getAdminSub();
+  var selfNote = isSelf
+    ? '<div class="small mt-2" style="color:var(--bbm-muted,#888)">'
+      + '<i class="bi bi-lock me-1"></i>You cannot modify your own tier or role.</div>'
+    : '';
 
   // Venue cards: show manager field + reassign control instead of role/save.
   var expandedBody = isVenue ? [
@@ -201,7 +214,8 @@ function renderUserCard(u) {
     '      </div>',
     '      <div class="col-6 col-md-2">',
     '        <label class="form-label small mb-1" for="tier-' + escHtml(u.userId) + '">Tier</label>',
-    '        ' + _buildTierSelect(u.userId, u.tier),
+    '        ' + _buildTierSelect(u.userId, u.tier, isSelf),
+    selfNote,
     '      </div>',
     '    </div>',
     '    <div class="row g-3 mb-3">',
@@ -242,17 +256,18 @@ function renderUserCard(u) {
     '      </div>',
     '      <div class="col-6 col-md-2">',
     '        <label class="form-label small mb-1" for="tier-' + escHtml(u.userId) + '">Tier</label>',
-    '        ' + _buildTierSelect(u.userId, u.tier),
+    '        ' + _buildTierSelect(u.userId, u.tier, isSelf),
     '      </div>',
     '      <div class="col-6 col-md-2">',
     '        <label class="form-label small mb-1" for="role-' + escHtml(u.userId) + '">Role</label>',
-    '        <select class="form-select form-select-sm" id="role-' + escHtml(u.userId) + '">',
+    '        <select class="form-select form-select-sm" id="role-' + escHtml(u.userId) + '"' + (isSelf ? ' disabled' : '') + '>',
     '          <option value="user"'           + (u.role === 'user'           ? ' selected' : '') + '>user</option>',
     '          <option value="venue_manager"'  + (u.role === 'venue_manager'  ? ' selected' : '') + '>venue_manager</option>',
     '          <option value="admin"'          + (u.role === 'admin'          ? ' selected' : '') + '>admin</option>',
     '        </select>',
     '      </div>',
     '    </div>',
+    isSelf ? selfNote : '',
     '    <div class="d-flex align-items-center gap-3">',
     '      <button class="btn btn-bbm-primary btn-sm" data-save-user="' + escHtml(u.userId) + '">',
     '        <i class="bi bi-check2 me-1"></i>Save Changes',
@@ -619,9 +634,9 @@ function renderRolesTab() {
     '    <li>Cannot be self-assigned — must be granted by another admin.</li>',
     '    <li>Changing a user\'s tier or role invalidates their active session (tokenVersion bump).</li>',
     '  </ul>',
-    '  <div class="small" style="color:var(--bbm-yellow, #f0c040)">',
-    '    <i class="bi bi-exclamation-triangle me-1"></i>',
-    '    No server-side guard currently prevents an admin from modifying their own tier or role (AUDIT 1.4).',
+    '  <div class="small" style="color:var(--bbm-muted,#888)">',
+    '    <i class="bi bi-lock me-1"></i>',
+    '    Self-modification of tier or role is blocked in the admin UI. Server-side enforcement is controlled by the <code>SELF_PROMOTION_GUARD</code> env var.',
     '  </div>',
     '</div>',
     '<div class="bbm-section mb-3">',

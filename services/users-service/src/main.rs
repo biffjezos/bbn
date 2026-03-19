@@ -936,6 +936,19 @@ async fn admin_get_users(
     Json(json!({ "users": result })).into_response()
 }
 
+// ── GET /admin/config ─────────────────────────────────────────────────────────
+
+async fn admin_get_config(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+    let guard_active = env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1");
+    Json(json!({ "selfPromotionGuard": guard_active })).into_response()
+}
+
 // ── PATCH /admin/users/:id/tier ───────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -952,6 +965,10 @@ async fn admin_patch_tier(
 ) -> impl IntoResponse {
     if claims.role != "admin" {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+
+    if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own tier.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
     }
 
     let oid = match safe_object_id(&id) {
@@ -997,6 +1014,10 @@ async fn admin_patch_role(
 ) -> impl IntoResponse {
     if claims.role != "admin" {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+
+    if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own role.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
     }
 
     let oid = match safe_object_id(&id) {
@@ -1355,6 +1376,7 @@ async fn main() {
         .route("/users/me/keys",             put(put_keys))
         .route("/users/me/keys",             get(get_keys))
         .route("/users/me/preferences",      get(get_preferences).put(put_preferences))
+        .route("/admin/config",              get(admin_get_config))
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
         .route("/admin/users/{id}/role",         patch(admin_patch_role))

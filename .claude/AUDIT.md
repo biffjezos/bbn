@@ -67,14 +67,7 @@ per-userId in-memory rate check.
 
 ### 1.4 Admin can modify their own tier and role (self-promotion guard missing)
 
-**Date:** 2026-03-16
-**Files:** `services/users-service/src/main.rs` (`PATCH /admin/users/:id/tier`, `PATCH /admin/users/:id/role`)
-
-No server-side check prevents an admin from using the admin API to change their own tier or role. A rogue or compromised admin account could self-promote without a second approval. The fix is one line per handler: if `targetId === req.auth.sub`, reject with 403.
-
-Full per-role permission scoping (e.g. only allow tier assignments within a permitted range) requires T-09. The minimal standalone guard can be applied without T-09.
-
-**Priority:** LOW — requires a compromised or rogue admin account; no external attack vector. Also documented in T-09 as a standalone prerequisite patch.
+✅ **Resolved (2026-03-19):** Guard implemented in `services/users-service/src/main.rs`. Both `PATCH /admin/users/:id/tier` and `PATCH /admin/users/:id/role` return `403 SELF_MODIFICATION_FORBIDDEN` when the requesting admin's `sub` matches the target `id` and `SELF_PROMOTION_GUARD=1` is set in Railway env vars. Guard is inactive when the var is absent or `0`.
 
 ---
 
@@ -343,7 +336,7 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 | 🔲 | 1.1 | Security | HIGH | Plain password/email in POST request — needs OPAQUE/PAKE |
 | 🔲 | 1.2 | Security | MEDIUM | Gateway send-rate bypassable at messages-service level |
 | ✅ | 1.3 | Security | LOW (future) | JWT tier claim stale after admin tier change — resolved T-01 |
-| 🔲 | 1.4 | Security | LOW | Admin self-promotion guard missing — can modify own tier/role via API |
+| ✅ | 1.4 | Security | LOW | Admin self-promotion guard — resolved 2026-03-19, env-gated via SELF_PROMOTION_GUARD=1 |
 | 🔲 | 2.1 | Infrastructure | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
 | ~~🔲~~ | ~~2.0~~ | ~~Infrastructure~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by 2.1 |
 | 🔲 | 3.1 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |

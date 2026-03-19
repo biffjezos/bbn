@@ -51,10 +51,10 @@ Before writing any code for a ticket:
 
 After every commit and push, always report — even if there is nothing to report:
 
-- **Backend changes required:** list any environment variables to add, update,
-  or remove per service; Railway settings or paths that need updating; any
-  other infrastructure-side change. If none, write *"No backend changes
-  required."*
+- **Backend changes required:** list only actions **the owner must take manually** —
+  env vars to add, update, or remove in Railway; shell commands to run; Railway
+  settings to change. Do NOT list code changes already committed. If none, write
+  *"No backend changes required."*
 - **Expected behavior:** one sentence describing what is now different or new,
   if not obvious from the commit message or ticket title (e.g. *"User documents
   in the `users` collection now include a `preferences` sub-object."*).

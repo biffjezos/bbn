@@ -110,17 +110,30 @@
 
   // ── App Limits (read-only, static) ────────────────────────────────────────
 
-  function initAppLimits() {
+  async function initAppLimits() {
     var wrap   = document.getElementById('appLimitsWrap');
     var fields = document.getElementById('appLimitsFields');
     if (!wrap || !fields) return;
     if (!window.Auth || !window.Auth.isRegistered()) return;
+
+    var token  = window.Auth.getToken && window.Auth.getToken();
+    var claims = token ? parseJwt(token) : null;
+    var isAdmin = claims && claims.role === 'admin';
 
     var rows = [
       infoRow('Messages auto-delete after',   '4 hours'),
       infoRow('Favourites expire after',       '30 days'),
       infoRow('Message length limit',          '144 characters'),
     ];
+
+    if (isAdmin) {
+      try {
+        var cfg = await window.Api.adminGetConfig();
+        rows.push(infoRow('Self-promotion guard', cfg.selfPromotionGuard ? 'Active' : 'Inactive'));
+      } catch (_) {
+        rows.push(infoRow('Self-promotion guard', 'Unknown'));
+      }
+    }
 
     fields.innerHTML = rows.join('');
     wrap.style.display = '';
