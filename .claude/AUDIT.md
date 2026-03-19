@@ -1,6 +1,6 @@
 # bOOmbOOm.NOW! — Audit
 
-**Last updated:** 2026-03-19
+**Last updated:** 2026-03-19 (maintainability items verified against codebase)
 **Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
 **Auditor:** Claude (claude-sonnet-4-6)
 
@@ -70,60 +70,33 @@ The gateway will recreate it with `expireAfterSeconds: 1200` on next boot.
 
 ## 2. Maintainability
 
-### 2.1 `haversine_distance` duplicated across three Rust services
+### 2.1 `haversine_distance` — resolved, see AUDIT_DONE.md
 
-***Postponed by project owner (12 March 2026):*** Postponed until further notice.
-
-**Files:** `services/gateway/src/main.rs`, `services/messages-service/src/main.rs`, `services/location-service/src/main.rs`
-
-Three independent copy-paste implementations of the same function. If a precision bug is found, all three need patching. All services now in Rust — consolidation into a `common` crate is possible but deferred.
-
-**Context:** Each service is intentionally self-contained. MongoDB geospatial indexes are unavailable (free tier RAM limits), so haversine-in-Rust is the correct approach for distance filtering. Consolidation deferred.
+### 2.2 Core utilities duplication — resolved, see AUDIT_DONE.md
 
 ---
 
-### 2.2 Core utilities duplicated across all Rust services
+### 2.3 Per-handler role guards still scattered across services
 
-***Postponed by project owner (12 March 2026):*** Postponed until further notice.
+**Date:** 2026-03-16 (updated 2026-03-19)
+**Files:** `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
 
-**Files:** All services (now all Rust, using the shared `common` crate for auth — partial consolidation already exists)
+**What is now resolved:** Token *verification* is fully centralised — `AuthToken`, `RequireRegistered`, `ServiceToken`, and `AdminUser` Axum extractors in `services/common/src/auth.rs` handle all JWT validation. No per-service re-implementations remain. The original three-layer bug (frontend guard, backend verifyToken, issueUserToken) is fixed.
 
-The following utilities are copy-pasted across services. The `common` crate (`services/common/src/`) already centralises JWT types and `issue_user_token` / `issue_guest_token`. Remaining duplication:
+**What remains:** Individual *role guards* inside handler bodies are still per-service (e.g., `claims.role != "admin"` repeated in `users-service` for every admin endpoint; gateway has its own `admin_guard()` / `manager_guard()` helpers). The gateway does **not** inject `X-Auth-Role` or similar trusted headers — it passes the raw `Authorization` header downstream. Adding a new role still requires auditing handler-level checks across multiple files.
 
-| Utility | Duplicated in |
-|---|---|
-| `verify_token` | messages, location, favourites, blocks, users — each service re-verifies the JWT independently |
-| `require_service_token` | all Rust services |
-| `haversine_distance` | gateway, messages-service, location-service — see 2.1 |
+**Suggested resolution:** T-08 Phase 2 — gateway injects `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers; services drop JWT re-verification and read headers. Role-model changes would then require only one file.
 
-T-08 Phase 2 (authority service + gateway-centralised verification) will eliminate `verify_token` duplication entirely. Remaining items deferred until T-08 is complete.
+**Priority:** LOW — token verification is solid; the remaining scatter is a future-maintenance risk, not an active bug.
 
 ---
 
-### 2.3 Auth validation duplicated per-service (root cause of the admin-role bug cascade)
+### 2.4 `app.js` mixes six distinct module concerns
 
-**Date:** 2026-03-16 (updated 2026-03-18: all services now in Rust)
-**Files:** `services/messages-service/src/main.rs`, `services/favourites-service/src/main.rs`, `services/blocks-service/src/main.rs`, `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
-
-Adding a second privileged role (`admin`) required changes in 6 separate files. The bug had three distinct failure layers, all hit in sequence:
-
-1. **Frontend layout guard** (`default.html` inline `<script>`) — hard-coded `payload.role === 'user'`, rejecting admin tokens before the page even loaded.
-2. **Backend `verifyToken` functions** — every service independently checks `payload.role !== 'user'` and returns 403 `REGISTERED_REQUIRED`. Four services had this guard.
-3. **`issueUserToken` in `users-service.js`** — hard-coded `role: 'user'`, silently downgrading the admin to a regular user token after a password change.
-
-**Root cause:** No single point of auth enforcement. The gateway already decodes the JWT for tier checks but does not validate role or tokenVersion — it passes the raw `Authorization` header to each service.
-
-**Suggested solution:** Centralise auth validation in the gateway (inject `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers; services read headers instead of re-verifying JWT). Role-model changes would then touch exactly **one file** (gateway). Tracked as T-08 Phase 2.
-
-**Priority:** MEDIUM. The immediate bug is fixed. The risk persists for any future role or field change.
-
----
-
-### 2.4 `app.js` mixes four distinct module concerns
-
+**Date updated:** 2026-03-19 (corrected count)
 **File:** `ui/scripts/app.js`
 
-The file contains the main app shell, `GeoModule`, `LockModule`, and `NotifModule` — four concerns with distinct lifecycles. Each wraps itself in an IIFE, which helps, but the file must be loaded on every page. As the app grows, splitting into separate files (which Jekyll already supports via `extra_js`) would improve navigation and testability.
+The file contains **6 IIFEs** with distinct responsibilities: Debug console (~24 lines), Warm-up (~12 lines), Main App shell (~336 lines), `GeoModule` (~282 lines), `LockModule` (~183 lines), and `NotifModule` (~117 lines). Each wraps itself in an IIFE, which helps, but the entire file (~990 lines) is loaded on every page. As the app grows, splitting into separate files (Jekyll supports `extra_js`) would improve navigation and testability.
 
 ---
 
@@ -219,9 +192,9 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 | 🔲 | 1.1 | Infrastructure | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
 | ~~🔲~~ | ~~1.0~~ | ~~Infrastructure~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by 1.1 |
 | 🔲 | 1.2 | Infrastructure | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
-| ⏸️ | 2.1 | Maintainability | LOW | haversineDistance copy-pasted in 3 Rust services (divergence risk, deferred) |
-| 🔲 | 2.2 | Maintainability | MEDIUM | Core utilities (verifyToken, haversine) duplicated — deferred on T-08 Phase 2 |
-| 🔲 | 2.3 | Maintainability | MEDIUM | Auth validation duplicated per-service — role changes require 6+ file edits (T-08 Phase 2) |
-| 🔲 | 2.4 | Maintainability | LOW | app.js mixes four module concerns |
+| ✅ | 2.1 | Maintainability | LOW | haversineDistance — resolved, single impl in common/src/geo.rs |
+| ✅ | 2.2 | Maintainability | MEDIUM | Core utilities — resolved, all in common/src/auth.rs extractors |
+| 🔲 | 2.3 | Maintainability | LOW | Per-handler role guards still scattered; token verification now centralised |
+| 🔲 | 2.4 | Maintainability | LOW | app.js mixes six module concerns (~990 lines) |
 | 🔲 | 2.5 | Maintainability | LOW | No explicit WS close on message-page navigation |
 | 🔲 | 3.1 | Usability | MEDIUM | Users enter password twice in cold login → messages flow |
