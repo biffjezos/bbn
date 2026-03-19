@@ -35,3 +35,4 @@ Short labels used to tag REFLECTION entries. Enables pattern detection across se
 - 2026-03-19 — REFLECTION [**Pattern blindness**]: Missed applying INFRA-/MAINT-/UX- ID prefixes when splitting audit files, even though SEC-/PERF- were already established as the convention. Owner had to correct it. Fix: added prefix convention to Persistent Files section in CLAUDE.md so it is explicit and cannot be missed again.
 - 2026-03-19 — CHANGE: Updated CHANGELOG.md description in CLAUDE.md — it now records both CHANGE and REFLECTION entries, not just CLAUDE.md edits; format updated accordingly.
 - 2026-03-19 — CHANGE: Added ID prefixes (INFRA-, MAINT-, UX-, SEC-, PERF-) explicitly to each audit file description in Persistent Files section.
+- 2026-03-19 — CHANGE: Added "Friction Awareness" section to CLAUDE.md — instructs future sessions to consult the friction label taxonomy as a pre-action check, not just a retrospective log.
