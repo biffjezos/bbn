@@ -103,7 +103,7 @@ const Auth = (() => {
       await Auth.initGuest();
     },
 
-    async initGuest() {
+    async initGuest(_retry = false) {
       _guestId = getOrCreateGuestId();
       const now = Date.now();
       const storedExp = parseInt(localStorage.getItem(STORAGE_GUEST_EXP) || '0', 10);
@@ -137,6 +137,10 @@ const Auth = (() => {
         }
         Auth.onGuestReady?.();
       } catch (err) {
+        if (err.status === 429 && !_retry) {
+          await new Promise(r => setTimeout(r, 2000));
+          return Auth.initGuest(true);
+        }
         console.warn('[Auth] Guest token failed', err);
         Auth.onGuestExpired?.();
       }
