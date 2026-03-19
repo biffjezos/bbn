@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-03-19
 **Concern:** Performance only.
-**See also:** AUDIT_SECURITY.md · AUDIT.md (infrastructure / maintainability / usability) · AUDIT_DONE.md (resolved items)
+**See also:** [AUDIT.md](AUDIT.md) (index · owner notes · global summary) · [AUDIT_INFRASTRUCTURE.md](AUDIT_INFRASTRUCTURE.md) · [AUDIT_MAINTAINABILITY.md](AUDIT_MAINTAINABILITY.md) · [AUDIT_USABILITY.md](AUDIT_USABILITY.md) · [AUDIT_SECURITY.md](AUDIT_SECURITY.md) · [AUDIT_DONE.md](AUDIT_DONE.md) (resolved items)
 
 ---
 
