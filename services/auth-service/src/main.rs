@@ -54,6 +54,17 @@ impl Config {
     }
 }
 
+// ── Email validation ──────────────────────────────────────────────────────────
+
+/// Basic email format check: must contain exactly one '@', and the domain part
+/// must contain at least one '.'. Does not do DNS or RFC-5321 full validation.
+fn is_valid_email(email: &str) -> bool {
+    let mut parts = email.splitn(2, '@');
+    let local  = parts.next().unwrap_or("");
+    let domain = match parts.next() { Some(d) => d, None => return false };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
 // ── Valid tiers ───────────────────────────────────────────────────────────────
 
 /// Tiers that a user account may hold.
@@ -227,6 +238,9 @@ async fn auth_register(
 
     let email = email.to_lowercase();
     let email = email.trim().to_string();
+    if !is_valid_email(&email) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid email address." }))).into_response();
+    }
 
     // ── Hash password (blocking) ──────────────────────────────────────────────
     let password_hash = match tokio::task::spawn_blocking(move || bcrypt::hash(password, 12)).await {
@@ -253,7 +267,13 @@ async fn auth_register(
         .await;
 
     let inserted_id = match insert_result {
-        Ok(r)  => r.inserted_id.as_object_id().unwrap().to_hex(),
+        Ok(r)  => match r.inserted_id.as_object_id() {
+            Some(oid) => oid.to_hex(),
+            None => {
+                eprintln!("[auth/register] insert returned non-ObjectId _id");
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response();
+            }
+        },
         Err(e) if e.to_string().contains("11000") => {
             return (StatusCode::CONFLICT, Json(json!({ "error": "Email already in use." }))).into_response();
         }
@@ -288,7 +308,7 @@ async fn auth_register(
         role:         "user",
         tier:         "regular",
         tv:           0,
-        account_type: Some("user"), // always set; backfilled for old accounts by migration 007
+        account_type: "user",
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => { eprintln!("[auth/register] jwt sign: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
@@ -341,6 +361,9 @@ async fn auth_login(
 
     let email = email.to_lowercase();
     let email = email.trim().to_string();
+    if !is_valid_email(&email) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid email address." }))).into_response();
+    }
 
     let user = match state.db
         .collection::<UserDoc>("users")
@@ -414,7 +437,9 @@ async fn not_found() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let cfg = Config::from_env().unwrap_or_else(|e| {
         eprintln!("{e}");

@@ -6,6 +6,31 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-17 — .unwrap() + email validation + logging in auth-service
+
+**Status:** ✅ Complete (2026-03-19).
+
+### What was implemented
+
+**auth-service:**
+- Added `is_valid_email()` helper; register and login now reject malformed addresses with 400 `"Invalid email address."`.
+- Replaced `r.inserted_id.as_object_id().unwrap()` with an explicit error branch — no panic on unexpected DB `_id` type.
+- Fixed pre-existing compile error: `account_type: Some("user")` → `"user"` in register handler (field type changed to `&str` in an earlier common refactor but auth-service wasn't updated).
+- `tracing_subscriber::fmt::init()` → `tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init()` — honours `RUST_LOG`.
+
+**users-service:**
+- Added `is_valid_email()` helper; `PUT /users/me` email-update path now validates format before writing to DB.
+- Same tracing fix as above.
+
+**All other Rust services (blocks, favourites, gateway, location, messages, migration, tiers):**
+- Same tracing fix — all 9 services now respect `RUST_LOG`.
+
+### Backend note
+
+Set `RUST_LOG=warn` (or `info`, `error`, `debug`) on each Railway service to control log verbosity. No other backend action required.
+
+---
+
 ## T-07a — Settings Page
 
 **Status:** ✅ Complete (2026-03-18).
