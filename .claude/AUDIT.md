@@ -1,141 +1,55 @@
-# bOOmbOOm.NOW! — Code & Security Audit
+# bOOmbOOm.NOW! — Audit
 
-**Date:** 2026-03-18 (last updated)
+**Last updated:** 2026-03-19
 **Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
 **Auditor:** Claude (claude-sonnet-4-6)
-**Note:** Carries forward postponed items from AUDIT-20260310-1425.md
+
+**This file covers:** Infrastructure · Maintainability · Usability · Owner notes / open questions
+**See also:** AUDIT_SECURITY.md · AUDIT_PERFORMANCE.md · AUDIT_DONE.md (resolved items)
 
 ---
 
-## Executive Summary
+## 1. Infrastructure
 
----
-
-## 1. Security Bugs
-
-### 1.1 Plain password in a POST request
-
-***Note:*** added by project owner (12 March 2026)
-
-```json
-[API] → POST https://boom.up.railway.app/api/auth/login
-{
-    email: ' {plain email address}',
-    password: '{plain password}',
-    guestId: '{guest id}'
-}
-
-//found /ui/scripts/api.js
-
-login({ email, password, guestId }) {
-    return apiFetch('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, guestId }),
-    });
-  },
-```
-
-Why is that? Hash the email address and password right in the client. The app doesn't have any purpose for a plain text eMail address. Find the issue. Show me the concrete code snippet. If `/services` encrypt or hash data a second time, that's ok. I do not want any unencrypted/unhashed communication between server and clients (later also encrypt location data). Look into SRP or even better OPAQUE / PAKE to solve this. Include items 6.* before contemplating about this ticket. Could we implement OPAQUE if we would port the auth-service to rust as a test run?
-
-On account creation the eMail should be hashed, just like the password, sent and stored in the db.
-
-The eMail address and password should always be hashed right after it was added into the text field (of the account creation, login-modal).
-
-**Sequencing decision (2026-03-16):** OPAQUE is deferred until `auth-service` is
-ported to Rust (T-04b). `opaque-ke` (Rust) is production-ready; no equivalent
-exists for JS. Implementing OPAQUE in JS now would require a full re-implementation
-once the Rust port lands. T-04a (tiers-service) establishes the Rust infra first;
-T-04b (auth-service + OPAQUE) follows and unblocks this ticket and T-05b (block
-note encryption). This ticket remains HIGH priority but is intentionally blocked
-on T-04b.
-
----
-
-### 1.2 Gateway send-rate limit bypassable at messages-service level
-
-**File:** `services/gateway/src/main.rs` (`_wsSendCounts`), `services/messages-service/src/main.rs`
-
-The per-user send rate (10 msg / 10 s) is enforced only at the WebSocket layer
-in the gateway. The messages-service HTTP endpoint has no independent rate
-limit. A client with a valid JWT hitting the HTTP endpoint directly (or via
-multiple tabs) can exceed the per-user budget. messages-service needs its own
-per-userId in-memory rate check.
-
-**Priority:** Medium — T-05 (blocking) is now live which reduces abuse risk, but the HTTP bypass remains.
-
----
-
-### 1.4 Admin can modify their own tier and role (self-promotion guard missing)
-
-✅ **Resolved (2026-03-19):** Guard implemented in `services/users-service/src/main.rs`. Both `PATCH /admin/users/:id/tier` and `PATCH /admin/users/:id/role` return `403 SELF_MODIFICATION_FORBIDDEN` when the requesting admin's `sub` matches the target `id` and `SELF_PROMOTION_GUARD=1` is set in Railway env vars. Guard is inactive when the var is absent or `0`.
-
----
-
-### 1.3 JWT tier claim goes stale after admin tier change
-
-✅ **Resolved (2026-03-16, T-01):** Admin tier/role change bumps `tokenVersion`.
-All services reject the old JWT with `TOKEN_REVOKED` on the next request,
-forcing the user to re-login and receive a token with the updated claim.
-
----
-
-## 2. Infrastructure
-
-### 2.1 migration-service not running — root cause: Railway disk too small
+### 1.1 migration-service not running — root cause: Railway disk too small
 
 **Date:** 2026-03-17 (updated 2026-03-18)
 **Files:** `services/migration-service/src/main.rs` (Rust port),
 `services/gateway/src/main.rs` (calls `MIGRATION_SERVICE_URL` on boot)
 
-The migration-service itself is working correctly (responds, connects to MongoDB,
-reports the failure). The root cause is the Railway MongoDB volume: total disk is
-only **454 MB**, with 222 MB used by the OS and MongoDB process overhead, leaving
-232 MB free. MongoDB's WiredTiger engine requires a **minimum of 524 MB free** for
-write operations (index creation, inserts). This requirement exceeds the available
-free space and cannot be resolved by deleting data — the MongoDB database contains
-only ~614 KB of data across all collections.
+The migration-service itself is working correctly (responds, connects to MongoDB, reports the failure). The root cause is the Railway MongoDB volume: total disk is only **454 MB**, with 222 MB used by the OS and MongoDB process overhead, leaving 232 MB free. MongoDB's WiredTiger engine requires a **minimum of 524 MB free** for write operations (index creation, inserts). This requirement exceeds the available free space and cannot be resolved by deleting data — the MongoDB database contains only ~614 KB of data across all collections.
 
-**Confirmed 2026-03-18:** All collections inspected via `db.getCollectionNames()`.
-No bloated collections. The disk constraint is structural, not data-related.
+**Confirmed 2026-03-18:** All collections inspected via `db.getCollectionNames()`. No bloated collections. The disk constraint is structural, not data-related.
 
 **Attempted workarounds (all failed — 2026-03-18):**
-- `/migrate/reset` endpoint: same OutOfDiskSpace error (drop operations succeed,
-  but `createIndex` is a write op and is blocked by the same threshold).
-- Standalone Bun script connecting directly via `MONGO_URI`: identical error.
-  MongoDB code 14031 blocks **all** write operations below 524 MB free — there is
-  no way to run migrations against this instance without first freeing disk space
-  at the filesystem level.
+- `/migrate/reset` endpoint: same OutOfDiskSpace error (drop operations succeed, but `createIndex` is a write op and is blocked by the same threshold).
+- Standalone Bun script connecting directly via `MONGO_URI`: identical error. MongoDB code 14031 blocks **all** write operations below 524 MB free — there is no way to run migrations against this instance without first freeing disk space at the filesystem level.
 
 **Only remaining resolution: migrate MongoDB to Atlas free tier (M0).**
-- Atlas manages storage independently; WiredTiger journal overhead is not charged
-  against the 512 MB data limit.
+- Atlas manages storage independently; WiredTiger journal overhead is not charged against the 512 MB data limit.
 - The dataset is ~614 KB / 53 documents — trivially small.
 - Update `MONGO_URI` in Railway env vars for all services.
 - Migration-service will apply all 6 pending migrations on next gateway boot.
 - The `/migrate/reset` endpoint is available for a clean slate after migration.
 
 **Consequences while not running:**
-- MongoDB TTL indexes for `messages`, `locations`, `sessions` not applied — expired
-  data not auto-purged at DB level (privacy regression).
+- MongoDB TTL indexes for `messages`, `locations`, `sessions` not applied — expired data not auto-purged at DB level (privacy regression).
 - Migration `003_blocks_indexes` not enforced — duplicate block entries possible.
-- Migrations `004_tiers_seed` / `005_rename_developer_tier` / `006_email_index_sparse`
-  not applied.
+- Migrations `004_tiers_seed` / `005_rename_developer_tier` / `006_email_index_sparse` not applied.
 
-**Priority:** HIGH — privacy regression in a privacy-by-design app.
+**Priority:** HIGH — privacy regression in a privacy-by-design app. Tracked as T-10.
 
 ---
 
-### 2.0 MongoDB disk space — superseded by 2.1
+### 1.0 MongoDB disk space — superseded by 1.1
 
 **Date:** 2026-03-16 (superseded 2026-03-18)
 
-Merged into 2.1. Root cause confirmed: Railway volume is structurally too small
-(454 MB total). Upgrading the plan to 1 GB is not available on the current Railway
-tier. Resolution: migrate to MongoDB Atlas (see 2.1).
+Merged into 1.1. Root cause confirmed: Railway volume is structurally too small (454 MB total). Upgrading the plan to 1 GB is not available on the current Railway tier. Resolution: migrate to MongoDB Atlas (see 1.1).
 
 ---
 
-### 2.2 Sessions TTL index must be dropped and recreated after guest-TTL change
+### 1.2 Sessions TTL index must be dropped and recreated after guest-TTL change
 
 **Date:** 2026-03-18
 **File:** MongoDB `sessions` collection
@@ -154,9 +68,9 @@ The gateway will recreate it with `expireAfterSeconds: 1200` on next boot.
 
 ---
 
+## 2. Maintainability
 
-
-### 3.1 `haversine_distance` duplicated across three Rust services
+### 2.1 `haversine_distance` duplicated across three Rust services
 
 ***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
@@ -166,52 +80,9 @@ Three independent copy-paste implementations of the same function. If a precisio
 
 **Context:** Each service is intentionally self-contained. MongoDB geospatial indexes are unavailable (free tier RAM limits), so haversine-in-Rust is the correct approach for distance filtering. Consolidation deferred.
 
-### 3.2 Tier badge in /profile has hard-coded values
-
-✅ **Resolved (2026-03-16, T-03):** `GET /api/tiers/:tier/info` added. Profile badge
-now fetches label, cls, and nearbyRadiusM dynamically from tiers-service. Also fixed
-a pre-existing bug where location-service had guest radius at 23,000 m instead of 500 m.
-
 ---
 
-## 4. Performance
-
-### 4.1 Send-rate bucket is in-process — not safe for multi-instance gateway
-
-***Postponed by project owner (12 March 2026):*** Postponed until further notice.
-
-**File:** `services/gateway/src/main.rs` (in-memory rate bucket)
-
-The per-user send-rate bucket is stored in-process:
-
-```js
-const _wsSendCounts = new Map(); // userId -> { count, connections, timer }
-```
-
-If the gateway scales to multiple instances, two connections from the same user on different instances will have separate buckets, doubling the effective send rate. As long as Railway runs a single gateway instance this is fine, but it's worth noting before horizontal scaling.
-
-**Context:** Redis is not currently available. Adding Redis is planned when the app scales, at which point the bucket can be migrated to a shared store (e.g. Redis `INCR` with a TTL key).
-
----
-
-### 4.2 Notification poll scales linearly with active users
-
-**File:** `ui/scripts/app.js` (NotifModule), `services/favourites-service/src/main.rs`
-
-Each logged-in user polls `GET /api/notifications` every **2 minutes**
-(`POLL_INTERVAL_MS = 2 * 60 * 1000`). Negligible at current scale (< 1 000
-concurrent). At larger scale, push delivery via the existing message WebSocket
-would be more efficient. Acceptable for now.
-
----
-
-## 5. Usability
-
----
-
-## 6. Maintainability
-
-### 6.1 Core utilities duplicated across all Rust services
+### 2.2 Core utilities duplicated across all Rust services
 
 ***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
@@ -223,55 +94,32 @@ The following utilities are copy-pasted across services. The `common` crate (`se
 |---|---|
 | `verify_token` | messages, location, favourites, blocks, users — each service re-verifies the JWT independently |
 | `require_service_token` | all Rust services |
-| `haversine_distance` | gateway, messages-service, location-service — see 3.1 |
+| `haversine_distance` | gateway, messages-service, location-service — see 2.1 |
 
 T-08 Phase 2 (authority service + gateway-centralised verification) will eliminate `verify_token` duplication entirely. Remaining items deferred until T-08 is complete.
 
-### 6.3 Auth validation is duplicated across every service (root cause of the admin-role bug cascade)
+---
+
+### 2.3 Auth validation duplicated per-service (root cause of the admin-role bug cascade)
 
 **Date:** 2026-03-16 (updated 2026-03-18: all services now in Rust)
 **Files:** `services/messages-service/src/main.rs`, `services/favourites-service/src/main.rs`, `services/blocks-service/src/main.rs`, `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
 
-**What happened.**
-Adding a second privileged role (`admin`) required changes in 6 separate files. The bug had *three* distinct failure layers, all hit in sequence:
+Adding a second privileged role (`admin`) required changes in 6 separate files. The bug had three distinct failure layers, all hit in sequence:
 
-1. **Frontend layout guard** (`default.html` inline `<script>`) — hard-coded `payload.role === 'user'`, rejecting admin tokens before the page even loaded. Redirected to `/` immediately.
+1. **Frontend layout guard** (`default.html` inline `<script>`) — hard-coded `payload.role === 'user'`, rejecting admin tokens before the page even loaded.
 2. **Backend `verifyToken` functions** — every service independently checks `payload.role !== 'user'` and returns 403 `REGISTERED_REQUIRED`. Four services had this guard.
 3. **`issueUserToken` in `users-service.js`** — hard-coded `role: 'user'`, silently downgrading the admin to a regular user token after a password change.
 
-None of these components communicates with each other. Each enforces its own auth rules from a local copy-paste of `verifyToken`. Changing the role model (any new role, any new field) requires finding and updating every copy.
+**Root cause:** No single point of auth enforcement. The gateway already decodes the JWT for tier checks but does not validate role or tokenVersion — it passes the raw `Authorization` header to each service.
 
-**Why the design ended up this way.**
-The microservice architecture was chosen to allow services to be deployed and scaled independently. Each service is intentionally self-contained (no shared library, no private package registry — see 6.1). The consequence is that shared logic like token validation must be replicated verbatim. This is a well-known microservice trade-off and was noted in 6.1 as deferred. The admin role was added *after* the pattern was established, so the role check in every existing `verifyToken` was never updated.
+**Suggested solution:** Centralise auth validation in the gateway (inject `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers; services read headers instead of re-verifying JWT). Role-model changes would then touch exactly **one file** (gateway). Tracked as T-08 Phase 2.
 
-**Root cause (design).**
-There is no single point of auth enforcement. The gateway (`services/gateway/src/main.rs`) already sits in front of all services and already decodes the JWT for tier checks. But it does not validate role or tokenVersion — it passes the raw `Authorization` header to each service. Each Rust service therefore re-implements the same auth logic independently.
-
-**Suggested solution — centralise auth validation in the gateway.**
-
-The gateway already:
-- Holds the JWT secret
-- Decodes the token for tier checks
-- Forwards the raw `Authorization` header to services
-
-The minimal change: add a `verifyUserToken` step in the gateway proxy that validates signature + role + tokenVersion, then injects `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers. Services would read these headers instead of re-verifying the JWT. They are already protected from external callers by `X-Service-Token`.
-
-Benefits:
-- Role-model changes touch exactly **one file** (gateway).
-- tokenVersion DB check runs in one place (with one cache).
-- Individual services become thinner; no JWT dependency.
-
-**Prerequisites / cost:**
-- Medium refactor: gateway `proxy()` helper grows a `verifyUserToken` step; each service's `verifyToken` is replaced by a header read.
-- The frontend layout guard is a separate concern (client-side gate for UX); must stay but should be the *only* client-side check, not duplicated.
-- Requires careful handling of routes that allow guests (header `X-Auth-Role: guest` for unauthenticated requests).
-- Token: ~1–2 days for a careful port + test across all services.
-
-**Priority:** MEDIUM. The immediate bug is fixed. The risk persists for any future role or field change. **T-08** tracks the full architectural resolution (authority service + gateway centralisation).
+**Priority:** MEDIUM. The immediate bug is fixed. The risk persists for any future role or field change.
 
 ---
 
-### 6.2 `app.js` mixes four distinct module concerns
+### 2.4 `app.js` mixes four distinct module concerns
 
 **File:** `ui/scripts/app.js`
 
@@ -279,19 +127,52 @@ The file contains the main app shell, `GeoModule`, `LockModule`, and `NotifModul
 
 ---
 
-## 7. Other Tickets (new features, evaluations, questions)
+### 2.5 No explicit WebSocket disconnect on message-page navigation
 
-### 7.1 TTL for inactive users
+**File:** `ui/scripts/messages.js`
+
+The `beforeunload` handler sends `{ type: 'view', userId: null }` to clear the thread subscription, but the WebSocket itself is not explicitly closed on navigation. The server's `onclose` handler clears timers and releases the send bucket. The browser closes the WS on unload anyway, but there is no explicit `_msgWs.close()` call — inconsistent with the location WS (`closeLocWS()` is called on logout).
+
+**Priority:** LOW — no functional impact; cosmetic inconsistency.
+
+---
+
+## 3. Usability
+
+### 3.1 Users enter password twice in the cold login → messages flow
+
+**File:** `ui/scripts/auth.js`, `ui/scripts/crypto-worker.js`
+
+Login authenticates the user (issues JWT) but does **not** load the E2EE crypto keys into the worker. When the user navigates to `/messages/`, `requireUnlocked()` finds `BBMCrypto.isUnlocked() === false` and shows the lock screen — requiring the password a second time (PBKDF2 derivation, ~1 s, plus a network round-trip for the encrypted key blob).
+
+**Net result: two password entries in the typical "log in → read messages" flow.**
+
+**Mitigating factors:**
+- SharedWorker on Chrome/Firefox/Edge: keys survive full-page navigations within the same browser session. Double-entry only happens on the first access after a cold login.
+- Safari / iOS: regular Worker is destroyed on every page navigation — password required on every page load that touches messages.
+- Inactivity lock: intentional (3 min idle / 30 s hidden tab).
+
+**Possible improvement (no security downgrade):** After a successful login, automatically attempt to unlock the crypto keys using the password the user just typed — without requiring a second prompt. The password is available in-memory at that moment. The lock screen on inactivity/tab-hide would still protect keys at rest.
+
+**Priority:** MEDIUM — real friction for returning users, especially on Safari.
+
+---
+
+## 4. Owner Notes / Open Questions
+
+### 4.1 TTL for inactive users
 
 ***Note:*** added by project owner (12 March 2026)
 
-Related to 1.1.
+Related to SEC-1.1.
 
 I want to follow a (lost password - lost access)-approach. If a user forgets the password, there should be no way to recover the account, set a new password, being able to login, (and) or delete the account or read existing messages.
 
 Therefore, inactive users should be auto-deleted after 90 days. I prefer a TTL initially set on account creation and updated on each login.
 
-### 7.2 Evaluate stricter data protection feasibility
+---
+
+### 4.2 Evaluate stricter data protection feasibility
 
 ***Note:*** added by project owner (12 March 2026)
 
@@ -302,26 +183,28 @@ Evaluate in which way it's feasible to:
 - encrypt geo location data on the client side
 - being transmitted from a client (user) in an encrypted fashion
 - stored only encrypted in the backend (mongodb)
-- geo location sent out encrypted to all other `/location/nearby..`)
+- geo location sent out encrypted to all other `/location/nearby..`
 - decrypted by various clients (users) with different private keys.
 
-### 7.3 ✅ Port of all `/services` to Rust — complete (2026-03-17)
+---
 
-All services ported. See T-04 in TICKETS_DONE.md. migration-service intentionally remains the only exception (Node.js, by design).
-
-### 7.4 Question: Is there a secure way to prove that the running service matches the public repo?
+### 4.3 Question: Is there a secure way to prove the running service matches the public repo?
 
 ***Note:*** added by project owner (12 March 2026)
 
 I want to give users a way to validate the code that runs the services, by matching a signature of the binary or in another way. Please elaborate on the feasible options.
 
-### 7.5 Simple admin UI
+---
+
+### 4.4 Simple admin UI
 
 ***Note:*** added by project owner (14 March 2026)
 
 I need an admin UI, in which I can as a developer change the current profile information (including current tier) of a specific user. It should look similar to the /profile page with the search bar. I would be able to search for a user using the same filters, then a click on a user entry expands the profile information. If I change the tier make sure that this change is effectively working (token generation etc) and not just changing the tier string in the db of the user.
 
-### 7.6 Admin UI > Adding, changing, removing tiers
+---
+
+### 4.5 Admin UI > Adding, changing, removing tiers
 
 ***Note:*** added by project owner (14 March 2026)
 
@@ -329,21 +212,16 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 
 ---
 
-## 8. Summary Table
+## 5. Summary Table
 
-| Status | # | Area | Severity | Finding |
+| Status | ID | Area | Severity | Finding |
 |---|---|---|---|---|
-| 🔲 | 1.1 | Security | HIGH | Plain password/email in POST request — needs OPAQUE/PAKE |
-| 🔲 | 1.2 | Security | MEDIUM | Gateway send-rate bypassable at messages-service level |
-| ✅ | 1.3 | Security | LOW (future) | JWT tier claim stale after admin tier change — resolved T-01 |
-| ✅ | 1.4 | Security | LOW | Admin self-promotion guard — resolved 2026-03-19, env-gated via SELF_PROMOTION_GUARD=1 |
-| 🔲 | 2.1 | Infrastructure | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
-| ~~🔲~~ | ~~2.0~~ | ~~Infrastructure~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by 2.1 |
-| 🔲 | 3.1 | Bug | LOW | haversineDistance copy-pasted in 3 files (divergence risk) |
-| ✅ | 3.2 | Bug | LOW | Tier badge in /profile has hard-coded values — resolved T-03 |
-| 🔲 | 4.1 | Performance | LOW | Send-rate bucket is in-process — not safe for multi-instance |
-| 🔲 | 2.2 | Infrastructure | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
-| 🔲 | 4.2 | Performance | LOW | Notification poll scales linearly with active users |
-| 🔲 | 6.1 | Maintainability | MEDIUM | Core utilities (verifyToken, issueUserToken, haversine) duplicated |
-| 🔲 | 6.2 | Maintainability | LOW | app.js mixes four module concerns |
-| 🔲 | 6.3 | Maintainability | MEDIUM | Auth validation duplicated per-service — role changes require 6+ file edits |
+| 🔲 | 1.1 | Infrastructure | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
+| ~~🔲~~ | ~~1.0~~ | ~~Infrastructure~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by 1.1 |
+| 🔲 | 1.2 | Infrastructure | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
+| ⏸️ | 2.1 | Maintainability | LOW | haversineDistance copy-pasted in 3 Rust services (divergence risk, deferred) |
+| 🔲 | 2.2 | Maintainability | MEDIUM | Core utilities (verifyToken, haversine) duplicated — deferred on T-08 Phase 2 |
+| 🔲 | 2.3 | Maintainability | MEDIUM | Auth validation duplicated per-service — role changes require 6+ file edits (T-08 Phase 2) |
+| 🔲 | 2.4 | Maintainability | LOW | app.js mixes four module concerns |
+| 🔲 | 2.5 | Maintainability | LOW | No explicit WS close on message-page navigation |
+| 🔲 | 3.1 | Usability | MEDIUM | Users enter password twice in cold login → messages flow |
