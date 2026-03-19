@@ -22,7 +22,7 @@ wrap-up procedure.
 
 Run this on every session-start signal, in order:
 
-1. Read `.claude/AUDIT.md`. Do not read the rest of the codebase speculatively.
+1. Read `.claude/AUDIT.md`, `.claude/AUDIT_SECURITY.md`, and `.claude/AUDIT_PERFORMANCE.md`. Do not read the rest of the codebase speculatively.
 2. Read `.claude/TICKETS.md` for pending tickets relevant to this session.
 3. Greet the owner, present the last audit summary, and ask what to do.
 
@@ -76,8 +76,11 @@ without asking for permission:
    prevent that friction in future sessions, apply it now. Log every change
    made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
    date (see Persistent Files).
-3. Update `.claude/AUDIT.md` — add new findings, remove resolved items, update
-   existing entries.
+3. Update audit files — add new findings to the correct file, move resolved items
+   to `AUDIT_DONE.md`, update existing entries:
+   - `.claude/AUDIT_SECURITY.md` — security bugs and vulnerabilities
+   - `.claude/AUDIT_PERFORMANCE.md` — performance issues
+   - `.claude/AUDIT.md` — general technical debt, architectural concerns, deferred decisions
 4. Update `.claude/TICKETS.md` — move completed tickets/phases to
    `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
    session.
@@ -91,10 +94,23 @@ without asking for permission:
 
 ## Persistent Files
 
-### `.claude/AUDIT.md` — Claude's technical log
-Contains: security bugs, performance issues, architectural debt, deferred
-decisions, known risks. You are the owner. Add, remove, or edit entries any
-time without permission. Do not put feature requests or roadmap items here.
+### `.claude/AUDIT.md` — General technical log
+Contains: architectural debt, deferred decisions, known risks, maintainability
+concerns. You are the owner. Add, remove, or edit entries any time without
+permission. Do not put feature requests or roadmap items here.
+
+### `.claude/AUDIT_SECURITY.md` — Security log
+Contains: security bugs, vulnerabilities, auth/privacy concerns. File
+separately from AUDIT.md so security issues are never buried. Same ownership
+rules as AUDIT.md.
+
+### `.claude/AUDIT_PERFORMANCE.md` — Performance log
+Contains: performance bottlenecks, slow queries, inefficient patterns. File
+separately for the same reason. Same ownership rules as AUDIT.md.
+
+### `.claude/AUDIT_DONE.md` — Resolved audit items archive
+Contains: resolved findings from any audit file. Move items here when fixed —
+never delete them. Note which file they came from and when they were resolved.
 
 ### `.claude/TICKETS.md` — Feature backlog
 Contains: planned features, postponed work, architectural proposals,
