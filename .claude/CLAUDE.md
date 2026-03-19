@@ -72,6 +72,14 @@ After every commit and push, always report — even if there is nothing to repor
 - **Expected behavior:** one sentence describing what is now different or new,
   if not obvious from the commit message or ticket title (e.g. *"User documents
   in the `users` collection now include a `preferences` sub-object."*).
+- **Reflect.** Identify anything that slowed the session down or caused
+   friction: unclear rules, missing context, a workflow step that broke, a
+   ticket structure that wasn't useful. Be brief and honest. You may ask the
+   Project Owner about their perspective if uncertain.
+- **Improve.** If a change to CLAUDE.md or the ticket file structure would
+   prevent the identified friction in future sessions, apply it now. Log every change
+   made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
+   date and tag `CHANGE`or `REFLECTION` (see Persistent Files).
 
 Do NOT remind about redeployment — services are pulled from GitHub and deployed
 automatically.
@@ -83,23 +91,15 @@ automatically.
 When the owner signals a wrap-up (see Definitions), run these steps in order
 without asking for permission:
 
-1. **Reflect.** Identify anything that slowed the session down or caused
-   friction: unclear rules, missing context, a workflow step that broke, a
-   ticket structure that wasn't useful. Be brief and honest.
-2. **Improve.** If a change to CLAUDE.md or the ticket file structure would
-   prevent that friction in future sessions, apply it now. Log every change
-   made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
-   date (see Persistent Files).
-3. Update audit files — add new findings to the correct concern file, move resolved items
+1. Update audit files — add new findings to the correct concern file, move resolved items
    to `AUDIT_DONE.md`, update existing entries, and **keep the global summary table in
    `AUDIT.md` in sync** (update the status cell for any item that changed). File names
    and their concerns are listed in the Persistent Files section below.
-4. Update `.claude/TICKETS.md` — move completed tickets/phases to
+2. Update `.claude/TICKETS.md` — move completed tickets/phases to
    `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
    session.
-5. Commit all outstanding changes to the session branch, including all updated
-   files.
-6. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
+3. Commit all outstanding changes to the session branch, including all updated files.
+4. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
 
 ---
 
