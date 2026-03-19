@@ -86,9 +86,7 @@ without asking for permission:
    session.
 5. Commit all outstanding changes to the session branch, including all updated
    files.
-6. Create a PR targeting `dev` with a short summary of everything done this
-   session.
-7. Inform the owner the PR is ready.
+6. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
 
 ---
 
