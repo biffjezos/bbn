@@ -954,6 +954,10 @@ async fn admin_patch_tier(
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
     }
 
+    if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own tier.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
+    }
+
     let oid = match safe_object_id(&id) {
         Some(o) => o,
         None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid userId." }))).into_response(),
@@ -997,6 +1001,10 @@ async fn admin_patch_role(
 ) -> impl IntoResponse {
     if claims.role != "admin" {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+
+    if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own role.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
     }
 
     let oid = match safe_object_id(&id) {
