@@ -98,23 +98,23 @@ Cross-concern items that don't fit any single concern file also go here.
 You are the owner. Keep the global summary table in sync whenever any concern file changes.
 Do not put feature requests or roadmap items here.
 
-### `.claude/AUDIT_INFRASTRUCTURE.md` — Infrastructure log
+### `.claude/AUDIT_INFRASTRUCTURE.md` — Infrastructure log (`INFRA-` prefix)
 Contains: Railway/MongoDB environment issues, service dependencies, deployment constraints,
 one-time backend operations required. Same ownership rules as AUDIT.md.
 
-### `.claude/AUDIT_MAINTAINABILITY.md` — Maintainability log
+### `.claude/AUDIT_MAINTAINABILITY.md` — Maintainability log (`MAINT-` prefix)
 Contains: code structure issues, duplication, architectural debt, patterns that complicate
 future changes. Same ownership rules as AUDIT.md.
 
-### `.claude/AUDIT_USABILITY.md` — Usability log
+### `.claude/AUDIT_USABILITY.md` — Usability log (`UX-` prefix)
 Contains: user-facing friction, UX issues, interaction flows that degrade the user experience.
 Same ownership rules as AUDIT.md.
 
-### `.claude/AUDIT_SECURITY.md` — Security log
+### `.claude/AUDIT_SECURITY.md` — Security log (`SEC-` prefix)
 Contains: security bugs, vulnerabilities, auth/privacy concerns. Filed
 separately so security issues are never buried. Same ownership rules as AUDIT.md.
 
-### `.claude/AUDIT_PERFORMANCE.md` — Performance log
+### `.claude/AUDIT_PERFORMANCE.md` — Performance log (`PERF-` prefix)
 Contains: performance bottlenecks, slow queries, inefficient patterns, scaling concerns.
 Filed separately for the same reason. Same ownership rules as AUDIT.md.
 
@@ -141,10 +141,13 @@ Rules for moving:
 - Read TICKETS_DONE.md only when you need historical context for a specific
   ticket — not on session start, not speculatively.
 
-### `.claude/CHANGELOG.md` — CLAUDE.md change history
-One line per change, format: `YYYY-MM-DD — <what changed and why>`.
-Append during wrap-up whenever CLAUDE.md or the persistent file structures are
-modified. Never edit or remove existing entries.
+### `.claude/CHANGELOG.md` — Change history and reflections
+Append an entry during every wrap-up. Two entry types:
+- **CHANGE:** a modification to CLAUDE.md or persistent file structure — what changed and why.
+- **REFLECTION:** a mistake or friction from the session — what went wrong and what rule was added or changed to prevent recurrence.
+
+Format: `YYYY-MM-DD — [CHANGE|REFLECTION]: <description>`.
+Never edit or remove existing entries.
 
 ---
 

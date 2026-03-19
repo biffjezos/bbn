@@ -1,6 +1,10 @@
 # CLAUDE.md — Change History
 
-One line per change. Never edit or remove existing entries.
+Two entry types:
+- **CHANGE:** a modification to CLAUDE.md or persistent file structure
+- **REFLECTION:** a mistake or friction identified during wrap-up; what it was and what rule was added or changed to prevent recurrence
+
+Never edit or remove existing entries.
 
 ---
 
@@ -11,3 +15,6 @@ One line per change. Never edit or remove existing entries.
 2026-03-19 — Split AUDIT.md infrastructure/maintainability/usability sections into AUDIT_INFRASTRUCTURE.md, AUDIT_MAINTAINABILITY.md, AUDIT_USABILITY.md; AUDIT.md is now an index with a global summary table; updated Pre-Session Checklist, Wrap-Up Checklist step 3, and Persistent Files accordingly.
 2026-03-19 — Added INFRA-/MAINT-/UX- prefixes to audit item IDs to match existing SEC-/PERF- convention; updated all concern files, AUDIT.md global summary, and AUDIT_DONE.md.
 2026-03-19 — Removed redundant file list from Wrap-Up Checklist step 3 (already in Persistent Files); removed "See also" nav lines from all concern files.
+2026-03-19 — REFLECTION: Missed applying INFRA-/MAINT-/UX- ID prefixes when splitting audit files, even though SEC-/PERF- were already established as the convention. Owner had to correct it. Fix: added prefix convention to Persistent Files section in CLAUDE.md so it is explicit and cannot be missed again.
+2026-03-19 — CHANGE: Updated CHANGELOG.md description in CLAUDE.md — it now records both CHANGE and REFLECTION entries, not just CLAUDE.md edits; format updated accordingly.
+2026-03-19 — CHANGE: Added ID prefixes (INFRA-, MAINT-, UX-, SEC-, PERF-) explicitly to each audit file description in Persistent Files section.
