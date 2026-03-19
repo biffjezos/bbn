@@ -253,6 +253,10 @@ const Api = {
 
   // ---- Admin --------------------------------------------------
 
+  adminGetConfig() {
+    return apiFetch('/admin/config');
+  },
+
   adminSearchUsers({ q, by, accountType } = {}) {
     const qs = new URLSearchParams();
     if (q           != null && q           !== '') qs.set('q',           q);
