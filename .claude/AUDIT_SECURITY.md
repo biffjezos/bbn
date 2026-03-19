@@ -2,7 +2,6 @@
 
 **Last updated:** 2026-03-19
 **Concern:** Security only.
-**See also:** AUDIT_PERFORMANCE.md · AUDIT.md (infrastructure / maintainability / usability) · AUDIT_DONE.md (resolved items)
 
 ---
 

@@ -5,9 +5,9 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ---
 
-## From AUDIT.md (maintainability, 2026-03-19)
+## From AUDIT_MAINTAINABILITY.md (2026-03-19)
 
-### DONE — 2.1 `haversine_distance` duplicated across three Rust services
+### DONE — MAINT-2.1 `haversine_distance` duplicated across three Rust services
 
 **Original severity:** LOW
 **Resolved:** 2026-03-19 (confirmed in code)
@@ -16,7 +16,7 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ---
 
-### DONE — 2.2 Core utilities (`verify_token`, `require_service_token`) duplicated across services
+### DONE — MAINT-2.2 Core utilities (`verify_token`, `require_service_token`) duplicated across services
 
 **Original severity:** MEDIUM
 **Resolved:** 2026-03-19 (confirmed in code)
@@ -25,7 +25,7 @@ All token utilities are centralised in `services/common/src/auth.rs` as Axum ext
 
 ---
 
-## From AUDIT.md (active audit, 2026-03-18)
+## From AUDIT.md (cross-concern items, 2026-03-18)
 
 ### DONE — JWT tier claim goes stale after admin tier change
 

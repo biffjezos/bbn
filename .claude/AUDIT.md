@@ -1,152 +1,26 @@
-# bOOmbOOm.NOW! — Audit
+# bOOmbOOm.NOW! — Audit Index
 
-**Last updated:** 2026-03-19 (maintainability items verified against codebase)
+**Last updated:** 2026-03-19
 **Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
 **Auditor:** Claude (claude-sonnet-4-6)
 
-**This file covers:** Infrastructure · Maintainability · Usability · Owner notes / open questions
-**See also:** AUDIT_SECURITY.md · AUDIT_PERFORMANCE.md · AUDIT_DONE.md (resolved items)
+---
+
+## Concern Files
+
+Each concern has its own file with full item descriptions and a per-concern summary table. Add new findings to the correct file; cross-concern items or items that don't fit any category go in this file.
+
+- **[AUDIT_INFRASTRUCTURE.md](AUDIT_INFRASTRUCTURE.md)** — Railway/MongoDB environment, service dependencies, deployment constraints, one-time ops required on the backend.
+- **[AUDIT_MAINTAINABILITY.md](AUDIT_MAINTAINABILITY.md)** — Code structure, duplication, architectural debt, patterns that complicate future changes.
+- **[AUDIT_USABILITY.md](AUDIT_USABILITY.md)** — User-facing friction, UX issues, interaction flows that degrade the user experience.
+- **[AUDIT_SECURITY.md](AUDIT_SECURITY.md)** — Security vulnerabilities, auth/privacy concerns, data exposure risks.
+- **[AUDIT_PERFORMANCE.md](AUDIT_PERFORMANCE.md)** — Performance bottlenecks, slow queries, inefficient patterns, scaling concerns.
+
+Resolved items from any file → **[AUDIT_DONE.md](AUDIT_DONE.md)**
 
 ---
 
-## 1. Infrastructure
-
-### 1.1 migration-service not running — root cause: Railway disk too small
-
-**Date:** 2026-03-17 (updated 2026-03-18)
-**Files:** `services/migration-service/src/main.rs` (Rust port),
-`services/gateway/src/main.rs` (calls `MIGRATION_SERVICE_URL` on boot)
-
-The migration-service itself is working correctly (responds, connects to MongoDB, reports the failure). The root cause is the Railway MongoDB volume: total disk is only **454 MB**, with 222 MB used by the OS and MongoDB process overhead, leaving 232 MB free. MongoDB's WiredTiger engine requires a **minimum of 524 MB free** for write operations (index creation, inserts). This requirement exceeds the available free space and cannot be resolved by deleting data — the MongoDB database contains only ~614 KB of data across all collections.
-
-**Confirmed 2026-03-18:** All collections inspected via `db.getCollectionNames()`. No bloated collections. The disk constraint is structural, not data-related.
-
-**Attempted workarounds (all failed — 2026-03-18):**
-- `/migrate/reset` endpoint: same OutOfDiskSpace error (drop operations succeed, but `createIndex` is a write op and is blocked by the same threshold).
-- Standalone Bun script connecting directly via `MONGO_URI`: identical error. MongoDB code 14031 blocks **all** write operations below 524 MB free — there is no way to run migrations against this instance without first freeing disk space at the filesystem level.
-
-**Only remaining resolution: migrate MongoDB to Atlas free tier (M0).**
-- Atlas manages storage independently; WiredTiger journal overhead is not charged against the 512 MB data limit.
-- The dataset is ~614 KB / 53 documents — trivially small.
-- Update `MONGO_URI` in Railway env vars for all services.
-- Migration-service will apply all 6 pending migrations on next gateway boot.
-- The `/migrate/reset` endpoint is available for a clean slate after migration.
-
-**Consequences while not running:**
-- MongoDB TTL indexes for `messages`, `locations`, `sessions` not applied — expired data not auto-purged at DB level (privacy regression).
-- Migration `003_blocks_indexes` not enforced — duplicate block entries possible.
-- Migrations `004_tiers_seed` / `005_rename_developer_tier` / `006_email_index_sparse` not applied.
-
-**Priority:** HIGH — privacy regression in a privacy-by-design app. Tracked as T-10.
-
----
-
-### 1.0 MongoDB disk space — superseded by 1.1
-
-**Date:** 2026-03-16 (superseded 2026-03-18)
-
-Merged into 1.1. Root cause confirmed: Railway volume is structurally too small (454 MB total). Upgrading the plan to 1 GB is not available on the current Railway tier. Resolution: migrate to MongoDB Atlas (see 1.1).
-
----
-
-### 1.2 Sessions TTL index must be dropped and recreated after guest-TTL change
-
-**Date:** 2026-03-18
-**File:** MongoDB `sessions` collection
-
-Guest session TTL was corrected from 2 h to 20 min (2026-03-18). The TTL index on `sessions.createdAt` still carries the old `expireAfterSeconds: 7200` value — MongoDB silently ignores `createIndex()` when an index with the same key pattern already exists, so the new value (1200 s) will not take effect until the old index is dropped.
-
-**One-time action required (Railway MongoDB shell or Compass):**
-
-```
-db.sessions.dropIndex("createdAt_1")
-```
-
-The gateway will recreate it with `expireAfterSeconds: 1200` on next boot.
-
-**Priority:** LOW — guest sessions currently expire after 2 h instead of 20 min. No privacy regression (they do expire); just looser than intended.
-
----
-
-## 2. Maintainability
-
-### 2.1 `haversine_distance` — resolved, see AUDIT_DONE.md
-
-### 2.2 Core utilities duplication — resolved, see AUDIT_DONE.md
-
----
-
-### 2.3 Per-handler role guards still scattered across services
-
-**Date:** 2026-03-16 (updated 2026-03-19)
-**Files:** `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
-
-**What is now resolved:** Token *verification* is fully centralised — `AuthToken`, `RequireRegistered`, `ServiceToken`, and `AdminUser` Axum extractors in `services/common/src/auth.rs` handle all JWT validation. No per-service re-implementations remain. The original three-layer bug (frontend guard, backend verifyToken, issueUserToken) is fixed.
-
-**What remains:** Individual *role guards* inside handler bodies are still per-service (e.g., `claims.role != "admin"` repeated in `users-service` for every admin endpoint; gateway has its own `admin_guard()` / `manager_guard()` helpers). The gateway does **not** inject `X-Auth-Role` or similar trusted headers — it passes the raw `Authorization` header downstream. Adding a new role still requires auditing handler-level checks across multiple files.
-
-**Suggested resolution:** T-08 Phase 2 — gateway injects `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers; services drop JWT re-verification and read headers. Role-model changes would then require only one file.
-
-**Priority:** LOW — token verification is solid; the remaining scatter is a future-maintenance risk, not an active bug.
-
----
-
-### 2.4 `app.js` mixes six distinct module concerns
-
-**Date updated:** 2026-03-19 (corrected count)
-**File:** `ui/scripts/app.js`
-
-The file contains **6 IIFEs** with distinct responsibilities: Debug console (~24 lines), Warm-up (~12 lines), Main App shell (~336 lines), `GeoModule` (~282 lines), `LockModule` (~183 lines), and `NotifModule` (~117 lines). Each wraps itself in an IIFE, which helps, but the entire file (~990 lines) is loaded on every page. As the app grows, splitting into separate files (Jekyll supports `extra_js`) would improve navigation and testability.
-
----
-
-### 2.6 Per-service Config struct duplication — acceptable, not worth refactoring now
-
-**Date:** 2026-03-19
-**Files:** `services/*/src/main.rs` (all 9 services)
-
-Each service defines its own `Config` struct with a `from_env()` impl. All share a common core (`port`, `jwt_secret`, `service_secret`, `mongo_uri`, `db_name`); some add service-specific URL fields (`fav_service_url`, `tiers_service_url`, etc.).
-
-**Assessment:** The duplication is intentional and appropriate for independent microservices. Rust has no inheritance; the alternatives (shared `common` crate, proc macros) add build coupling and complexity without meaningful benefit at the current scale (~30 lines per service). The `from_env()` impls are not identical — port defaults and required fields differ per service.
-
-**When this becomes worth revisiting:** If a new standard env var must be added to all services simultaneously (e.g., `OTEL_ENDPOINT` for tracing) and the manual update across 9 files becomes painful, a shared `common::BaseConfig` struct would be justified at that point.
-
-**Priority:** LOW — not a maintenance burden today; reassess at ~15+ services or frequent cross-service config drift.
-
----
-
-### 2.5 No explicit WebSocket disconnect on message-page navigation
-
-**File:** `ui/scripts/messages.js`
-
-The `beforeunload` handler sends `{ type: 'view', userId: null }` to clear the thread subscription, but the WebSocket itself is not explicitly closed on navigation. The server's `onclose` handler clears timers and releases the send bucket. The browser closes the WS on unload anyway, but there is no explicit `_msgWs.close()` call — inconsistent with the location WS (`closeLocWS()` is called on logout).
-
-**Priority:** LOW — no functional impact; cosmetic inconsistency.
-
----
-
-## 3. Usability
-
-### 3.1 Users enter password twice in the cold login → messages flow
-
-**File:** `ui/scripts/auth.js`, `ui/scripts/crypto-worker.js`
-
-Login authenticates the user (issues JWT) but does **not** load the E2EE crypto keys into the worker. When the user navigates to `/messages/`, `requireUnlocked()` finds `BBMCrypto.isUnlocked() === false` and shows the lock screen — requiring the password a second time (PBKDF2 derivation, ~1 s, plus a network round-trip for the encrypted key blob).
-
-**Net result: two password entries in the typical "log in → read messages" flow.**
-
-**Mitigating factors:**
-- SharedWorker on Chrome/Firefox/Edge: keys survive full-page navigations within the same browser session. Double-entry only happens on the first access after a cold login.
-- Safari / iOS: regular Worker is destroyed on every page navigation — password required on every page load that touches messages.
-- Inactivity lock: intentional (3 min idle / 30 s hidden tab).
-
-**Possible improvement (no security downgrade):** After a successful login, automatically attempt to unlock the crypto keys using the password the user just typed — without requiring a second prompt. The password is available in-memory at that moment. The lock screen on inactivity/tab-hide would still protect keys at rest.
-
-**Priority:** MEDIUM — real friction for returning users, especially on Safari.
-
----
-
-## 4. Owner Notes / Open Questions
+## Owner Notes / Open Questions
 
 ### 4.1 TTL for inactive users
 
@@ -200,17 +74,23 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 
 ---
 
-## 5. Summary Table
+## Global Summary Table
 
-| Status | ID | Area | Severity | Finding |
+When a finding is resolved: update the relevant concern file's summary, move the item to AUDIT_DONE.md, and update the row below to ✅.
+
+| Status | ID | Concern | Severity | Finding |
 |---|---|---|---|---|
-| 🔲 | 1.1 | Infrastructure | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
-| ~~🔲~~ | ~~1.0~~ | ~~Infrastructure~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by 1.1 |
-| 🔲 | 1.2 | Infrastructure | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
-| ✅ | 2.1 | Maintainability | LOW | haversineDistance — resolved, single impl in common/src/geo.rs |
-| ✅ | 2.2 | Maintainability | MEDIUM | Core utilities — resolved, all in common/src/auth.rs extractors |
-| 🔲 | 2.3 | Maintainability | LOW | Per-handler role guards still scattered; token verification now centralised |
-| 🔲 | 2.4 | Maintainability | LOW | app.js mixes six module concerns (~990 lines) |
-| 🔲 | 2.5 | Maintainability | LOW | No explicit WS close on message-page navigation |
-| 🔲 | 2.6 | Maintainability | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
-| 🔲 | 3.1 | Usability | MEDIUM | Users enter password twice in cold login → messages flow |
+| 🔲 | INFRA-1.1 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | HIGH | migration-service not running — Railway volume too small (454 MB total, WiredTiger needs 524 MB free). Migrate to MongoDB Atlas. |
+| ~~🔲~~ | ~~INFRA-1.0~~ | ~~[Infrastructure](AUDIT_INFRASTRUCTURE.md)~~ | ~~MEDIUM~~ | ~~MongoDB disk space~~ — superseded by INFRA-1.1 |
+| 🔲 | INFRA-1.2 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | LOW | Sessions TTL index carries old 2 h value — drop `createdAt_1` index to apply 20 min TTL |
+| ✅ | MAINT-2.1 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | haversineDistance — resolved, single impl in common/src/geo.rs |
+| ✅ | MAINT-2.2 | [Maintainability](AUDIT_MAINTAINABILITY.md) | MEDIUM | Core utilities — resolved, all in common/src/auth.rs extractors |
+| 🔲 | MAINT-2.3 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | Per-handler role guards still scattered; token verification now centralised |
+| ✅ | MAINT-2.4 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | app.js split into 6 focused files — 2026-03-19 |
+| 🔲 | MAINT-2.5 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | No explicit WS close on message-page navigation |
+| 🔲 | MAINT-2.6 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
+| 🔲 | UX-3.1 | [Usability](AUDIT_USABILITY.md) | MEDIUM | Users enter password twice in cold login → messages flow |
+| 🔲 | SEC-1.1 | [Security](AUDIT_SECURITY.md) | HIGH | Plain password/email in POST request — needs OPAQUE/PAKE |
+| 🔲 | SEC-1.2 | [Security](AUDIT_SECURITY.md) | MEDIUM | Gateway send-rate bypassable at messages-service HTTP endpoint |
+| ⏸️ | PERF-4.1 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Send-rate bucket in-process — not safe for multi-instance gateway (deferred) |
+| 🔲 | PERF-4.2 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Notification poll scales linearly with active users |

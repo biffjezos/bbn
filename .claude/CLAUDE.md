@@ -22,7 +22,7 @@ wrap-up procedure.
 
 Run this on every session-start signal, in order:
 
-1. Read `.claude/AUDIT.md`, `.claude/AUDIT_SECURITY.md`, and `.claude/AUDIT_PERFORMANCE.md`. Do not read the rest of the codebase speculatively.
+1. Read `.claude/AUDIT.md` (the index and global summary table). Do not read individual concern files speculatively — open them only when you need full context on a specific item. Do not read the rest of the codebase speculatively.
 2. Read `.claude/TICKETS.md` for pending tickets relevant to this session.
 3. Greet the owner, present the last audit summary, and ask what to do.
 
@@ -76,11 +76,10 @@ without asking for permission:
    prevent that friction in future sessions, apply it now. Log every change
    made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
    date (see Persistent Files).
-3. Update audit files — add new findings to the correct file, move resolved items
-   to `AUDIT_DONE.md`, update existing entries:
-   - `.claude/AUDIT_SECURITY.md` — security bugs and vulnerabilities
-   - `.claude/AUDIT_PERFORMANCE.md` — performance issues
-   - `.claude/AUDIT.md` — general technical debt, architectural concerns, deferred decisions
+3. Update audit files — add new findings to the correct concern file, move resolved items
+   to `AUDIT_DONE.md`, update existing entries, and **keep the global summary table in
+   `AUDIT.md` in sync** (update the status cell for any item that changed). File names
+   and their concerns are listed in the Persistent Files section below.
 4. Update `.claude/TICKETS.md` — move completed tickets/phases to
    `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
    session.
@@ -92,19 +91,32 @@ without asking for permission:
 
 ## Persistent Files
 
-### `.claude/AUDIT.md` — General technical log
-Contains: architectural debt, deferred decisions, known risks, maintainability
-concerns. You are the owner. Add, remove, or edit entries any time without
-permission. Do not put feature requests or roadmap items here.
+### `.claude/AUDIT.md` — Audit index
+Contains: links to all concern files (with descriptions), owner notes / open questions,
+and the **global summary table** of every open and resolved finding across all concerns.
+Cross-concern items that don't fit any single concern file also go here.
+You are the owner. Keep the global summary table in sync whenever any concern file changes.
+Do not put feature requests or roadmap items here.
 
-### `.claude/AUDIT_SECURITY.md` — Security log
-Contains: security bugs, vulnerabilities, auth/privacy concerns. File
-separately from AUDIT.md so security issues are never buried. Same ownership
-rules as AUDIT.md.
+### `.claude/AUDIT_INFRASTRUCTURE.md` — Infrastructure log (`INFRA-` prefix)
+Contains: Railway/MongoDB environment issues, service dependencies, deployment constraints,
+one-time backend operations required. Same ownership rules as AUDIT.md.
 
-### `.claude/AUDIT_PERFORMANCE.md` — Performance log
-Contains: performance bottlenecks, slow queries, inefficient patterns. File
-separately for the same reason. Same ownership rules as AUDIT.md.
+### `.claude/AUDIT_MAINTAINABILITY.md` — Maintainability log (`MAINT-` prefix)
+Contains: code structure issues, duplication, architectural debt, patterns that complicate
+future changes. Same ownership rules as AUDIT.md.
+
+### `.claude/AUDIT_USABILITY.md` — Usability log (`UX-` prefix)
+Contains: user-facing friction, UX issues, interaction flows that degrade the user experience.
+Same ownership rules as AUDIT.md.
+
+### `.claude/AUDIT_SECURITY.md` — Security log (`SEC-` prefix)
+Contains: security bugs, vulnerabilities, auth/privacy concerns. Filed
+separately so security issues are never buried. Same ownership rules as AUDIT.md.
+
+### `.claude/AUDIT_PERFORMANCE.md` — Performance log (`PERF-` prefix)
+Contains: performance bottlenecks, slow queries, inefficient patterns, scaling concerns.
+Filed separately for the same reason. Same ownership rules as AUDIT.md.
 
 ### `.claude/AUDIT_DONE.md` — Resolved audit items archive
 Contains: resolved findings from any audit file. Move items here when fixed —
@@ -129,10 +141,13 @@ Rules for moving:
 - Read TICKETS_DONE.md only when you need historical context for a specific
   ticket — not on session start, not speculatively.
 
-### `.claude/CHANGELOG.md` — CLAUDE.md change history
-One line per change, format: `YYYY-MM-DD — <what changed and why>`.
-Append during wrap-up whenever CLAUDE.md or the persistent file structures are
-modified. Never edit or remove existing entries.
+### `.claude/CHANGELOG.md` — Change history and reflections
+Append an entry during every wrap-up. Two entry types:
+- **CHANGE:** a modification to CLAUDE.md or persistent file structure — what changed and why.
+- **REFLECTION:** a mistake or friction from the session — what went wrong and what rule was added or changed to prevent recurrence.
+
+Format: `YYYY-MM-DD — [CHANGE|REFLECTION]: <description>`.
+Never edit or remove existing entries.
 
 ---
 
