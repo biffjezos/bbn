@@ -78,13 +78,8 @@ without asking for permission:
    date (see Persistent Files).
 3. Update audit files — add new findings to the correct concern file, move resolved items
    to `AUDIT_DONE.md`, update existing entries, and **keep the global summary table in
-   `AUDIT.md` in sync** (update the status cell for any item that changed):
-   - `.claude/AUDIT_INFRASTRUCTURE.md` — infrastructure issues, deployment constraints, one-time backend ops
-   - `.claude/AUDIT_MAINTAINABILITY.md` — code structure, duplication, architectural debt
-   - `.claude/AUDIT_USABILITY.md` — user-facing friction and UX issues
-   - `.claude/AUDIT_SECURITY.md` — security bugs and vulnerabilities
-   - `.claude/AUDIT_PERFORMANCE.md` — performance bottlenecks and scaling concerns
-   - `.claude/AUDIT.md` — index only; update the global summary table and owner notes; cross-concern items that don't fit any category above go here
+   `AUDIT.md` in sync** (update the status cell for any item that changed). File names
+   and their concerns are listed in the Persistent Files section below.
 4. Update `.claude/TICKETS.md` — move completed tickets/phases to
    `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
    session.

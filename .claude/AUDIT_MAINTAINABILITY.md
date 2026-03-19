@@ -2,7 +2,6 @@
 
 **Last updated:** 2026-03-19
 **Concern:** Maintainability — code structure, duplication, architectural debt, patterns that complicate future changes.
-**See also:** [AUDIT.md](AUDIT.md) (index · owner notes · global summary) · [AUDIT_INFRASTRUCTURE.md](AUDIT_INFRASTRUCTURE.md) · [AUDIT_USABILITY.md](AUDIT_USABILITY.md) · [AUDIT_SECURITY.md](AUDIT_SECURITY.md) · [AUDIT_PERFORMANCE.md](AUDIT_PERFORMANCE.md) · [AUDIT_DONE.md](AUDIT_DONE.md) (resolved items)
 
 ---
 
