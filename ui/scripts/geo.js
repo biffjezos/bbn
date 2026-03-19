@@ -14,7 +14,7 @@
   // if the WS is unavailable (e.g. gateway cold-start).
 
   var _locWs      = null;
-  var _locWsRetry = 1000;
+  var _locWsRetry = 10000;
   var _locWsTimer = null;
 
   function locWsUrl() {
