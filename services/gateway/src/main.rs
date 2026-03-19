@@ -390,6 +390,14 @@ async fn users_put_keys(State(s): State<AppState>, headers: HeaderMap, body: Byt
     if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::PUT, format!("{}/users/me/keys", s.user_url), auth_hdr(&headers), Some(body)).await
 }
+async fn users_get_preferences(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    proxy(&s, Method::GET, format!("{}/users/me/preferences", s.user_url), auth_hdr(&headers), None).await
+}
+async fn users_put_preferences(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    proxy(&s, Method::PUT, format!("{}/users/me/preferences", s.user_url), auth_hdr(&headers), Some(body)).await
+}
 async fn users_search(State(s): State<AppState>, headers: HeaderMap, RawQuery(q): RawQuery) -> impl IntoResponse {
     if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
     let qs = q.unwrap_or_default();
@@ -996,9 +1004,9 @@ async fn main() {
         migration_url:   cfg.migration_url,
         http,
         svc_token_cache: svc_cache,
-        lim_login:       FixedWindow::new(10,  Duration::from_secs(15 * 60)),
+        lim_login:       FixedWindow::new(20,  Duration::from_secs(15 * 60)),
         lim_register:    FixedWindow::new(5,   Duration::from_secs(60 * 60)),
-        lim_guest:       FixedWindow::new(10,  Duration::from_secs(60 * 60)),
+        lim_guest:       FixedWindow::new(40,  Duration::from_secs(60 * 60)),
         lim_api:         FixedWindow::new(120, Duration::from_secs(60)),
         health_cache:    Arc::new(Mutex::new(None)),
         send_buckets:    Arc::new(Mutex::new(HashMap::new())),
@@ -1023,6 +1031,7 @@ async fn main() {
         .route("/api/auth/login",    post(auth_login))
         // Users
         .route("/api/users/me",                get(users_get_me).put(users_put_me).delete(users_delete_me))
+        .route("/api/users/me/preferences",    get(users_get_preferences).put(users_put_preferences))
         .route("/api/users/me/keys",           get(users_get_keys).put(users_put_keys))
         .route("/api/users/search",            get(users_search))
         .route("/api/users/{userId}/profile",  get(users_profile))
