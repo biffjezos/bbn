@@ -474,11 +474,11 @@ truth for roles + tiers before adding a second tier dimension.
 
 ---
 
-### T-17 ✅ Complete (2026-03-19). Details in TICKETS_DONE.md.
+## T-17 ✅ Complete (2026-03-19). Details in TICKETS_DONE.md.
 
 ---
 
-### T-18 The login.modal is filled with user credentials after logout
+## T-18 The login.modal is filled with user credentials after logout
 
 ### Problem
 
@@ -491,3 +491,16 @@ Only happens if the logout happens immediately after login. If a user logs in, c
 ### Owner's Comments
 
 This is a privacy-by-design app. Keep that in mind. Reflect on that and avoid any privacy related issue in the future. Always!
+
+---
+
+## T-19 Notification banner on the map
+
+**Status:** Open
+
+### Problem 
+
+The app's rate limits (login, guest session) have strict rate limits. It's logged in the console, but the avg user doesn't see any notifaction, only an error. Since it affects only the login-, registration-modals and guest sessions, there should be a notification banner on the top of map just below that main mennu bar, stating that the actioned attempted is rate-limited in the development environment. Asking for support to open up the app and provide a link to /donate.
+
+I think the notification banner already exists, just add the message.
+
