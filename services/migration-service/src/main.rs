@@ -184,7 +184,8 @@ async fn migration_004(db: &Database) -> Result<(), mongodb::error::Error> {
     let seeds: &[(&str, &str, &str, i32, Option<i32>, Option<i32>)] = &[
         ("guest",   "Guest",   "secondary", 0, Some(500),   None),
         ("regular", "Regular", "primary",   1, Some(1_000), Some(100)),
-        ("premium", "Premium", "warning",   2, Some(1_000), Some(1_000)),
+        ("premium", "Premium", "warning",   2, Some(23_000), Some(23_000)),
+        ("unrestricted", "Unrestricted", "danger", 3, Some(9_700_000), Some(9_700_000))
     ];
     for (name, label, cls, rank, nearby, message) in seeds {
         let mut tier_doc = doc! {
