@@ -223,6 +223,12 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
         _ => 500.0,
     };
 
+    // Guard against SSRF: tier must be a safe path segment (CodeQL #25).
+    if tier.is_empty() || tier.len() > 64 || !tier.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        eprintln!("[location] tier radius: invalid tier string");
+        return fallback;
+    }
+
     let svc_token = match state.svc_token_cache.get("location", &state.service_secret).await {
         Ok(t)  => t,
         Err(e) => { eprintln!("[location] tier radius: token error: {e}"); return fallback; }

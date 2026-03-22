@@ -200,6 +200,17 @@ async fn proxy(
     auth:   String,
     body:   Option<Bytes>,
 ) -> axum::response::Response {
+    // Guard against SSRF: reject any URL that does not start with a known
+    // internal service base URL (CodeQL #25).
+    let allowed = [
+        &state.auth_url, &state.user_url, &state.loc_url, &state.msg_url,
+        &state.fav_url,  &state.tiers_url, &state.blocks_url, &state.migration_url,
+    ];
+    if !allowed.iter().any(|base| url.starts_with(base.as_str())) {
+        eprintln!("[gateway] proxy: rejected non-internal URL: {url}");
+        return bad_gw();
+    }
+
     let token = match get_svc_token(state).await {
         Some(t) => t,
         None    => return bad_gw(),
@@ -271,6 +282,10 @@ async fn tier_guard(state: &AppState, headers: &HeaderMap, feature: &str) -> Opt
     };
 
     let tier = claims.tier.as_deref().unwrap_or("guest").to_string();
+    // Guard against SSRF: tier in JSON body must be a safe value (CodeQL #25).
+    if tier.is_empty() || tier.len() > 64 || !tier.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Some((StatusCode::FORBIDDEN, Json(json!({ "error": "Invalid tier value." }))).into_response());
+    }
     let svc  = match get_svc_token(state).await { Some(t) => t, None => return Some(bad_gw()) };
 
     match state.http
