@@ -123,6 +123,7 @@ Track here, implement later. Idea: a background task monitors shard population s
 - In-memory mode is **single-instance only**. If Railway ever scales location-service beyond one replica, switch to `LOCATION_STORE=db`. Document prominently in the README.
 - Privacy: no new PII exposure. `LocationEntry` stores only `user_id`, `lat`, `lon`, `tier`, timestamp — same as today.
 - No new infrastructure required. Both backends use existing dependencies (Tokio `RwLock`, existing MongoDB client).
+- **Unrestricted tier (9,700 km radius):** the shard intersection test returns every shard at this radius — spatial pruning is impossible. Add an early exit in `nearby`: if `radius_m` exceeds a configurable `LOCATION_FULLSCAN_THRESHOLD_M` (default: half Earth's circumference, ~20,000,000 m), skip the intersection test and iterate all shards directly. This makes the intent explicit and avoids wasted intersection computation. Cost remains O(total active users), but with T-21 continental routing that is bounded to one continent's population.
 
 ---
 
