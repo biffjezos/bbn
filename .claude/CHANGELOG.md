@@ -24,6 +24,14 @@ Short labels used to tag REFLECTION entries. Enables pattern detection across se
 - **False confidence** — Claude stated something as certain that was actually ambiguous or unverified.
 
 ---
+## Reflection
+
+**Note:** This section should not be longer than one or two paragraphs. It's a compact summary of all your reflections since the beginning of the project.
+
+
+---
+
+## Log
 
 - 2026-03-19 — RELECTION [**Mixed scope**]: Clarified "Backend changes required" to list only manual owner actions, not code already committed.
 - 2026-03-19 — CHANGE: Split AUDIT.md into three files (AUDIT.md, AUDIT_SECURITY.md, AUDIT_PERFORMANCE.md) and added AUDIT_DONE.md for resolved items; updated Pre-Session Checklist, Wrap-Up Checklist, and Persistent Files section accordingly.
