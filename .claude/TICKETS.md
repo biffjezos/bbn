@@ -7,6 +7,122 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ---
 
+## T-20 — Sharded Location Store (performance at scale)
+
+**Status:** Not started. Self-contained — no prerequisites.
+
+### Goal
+
+Replace the current full-collection location scan with a sparse shard grid so that nearby queries touch only the geographic cells that intersect the search circle. Both in-memory and DB backends use the same sharded structure, selected at startup by an env var.
+
+### Design decisions (agreed 2026-03-22)
+
+| Question | Decision |
+|---|---|
+| Shard size | Configurable via `LOCATION_SHARD_SIZE_M` (default 2000 m). Auto-adjustment deferred to Phase 2. |
+| Storage backend | Env var `LOCATION_STORE=memory\|db` (default `db`). In-memory is single-process only — not safe for multi-instance deployments; this is documented, not enforced. |
+| Restart behaviour | In-memory store loses all locations on restart. Acceptable — clients re-publish every N seconds. |
+| 2dsphere index | **Replaced** in both modes. DB mode uses a compound `(shard_key, updatedAt)` index instead. Sharding makes `$nearSphere` + 2dsphere redundant. |
+| 10k-in-one-shard | Haversine post-filter still scans all candidates in matching shards. Smaller shard size is the mitigation — tune `LOCATION_SHARD_SIZE_M` for the expected density. |
+| Suppression thresholds | `LOCATION_UPDATE_INTERVAL_SECS` and `LOCATION_UPDATE_DISTANCE_M` both kept and made configurable (currently hardcoded at 15 s and 100 m). |
+
+### Shard key
+
+`ShardKey = (i64, i64)` — `(floor(lat / cell_deg_lat), floor(lon / cell_deg_lon))`.
+
+`cell_deg_lat = shard_m / 111_320.0` (metres per degree latitude, fixed).
+`cell_deg_lon = shard_m / (111_320.0 * cos(lat.to_radians()))` (varies with latitude — computed at query time).
+
+### Shard intersection test (AABB vs circle)
+
+For a circle of radius R centred at (lat, lon): find the closest point on the shard's bounding rectangle to (lat, lon). If the Haversine distance to that closest point is ≤ R, the shard intersects the circle and must be queried.
+
+Iterate over the grid of shards covering the bounding box of the search circle (fast, integer arithmetic). Most shards outside the circle are eliminated by the test; corner shards are the key case.
+
+---
+
+### Phase 1 — Shard primitives in `common`
+
+**Location:** `services/common/src/shard.rs` (new module, exported from `common`).
+
+Implement:
+- `ShardKey` — `(i64, i64)` newtype, `Hash + Eq + Clone + Copy`.
+- `shard_for_coords(lat: f64, lon: f64, shard_m: f64) -> ShardKey`
+- `intersecting_shards(lat: f64, lon: f64, radius_m: f64, shard_m: f64) -> Vec<ShardKey>` — AABB-vs-circle test, returns the minimal set of shard keys that overlap the search circle.
+- Unit tests: zero-radius (single shard), exactly-centered small radius (single shard), edge case (user at shard border), large radius (many shards), polar-distortion (high latitude).
+
+No changes to location-service in this phase.
+
+---
+
+### Phase 2 — `LocationStore` trait + both backends
+
+**Trait** (`services/common/src/location_store.rs` or inline in location-service):
+
+```rust
+pub trait LocationStore: Send + Sync {
+    async fn upsert(&self, user_id: &str, lat: f64, lon: f64, tier: &str) -> Result<(), StoreError>;
+    async fn remove(&self, user_id: &str);
+    async fn get_user(&self, user_id: &str) -> Option<LocationEntry>;
+    async fn nearby(&self, lat: f64, lon: f64, radius_m: f64, ttl: Duration, exclude_ids: &HashSet<String>) -> Vec<LocationEntry>;
+}
+```
+
+**MemoryStore:**
+- `Arc<RwLock<HashMap<ShardKey, HashMap<String, LocationEntry>>>>`
+- `upsert`: suppression check (interval + distance) using a per-user `last_written` map. Moves user between shards if they crossed a shard boundary.
+- `remove`: deletes user from their shard; drops the shard entry if it becomes empty.
+- `nearby`: find intersecting shards, iterate their entries, filter by TTL and Haversine ≤ radius, exclude blocked ids.
+- No DB calls in this path.
+
+**DbStore:**
+- Wraps `mongodb::Database`.
+- `upsert`: same suppression check (interval + distance). Stores `shard_key` field on the document alongside `loc`. Upserts by `userId`.
+- `nearby`: query `{ shard_key: { $in: [...] }, updatedAt: { $gt: cutoff } }`, Haversine post-filter in Rust.
+- Replaces the existing `$nearSphere` query. The 2dsphere index is no longer used.
+
+**Suppression state:** both stores keep a `HashMap<String, (Instant, f64, f64)>` (user_id → last_write time + lat/lon) under a separate `RwLock` to enforce `UPDATE_INTERVAL` / `UPDATE_DISTANCE_M`.
+
+---
+
+### Phase 3 — Wire into location-service
+
+- Read `LOCATION_STORE` env var at startup (`memory` or `db`, default `db`).
+- Read `LOCATION_SHARD_SIZE_M` (default `2000.0`).
+- Read `LOCATION_UPDATE_INTERVAL_SECS` (default `15`).
+- Read `LOCATION_UPDATE_DISTANCE_M` (default `100.0`).
+- Replace `AppState.db`-direct location queries with `AppState.store: Arc<dyn LocationStore>`.
+- Remove `ActiveUsersCache` (replaced by shard store; the 2 s nearby cache can be kept as a thin wrapper on top if needed).
+- Keep block cache, tier radius cache, and nearby results cache unchanged.
+- All existing HTTP endpoints retain the same contract (gateway needs no changes).
+
+---
+
+### Phase 4 — DB migration
+
+New migration `007_shard_index`:
+- Drop the `locations_loc_2dsphere` index.
+- Create compound index: `{ shard_key: 1, updatedAt: -1 }` on `locations`.
+- Backfill `shard_key` on all existing documents (compute from stored `loc` coordinates).
+
+Add to `migration-service/src/main.rs`. Idempotent — safe to run on existing data.
+
+---
+
+### Phase 5 — Auto-adjustable shard size (deferred)
+
+Track here, implement later. Idea: a background task monitors shard population sizes. If any shard exceeds a configurable `SHARD_MAX_USERS` threshold, halve `SHARD_SIZE_M` for the next startup (write to a `_meta` doc). If all shards fall below `SHARD_MIN_USERS`, double it. Requires graceful re-bucketing logic. Low priority until real load data exists.
+
+---
+
+### Notes
+
+- In-memory mode is **single-instance only**. If Railway ever scales location-service beyond one replica, switch to `LOCATION_STORE=db`. Document prominently in the README.
+- Privacy: no new PII exposure. `LocationEntry` stores only `user_id`, `lat`, `lon`, `tier`, timestamp — same as today.
+- No new infrastructure required. Both backends use existing dependencies (Tokio `RwLock`, existing MongoDB client).
+
+---
+
 ## Recommended Implementation Order
 
 Before any marketing or scaling push, the order of priority is:
