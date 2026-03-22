@@ -5,6 +5,8 @@ on:
     branches:
       - dev
       - 'claude/**'
+    paths:
+      - 'ui/**'
 
 permissions:
   contents: read
