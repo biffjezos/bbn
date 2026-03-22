@@ -69,10 +69,10 @@ pub trait LocationStore: Send + Sync {
 ```
 
 **MemoryStore:**
-- `Arc<RwLock<HashMap<ShardKey, HashMap<String, LocationEntry>>>>`
+- `Arc<RwLock<HashMap<ShardKey, Arc<RwLock<HashMap<String, LocationEntry>>>>>>` — outer `RwLock` guards shard-map mutations (inserting/dropping shards); each shard has its own `Arc<RwLock<...>>` so concurrent reads to different shards do not block each other.
 - `upsert`: suppression check (interval + distance) using a per-user `last_written` map. Moves user between shards if they crossed a shard boundary.
 - `remove`: deletes user from their shard; drops the shard entry if it becomes empty.
-- `nearby`: find intersecting shards, iterate their entries, filter by TTL and Haversine ≤ radius, exclude blocked ids.
+- `nearby`: find intersecting shards, acquire each shard's read lock, iterate entries. Any entry where `now - updated_at > LOCATION_TTL` is **evicted** (upgrade to write lock, remove). Filter survivors by Haversine ≤ radius and exclude blocked ids. This piggybacks cleanup onto normal queries — the sweep task only has meaningful work in shards that are never queried.
 - No DB calls in this path.
 
 **DbStore:**
@@ -83,6 +83,8 @@ pub trait LocationStore: Send + Sync {
 
 **Suppression state:** both stores keep a `HashMap<String, (Instant, f64, f64)>` (user_id → last_write time + lat/lon) under a separate `RwLock` to enforce `UPDATE_INTERVAL` / `UPDATE_DISTANCE_M`.
 
+**Sweep task (MemoryStore only):** a Tokio background task runs every `LOCATION_SWEEP_INTERVAL_SECS` (default `300`, i.e. 5 min). Each shard maintains a min-heap of `(expiry_instant, user_id)` alongside its HashMap. The sweep pops from the heap until the top entry has not yet expired; for each popped entry it verifies the user still exists in the map with a matching expiry (lazy deletion of invalidated heap entries from prior updates). Drop empty shards after eviction. This makes the sweep O(k) in expired entries rather than O(n) in total entries. Read-path eviction (see `nearby` above) means most stale entries are already gone before the sweep runs.
+
 ---
 
 ### Phase 3 — Wire into location-service
@@ -91,6 +93,7 @@ pub trait LocationStore: Send + Sync {
 - Read `LOCATION_SHARD_SIZE_M` (default `2000.0`).
 - Read `LOCATION_UPDATE_INTERVAL_SECS` (default `15`).
 - Read `LOCATION_UPDATE_DISTANCE_M` (default `100.0`).
+- Read `LOCATION_SWEEP_INTERVAL_SECS` (default `300`). Only used when `LOCATION_STORE=memory`.
 - Replace `AppState.db`-direct location queries with `AppState.store: Arc<dyn LocationStore>`.
 - Remove `ActiveUsersCache` (replaced by shard store; the 2 s nearby cache can be kept as a thin wrapper on top if needed).
 - Keep block cache, tier radius cache, and nearby results cache unchanged.
