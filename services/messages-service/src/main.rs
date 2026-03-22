@@ -406,6 +406,16 @@ async fn send_message(
         let sender_tier    = claims.tier.as_deref().unwrap_or("regular");
         let recipient_tier = to_user.get_str("tier").unwrap_or("regular");
 
+        // Guard against SSRF: tier strings must be safe path segments before
+        // being interpolated into internal service URLs (CodeQL alert #25).
+        fn is_valid_tier(t: &str) -> bool {
+            !t.is_empty() && t.len() <= 64
+                && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        }
+        if !is_valid_tier(sender_tier) || !is_valid_tier(recipient_tier) {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid tier value." }))).into_response();
+        }
+
         let (s_res, r_res) = tokio::join!(
             state.http
                 .get(format!("{}/tiers/radius/message/{}", state.tiers_service_url, sender_tier))
