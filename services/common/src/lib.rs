@@ -5,3 +5,4 @@ pub mod geo;
 pub mod models;
 pub mod mongo;
 pub mod service_token;
+pub mod shard;
