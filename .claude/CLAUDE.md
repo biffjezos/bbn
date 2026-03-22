@@ -61,6 +61,17 @@ Before writing any code for a ticket:
 
 ---
 
+## Before Each Commit / Push
+
+- **Reflect.** Identify anything that slowed the session down or caused
+   friction: unclear rules, missing context, a workflow step that broke, a
+   ticket structure that wasn't useful. Be brief and honest. You may ask the
+   Project Owner about their perspective if uncertain.
+- **Improve.** If a change to CLAUDE.md or the ticket file structure would
+   prevent the identified friction in future sessions, apply it now. Log every change
+   made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
+   date and tag `CHANGE`or `REFLECTION` (see Persistent Files).
+
 ## After Each Commit / Push
 
 After every commit and push, always report — even if there is nothing to report:
@@ -72,18 +83,6 @@ After every commit and push, always report — even if there is nothing to repor
 - **Expected behavior:** one sentence describing what is now different or new,
   if not obvious from the commit message or ticket title (e.g. *"User documents
   in the `users` collection now include a `preferences` sub-object."*).
-- **Reflect.** Identify anything that slowed the session down or caused
-   friction: unclear rules, missing context, a workflow step that broke, a
-   ticket structure that wasn't useful. Be brief and honest. You may ask the
-   Project Owner about their perspective if uncertain.
-- **Improve.** If a change to CLAUDE.md or the ticket file structure would
-   prevent the identified friction in future sessions, apply it now. Log every change
-   made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
-   date and tag `CHANGE`or `REFLECTION` (see Persistent Files).
-
-Do NOT remind about redeployment — services are pulled from GitHub and deployed
-automatically.
-
 ---
 
 ## Session Wrap-Up Checklist
@@ -98,8 +97,12 @@ without asking for permission:
 2. Update `.claude/TICKETS.md` — move completed tickets/phases to
    `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
    session.
-3. Commit all outstanding changes to the session branch, including all updated files.
-4. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
+3. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
+   compact them into the section `Reflection`. The essentials must remain in the Summary
+5. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md, remove
+   the oldest entries (by date) until the total counts 15.
+7. Commit all outstanding changes to the session branch, including all updated files.
+8. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
 
 ---
 
