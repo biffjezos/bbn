@@ -106,7 +106,7 @@ DB-stored tier definitions with admin CRUD. Serves tier info and radius lookups 
 
 #### migration-service
 
-Node.js. Applies idempotent database migrations in order on every gateway boot. Tracks applied migrations in a `_migrations` collection. Runs before the gateway opens to traffic.
+Applies idempotent database migrations in order on every gateway boot. Tracks applied migrations in a `_migrations` collection. Runs before the gateway opens to traffic.
 
 ### Persistence
 

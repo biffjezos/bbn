@@ -1,5 +1,6 @@
 # users-service
 
+Profile CRUD, crypto key storage and retrieval, password changes (including re-keying the encrypted private key blob), account deletion, admin user management (tier and role changes with `tokenVersion` bump).
 
 ## Required Environment Variables
 
