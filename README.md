@@ -76,55 +76,37 @@ All services are written in Rust (Axum 0.8, Tokio, MongoDB driver 3). They are d
 
 Entry point for all client traffic. Routes HTTP requests to downstream services, injects `X-Service-Token` on every proxied request, enforces per-IP rate limits (login, register, guest, general API), handles WebSocket connections for live location and messaging, and runs database migrations on boot.
 
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `AUTH_SERVICE_URL`, `USER_SERVICE_URL`, `LOC_SERVICE_URL`, `MSG_SERVICE_URL`, `FAV_SERVICE_URL`, `TIERS_SERVICE_URL`, `BLOCKS_SERVICE_URL`, `MIGRATION_SERVICE_URL`. Optional: `ALLOWED_ORIGINS` (default `https://biffjezos.github.io`), `PORT` (default 8080).
-
 #### auth-service
 
 Issues guest, user, and admin JWTs. Validates credentials via bcrypt. Handles admin bootstrap on first boot. All endpoints require a valid `X-Service-Token` from the gateway.
-
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`. Optional: `DB_NAME` (default `boomboom`), `ADMIN_BOOTSTRAP_USER_ID` (one-time, remove after use), `PORT` (default 8080).
 
 #### users-service
 
 Profile CRUD, crypto key storage and retrieval, password changes (including re-keying the encrypted private key blob), account deletion, admin user management (tier and role changes with `tokenVersion` bump).
 
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 3002).
-
 #### location-service
 
 Stores and expires location documents, serves nearby-user queries filtered by tier radius and block list, exposes an internal per-user location endpoint used by messages-service and favourites-service.
-
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`, `FAV_SERVICE_URL`, `TIERS_SERVICE_URL`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 8080).
 
 #### messages-service
 
 Stores and retrieves E2EE message ciphertext, enforces TTL (4 hours), validates sender/recipient are mutually within range (tier-dependent), checks the block list before delivery.
 
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`, `LOC_SERVICE_URL`, `TIERS_SERVICE_URL`, `FAV_SERVICE_URL`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 8080).
-
 #### favourites-service
 
 Manages one-directional favourite links, syncs range state (writes `withinRange` flag and fires a notification when a favourite comes into messaging range), delivers in-app notifications.
-
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`, `LOC_SERVICE_URL`, `TIERS_SERVICE_URL`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 8080).
 
 #### blocks-service
 
 Block and unblock with mandatory reason enum. Blocked-user status is checked in location-service, messages-service, and users-service by reading the `blocks` collection directly.
 
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 8080).
-
 #### tiers-service
 
 DB-stored tier definitions with admin CRUD. Serves tier info and radius lookups to other services. In-memory cache (5-minute TTL) with static fallback if the collection is empty.
 
-Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 8080).
-
 #### migration-service
 
 Node.js. Applies idempotent database migrations in order on every gateway boot. Tracks applied migrations in a `_migrations` collection. Runs before the gateway opens to traffic.
-
-Requires: `MONGO_URI`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 3099).
 
 ### Persistence
 
@@ -138,9 +120,13 @@ The `dev` branch and all `claude/**` branches auto-deploy to [https://biffjezos.
 
 ## Donate
 
-Current monthly expenditure: **26.42 €**
-
-- 21.42 € — Claude Code
-- 5.00 € — Railway (microservices + MongoDB)
-
 Donate at [https://biffjezos.github.io/bbn/donate/](https://biffjezos.github.io/bbn/donate/) via Apple Pay, credit/debit card, or Revolut. Add a note if you want to be listed as a donor.
+
+### Current monthly expenditure: **26.42 €**
+
+- 21,42€ — Claude Code
+- 5,00€ — Railway (microservices + MongoDB)
+
+### Total amount spent (since February 2026)
+
+- 21,42€
