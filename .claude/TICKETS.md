@@ -126,6 +126,33 @@ Track here, implement later. Idea: a background task monitors shard population s
 
 ---
 
+## T-21 — Continental location-service routing
+
+**Status:** Deferred. Prerequisite: T-20 complete and deployed.
+
+### Goal
+
+Run one `location-service` instance per continent (e.g. `americas`, `europe`, `africa-asia`). Users in different continents never appear in each other's nearby queries, so there is no cross-instance state or coordination needed. Each instance runs `LOCATION_STORE=memory` independently.
+
+### Design
+
+- **Gateway routing:** the gateway derives the continent from the lat/lon in every location request (a simple bounding-box lookup — no geospatial library needed) and forwards to the appropriate upstream. Clients remain unaware of the topology.
+- **Location-service:** no code changes required. Each deployment is a standard location-service instance with its own env vars.
+- **User travel:** when a user crosses a continent boundary their old entry expires via `LOCATION_TTL` on the old instance and they appear on the new one after their next update. No explicit migration needed.
+- **Boundary placement:** draw boundaries conservatively away from dense border regions (e.g. Atlantic mid-ocean, Sahara) to avoid edge cases where two users at a boundary cannot see each other.
+
+### What this unlocks
+
+Removes the single-instance ceiling entirely without switching to `LOCATION_STORE=db`. Each continental instance scales to ~50,000–200,000 active users independently.
+
+### Infrastructure required (owner action, not code)
+
+- 2–3 additional Railway service deployments of `location-service`.
+- Gateway env vars for each continental upstream URL.
+- Continent bounding-box table added to gateway config.
+
+---
+
 ## Recommended Implementation Order
 
 Before any marketing or scaling push, the order of priority is:
