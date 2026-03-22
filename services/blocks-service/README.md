@@ -5,3 +5,9 @@ Block and unblock users with mandatory reason enum. Blocked-user status is check
 ## Required Environment Variables
 
 Requires: `JWT_SECRET`, `SERVICE_SECRET`, `MONGO_URI`. Optional: `DB_NAME` (default `boomboom`), `PORT` (default 8080)
+
+## Behaviour Settings (hardcoded)
+
+| Setting | Value |
+|---|---|
+| Valid block reasons | `spam`, `harassment`, `inappropriate_content`, `fake_profile`, `other` |
