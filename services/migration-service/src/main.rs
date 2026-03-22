@@ -87,6 +87,7 @@ const MIGRATIONS: &[&str] = &[
     "004_tiers_seed",
     "005_rename_developer_tier",
     "006_email_index_sparse",
+    "007_shard_index",
 ];
 
 async fn migration_001(db: &Database) -> Result<(), mongodb::error::Error> {
@@ -237,6 +238,24 @@ async fn migration_006(db: &Database) -> Result<(), mongodb::error::Error> {
     Ok(())
 }
 
+async fn migration_007(db: &Database) -> Result<(), mongodb::error::Error> {
+    // Add a compound index on (shard_key, updatedAt) to the locations collection.
+    // This index supports the DbStore backend (LOCATION_STORE=db) introduced in T-20.
+    // The location collection starts from a clean slate (no existing data to backfill).
+    // The 2dsphere index from migration_002 is kept — it does not conflict.
+    db.collection::<Document>("locations")
+        .create_index(
+            IndexModel::builder()
+                .keys(doc! { "shard_key": 1, "updatedAt": -1 })
+                .options(IndexOptions::builder()
+                    .name("shard_key_updatedAt".to_string())
+                    .sparse(true)   // sparse: documents without shard_key are ignored
+                    .build())
+                .build(),
+        ).await?;
+    Ok(())
+}
+
 async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Error> {
     match id {
         "001_indexes"                => migration_001(db).await,
@@ -245,6 +264,7 @@ async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Er
         "004_tiers_seed"             => migration_004(db).await,
         "005_rename_developer_tier"  => migration_005(db).await,
         "006_email_index_sparse"     => migration_006(db).await,
+        "007_shard_index"            => migration_007(db).await,
         _                            => Ok(()), // unknown migration — skip
     }
 }

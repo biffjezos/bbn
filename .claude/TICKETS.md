@@ -94,13 +94,9 @@ pub trait LocationStore: Send + Sync {
 - This makes query cost proportional to actual user density near the caller, not to the search radius. Dense city: often stops after 1–3 shards. Rural/unrestricted: expands until limit filled or radius exhausted.
 - No DB calls in this path.
 
-**DbStore:**
-- Wraps `mongodb::Database`.
-- `upsert`: same suppression check (interval + distance). Stores `shard_key` field on the document alongside `loc`. Upserts by `userId`.
-- `nearby`: same sorted-shard traversal logic as MemoryStore. Issue per-shard queries `{ shard_key: K, updatedAt: { $gt: cutoff } }` in sorted order, haversine post-filter in Rust, same early-exit check after each shard. `always_include` ids fetched separately by `userId`. The `limit` applies identically.
-- Replaces the existing `$nearSphere` query. The 2dsphere index is no longer used.
+**DbStore:** deferred — implement only if `LOCATION_STORE=db` is ever needed (multi-instance deployment). Design is documented in SHARD.md and the notes below; skip implementation for now.
 
-**Suppression state:** both stores keep a `HashMap<String, (Instant, f64, f64)>` (user_id → last_write time + lat/lon) under a separate `RwLock` to enforce `UPDATE_INTERVAL` / `UPDATE_DISTANCE_M`.
+**Suppression state:** `HashMap<String, (Instant, f64, f64)>` (user_id → last_write time + lat/lon) under a separate `RwLock` to enforce `UPDATE_INTERVAL` / `UPDATE_DISTANCE_M`.
 
 **Sweep task (MemoryStore only):** a Tokio background task runs every `LOCATION_SWEEP_INTERVAL_SECS` (default `300`, i.e. 5 min). Each shard maintains a min-heap of `(expiry_instant, user_id)` alongside its HashMap. The sweep pops from the heap until the top entry has not yet expired; for each popped entry it verifies the user still exists in the map with a matching expiry (lazy deletion of invalidated heap entries from prior updates). Drop empty shards after eviction. This makes the sweep O(k) in expired entries rather than O(n) in total entries. Read-path eviction (see `nearby` above) means most stale entries are already gone before the sweep runs.
 
@@ -108,12 +104,13 @@ pub trait LocationStore: Send + Sync {
 
 ### Phase 3 — Wire into location-service
 
-- Read `LOCATION_STORE` env var at startup (`memory` or `db`, default `memory`).
 - Read `LOCATION_SHARD_SIZE_M` (default `2000.0`).
 - Read `LOCATION_UPDATE_INTERVAL_SECS` (default `15`).
 - Read `LOCATION_UPDATE_DISTANCE_M` (default `100.0`).
-- Read `LOCATION_SWEEP_INTERVAL_SECS` (default `300`). Only used when `LOCATION_STORE=memory`.
-- Replace `AppState.db`-direct location queries with `AppState.store: Arc<dyn LocationStore>`.
+- Read `LOCATION_SWEEP_INTERVAL_SECS` (default `300`).
+- Read `LOCATION_NEARBY_LIMIT` (default `200`).
+- Remove `LOCATION_STORE` env var — memory-only for now; DbStore deferred.
+- Replace `AppState.db`-direct location queries with `AppState.store: Arc<MemoryStore>`.
 - Remove `ActiveUsersCache` (replaced by shard store; the 2 s nearby cache can be kept as a thin wrapper on top if needed).
 - Keep block cache, tier radius cache, and nearby results cache unchanged.
 - All existing HTTP endpoints retain the same contract (gateway needs no changes).
@@ -124,10 +121,10 @@ pub trait LocationStore: Send + Sync {
 
 New migration `007_shard_index`:
 - Create compound index: `{ shard_key: 1, updatedAt: -1 }` on `locations`.
-- Backfill `shard_key` on all existing documents (compute from stored `loc` coordinates).
+- No backfill — location collection starts empty (clean slate; no historical location data to preserve).
 - No index to drop — the collection currently has no geospatial index.
 
-Add to `migration-service/src/main.rs`. Idempotent — safe to run on existing data.
+Add to `migration-service/src/main.rs`. Idempotent — safe to re-run.
 
 ---
 
