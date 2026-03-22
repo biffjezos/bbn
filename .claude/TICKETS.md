@@ -22,7 +22,7 @@ Replace the current full-collection location scan with a sparse shard grid so th
 | Shard size | Configurable via `LOCATION_SHARD_SIZE_M` (default 2000 m). Auto-adjustment deferred to Phase 2. |
 | Storage backend | Env var `LOCATION_STORE=memory\|db` (default `memory`). In-memory is single-process only — not safe for multi-instance deployments; this is documented, not enforced. |
 | Restart behaviour | In-memory store loses all locations on restart. Acceptable — clients re-publish every N seconds. |
-| 2dsphere index | **Replaced** in both modes. DB mode uses a compound `(shard_key, updatedAt)` index instead. Sharding makes `$nearSphere` + 2dsphere redundant. |
+| 2dsphere index | Never existed. DB mode adds a compound `(shard_key, updatedAt)` index — the first index on this collection. |
 | 10k-in-one-shard | Haversine post-filter still scans all candidates in matching shards. Smaller shard size is the mitigation — tune `LOCATION_SHARD_SIZE_M` for the expected density. |
 | Suppression thresholds | `LOCATION_UPDATE_INTERVAL_SECS` and `LOCATION_UPDATE_DISTANCE_M` both kept and made configurable (currently hardcoded at 15 s and 100 m). |
 
@@ -104,9 +104,9 @@ pub trait LocationStore: Send + Sync {
 ### Phase 4 — DB migration
 
 New migration `007_shard_index`:
-- Drop the `locations_loc_2dsphere` index.
 - Create compound index: `{ shard_key: 1, updatedAt: -1 }` on `locations`.
 - Backfill `shard_key` on all existing documents (compute from stored `loc` coordinates).
+- No index to drop — the collection currently has no geospatial index.
 
 Add to `migration-service/src/main.rs`. Idempotent — safe to run on existing data.
 
