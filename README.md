@@ -122,11 +122,11 @@ The `dev` branch and all `claude/**` branches auto-deploy to [https://biffjezos.
 
 Donate at [https://biffjezos.github.io/bbn/donate/](https://biffjezos.github.io/bbn/donate/) via Apple Pay, credit/debit card, or Revolut. Add a note if you want to be listed as a donor.
 
-### Current monthly expenditure: **26.42 €**
+### Current monthly expenditure: **25,75€**
 
 - 21,42€ — Claude Code
-- 5,00€ — Railway (microservices + MongoDB)
+- $ 5,00 — Railway (~4,33€ microservices + MongoDB)
 
 ### Total amount spent (since February 2026)
 
-- 21,42€
+- 25,75€
