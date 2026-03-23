@@ -33,6 +33,7 @@ Short labels used to tag REFLECTION entries. Enables pattern detection across se
 
 ## Log
 
+- 2026-03-23 — CHANGE: Added "Update audit files" step to "Before Each Commit / Push" checklist and explicit stub/non-speculative-read rules to the AUDIT_DONE.md section — audit files now follow the same move-and-stub workflow as ticket files.
 - 2026-03-23 — REFLECTION [**API assumption**]: Assumed opaque-ke `ServerRegistration` stored state between start/finish (like login). In reality, server-side registration is stateless — `finish()` takes only the upload, no stored state. Discovered at compile time. Simplified both users-service and the api.js changePassword() accordingly. No rule added — this was a library-specific assumption that must be verified from docs/compiler.
 - 2026-03-23 — REFLECTION [**Under-reading**]: T-18 was fixed in commit f2e3918 (2026-03-22) but never moved to TICKETS_DONE.md. I then listed it as "next priority" this session. Root cause: ticket cleanup only happened at wrap-up and was missed. Fixed by the new pre-commit ticket update rule.
 - 2026-03-23 — CHANGE: Added "Update tickets" step to "Before Each Commit / Push" checklist — requires moving completed phases/tickets to TICKETS_DONE.md and updating status lines before every commit, not only at wrap-up.
