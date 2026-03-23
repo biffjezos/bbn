@@ -29,12 +29,10 @@ jobs:
           bundler-cache: true
           working-directory: ui
 
-      # Install dependencies and build Jekyll
+      # Build Jekyll site (bundle install already done by setup-ruby bundler-cache)
       - name: Build Jekyll site
         working-directory: ui
-        run: |
-          bundle install
-          bundle exec jekyll build -d ../public
+        run: bundle exec jekyll build -d ../public
         env:
           JEKYLL_ENV: production
 
