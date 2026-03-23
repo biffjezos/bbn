@@ -25,6 +25,7 @@ use mongodb::{
     bson::{doc, DateTime as BsonDateTime, Document},
     Client, Database,
 };
+use reqwest::Url;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -36,9 +37,20 @@ struct Config {
     db_name:           String,
     jwt_secret:        String,
     service_secret:    String,
-    loc_service_url:   String,
-    tiers_service_url: String,
-    fav_service_url:   String,
+    loc_service_url:   Url,
+    tiers_service_url: Url,
+    fav_service_url:   Url,
+}
+
+/// Parse a service base URL from an env var and verify the scheme is http/https.
+/// Fails at startup so misconfigured URLs are caught immediately.
+fn parse_service_url(raw: &str, name: &str) -> Result<Url, String> {
+    let url = Url::parse(raw)
+        .map_err(|e| format!("FATAL: {name} is not a valid URL: {e}"))?;
+    match url.scheme() {
+        "http" | "https" => Ok(url),
+        s => Err(format!("FATAL: {name} scheme must be http or https, got '{s}'")),
+    }
 }
 
 impl Config {
@@ -57,9 +69,9 @@ impl Config {
             db_name:           env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
             jwt_secret:        env::var("JWT_SECRET").unwrap(),
             service_secret:    env::var("SERVICE_SECRET").unwrap(),
-            loc_service_url:   env::var("LOC_SERVICE_URL").unwrap(),
-            tiers_service_url: env::var("TIERS_SERVICE_URL").unwrap(),
-            fav_service_url:   env::var("FAV_SERVICE_URL").unwrap(),
+            loc_service_url:   parse_service_url(&env::var("LOC_SERVICE_URL").unwrap(),   "LOC_SERVICE_URL")?,
+            tiers_service_url: parse_service_url(&env::var("TIERS_SERVICE_URL").unwrap(), "TIERS_SERVICE_URL")?,
+            fav_service_url:   parse_service_url(&env::var("FAV_SERVICE_URL").unwrap(),   "FAV_SERVICE_URL")?,
         })
     }
 }
@@ -71,9 +83,9 @@ struct AppState {
     db:                Database,
     jwt_secret:        String,
     service_secret:    String,
-    loc_service_url:   String,
-    tiers_service_url: String,
-    fav_service_url:   String,
+    loc_service_url:   Url,
+    tiers_service_url: Url,
+    fav_service_url:   Url,
     http:              reqwest::Client,
     svc_token_cache:   Arc<ServiceTokenCache>,
 }
@@ -339,13 +351,14 @@ async fn send_message(
         Err(e) => { eprintln!("[messages POST] svc token: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
+    let mut fav_url = state.fav_service_url.clone();
+    fav_url.set_path("/favourites/pair-status");
+    fav_url.query_pairs_mut()
+        .append_pair("sender",    &from_oid.to_hex())
+        .append_pair("recipient", &to_oid.to_hex());
+
     let pair_status: PairStatusResp = match state.http
-        .get(format!(
-            "{}/favourites/pair-status?sender={}&recipient={}",
-            state.fav_service_url,
-            from_oid.to_hex(),
-            to_oid.to_hex(),
-        ))
+        .get(fav_url)
         .header("X-Service-Token", &svc_token)
         .timeout(Duration::from_secs(5))
         .send()
@@ -370,8 +383,10 @@ async fn send_message(
     }
 
     // ── Sender must be sharing location ──
+    let mut loc_from_url = state.loc_service_url.clone();
+    loc_from_url.set_path(&format!("/location/user/{}", from_oid.to_hex()));
     let from_resp = match state.http
-        .get(format!("{}/location/user/{}", state.loc_service_url, from_oid.to_hex()))
+        .get(loc_from_url)
         .header("X-Service-Token", &svc_token)
         .timeout(Duration::from_secs(5))
         .send()
@@ -391,8 +406,10 @@ async fn send_message(
     };
 
     // ── Recipient location + proximity ──
+    let mut loc_to_url = state.loc_service_url.clone();
+    loc_to_url.set_path(&format!("/location/user/{}", to_oid.to_hex()));
     let to_resp = match state.http
-        .get(format!("{}/location/user/{}", state.loc_service_url, to_oid.to_hex()))
+        .get(loc_to_url)
         .header("X-Service-Token", &svc_token)
         .timeout(Duration::from_secs(5))
         .send()
@@ -422,14 +439,19 @@ async fn send_message(
             return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid tier value." }))).into_response();
         }
 
+        let mut tiers_sender_url    = state.tiers_service_url.clone();
+        let mut tiers_recipient_url = state.tiers_service_url.clone();
+        tiers_sender_url.set_path(&format!("/tiers/radius/message/{}", sender_tier));
+        tiers_recipient_url.set_path(&format!("/tiers/radius/message/{}", recipient_tier));
+
         let (s_res, r_res) = tokio::join!(
             state.http
-                .get(format!("{}/tiers/radius/message/{}", state.tiers_service_url, sender_tier))
+                .get(tiers_sender_url)
                 .header("X-Service-Token", &svc_token)
                 .timeout(Duration::from_secs(5))
                 .send(),
             state.http
-                .get(format!("{}/tiers/radius/message/{}", state.tiers_service_url, recipient_tier))
+                .get(tiers_recipient_url)
                 .header("X-Service-Token", &svc_token)
                 .timeout(Duration::from_secs(5))
                 .send(),
