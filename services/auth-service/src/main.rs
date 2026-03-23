@@ -189,7 +189,7 @@ fn is_valid_email_hash(h: &str) -> bool {
 
 async fn bootstrap_admin(db: &Database, user_id_str: &str) {
     let Some(oid) = safe_object_id(user_id_str) else {
-        eprintln!("[auth] ADMIN_BOOTSTRAP_USER_ID '{user_id_str}' is not a valid ObjectId — skipping.");
+        eprintln!("[auth] ADMIN_BOOTSTRAP_USER_ID is not a valid ObjectId — skipping bootstrap.");
         return;
     };
 
