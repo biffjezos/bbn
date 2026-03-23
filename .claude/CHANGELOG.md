@@ -26,13 +26,18 @@ Short labels used to tag REFLECTION entries. Enables pattern detection across se
 ---
 ## Reflection
 
-**Note:** This section should not be longer than one or two paragraphs. It's a compact summary of all your reflections since the beginning of the project.
+The most recurring failure mode is **acting before reading enough context** (under-reading): stale tickets listed as priorities, migrations designed for a dev environment with no users, library behaviour assumed without verification. The fix is always the same — read first, confirm context, then act.
+
+A second pattern is **circular reasoning on agreed designs**: once the owner confirms an approach (cryptographic or otherwise), stop re-opening it. Propose once, get confirmation, commit to it. Related: never design for production migration complexity when the owner has already said the DB is empty.
+
+Structural fixes already applied: pre-commit ticket + audit update steps, friction awareness check before acting, explicit ID prefix conventions in audit files, post-commit reporting scope limited to owner actions only.
 
 
 ---
 
 ## Log
 
+- 2026-03-23 — REFLECTION [**Circular reasoning**]: Kept second-guessing the T-24 E2EE design already agreed with the owner — proposing incomplete solutions, walking them back, re-proposing variants. Root cause: not committing to a design once the key constraint (ECDH, no fallbacks) was stated. Fix: once the owner confirms a cryptographic approach, stop re-opening it. Write it down and move on.
 - 2026-03-23 — REFLECTION [**False confidence**]: Designed OPAQUE rotation with multi-setup versioning and migration paths despite the owner having repeatedly stated this is a dev environment with no real users. Led to frustration. Root cause: architectural habit of designing for production scale regardless of context. Fix: when discussing rotation, key rotation, or any backward-compat concern, first confirm whether real data exists that needs to be preserved.
 - 2026-03-23 — CHANGE: Added "Update audit files" step to "Before Each Commit / Push" checklist and explicit stub/non-speculative-read rules to the AUDIT_DONE.md section — audit files now follow the same move-and-stub workflow as ticket files.
 - 2026-03-23 — REFLECTION [**API assumption**]: Assumed opaque-ke `ServerRegistration` stored state between start/finish (like login). In reality, server-side registration is stateless — `finish()` takes only the upload, no stored state. Discovered at compile time. Simplified both users-service and the api.js changePassword() accordingly. No rule added — this was a library-specific assumption that must be verified from docs/compiler.
