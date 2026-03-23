@@ -6,6 +6,62 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-23 — OPAQUE Authentication + Email Privacy (SEC-1.1)
+
+**Status:** ✅ Implemented 2026-03-23. Branch: `claude/review-next-tasks-dPbAT`.
+
+### What was done
+
+- **opaque-client-wasm/**: new Rust crate compiled to WASM (opaque-ke 4.1.0-pre.1 + Ristretto255 + Argon2). Artifacts committed to `ui/scripts/opaque-client/`.
+- **common crate**: removed `email` from `UserClaims`, `IssuedUserClaims`, `UserTokenParams`; added `email_db_hash()`.
+- **auth-service**: complete rewrite. New endpoints `POST /auth/register/start`, `/register/finish`, `/login/start`, `/login/finish`. Login state stored in in-memory HashMap with 2-min TTL. `OPAQUE_SERVER_SETUP` required; generates and exits if absent. `EMAIL_PEPPER` required. `POST /auth/register` and `/auth/login` removed. `POST /auth/guest` unchanged.
+- **users-service**: removed bcrypt; added `POST /users/me/password/start` and `/finish` (stateless OPAQUE re-registration). `OPAQUE_SERVER_SETUP` required. Removed email from `UserForToken`, `make_token()`, `UpdateMeBody`, `AdminUserDoc`. Removed admin email filter case.
+- **migration-service**: added migration `008_opaque_emailhash` — drops `email_1` sparse index, creates `emailHash_1` unique sparse index, drops `location_2dsphere` index (T-20 shard approach).
+- **gateway**: replaced `/api/auth/register` + `/api/auth/login` with 4 OPAQUE routes; added `/api/users/me/password/start` + `/finish`.
+- **ui/scripts/opaque-client.js**: new ES-module bridge; exposes `window.OpaqueClient` with `hashEmail`, `registerStart`, `registerFinish`, `loginStart`, `loginFinish`.
+- **ui/scripts/api.js**: `register()` and `login()` are now 2-round async OPAQUE flows; `changePassword()` added.
+- **ui/scripts/admin.js**: removed "Email" search option and email display from admin user cards.
+- **ui/_layouts/default.html**: added `<script type="module" src="/scripts/opaque-client.js">`.
+
+### OPAQUE API (actual implementation)
+
+Server-side registration is stateless (no state between start/finish). Login uses in-memory `stateToken` for server-side `ServerLogin` state.
+
+```
+POST /auth/register/start  { emailHash, registrationRequest }  → { registrationResponse }
+POST /auth/register/finish { emailHash, registrationUpload, nickname, age, sex, guestId? } → { token }
+POST /auth/login/start     { emailHash, loginRequest, guestId? } → { loginResponse, stateToken }
+POST /auth/login/finish    { stateToken, finalization }          → { token }
+POST /users/me/password/start  { registrationRequest }           → { registrationResponse }
+POST /users/me/password/finish { registrationUpload, emailHash? } → { ok, token }
+```
+
+### Required before going live
+
+1. Wipe `users` collection
+2. Set `EMAIL_PEPPER` in Railway (auth-service + users-service)
+3. Set `OPAQUE_SERVER_SETUP` in Railway (auth-service generates on missing env var; copy from logs)
+4. Run migration-service `008_opaque_emailhash`
+5. Update UI modals to call new Api methods
+
+---
+
+## T-18 — Login modal keeps credentials after logout
+
+**Status:** ✅ Complete (2026-03-22). Commit `f2e3918`.
+
+Added `hidden.bs.modal` listeners to `loginModal` and `registerModal` in `ui/scripts/app.js` that zero out all input fields and hide the error banner whenever either modal closes — regardless of how it was dismissed (successful login, backdrop click, Escape). Follows the existing pattern on `deleteConfirmModal`. Prevents credentials remaining in the DOM after immediate logout.
+
+---
+
+## T-10 — Restore migration-service
+
+**Status:** ✅ Closed (2026-03-23) — ticket was invalid.
+
+The ticket proposed restoring `services/migration-service.js` (Node.js) from git history. The premise was wrong: migration-service was already ported to Rust as part of T-04c. The Rust binary lives at `services/migration-service/src/main.rs` and was running. No restoration was needed. Closed per owner instruction.
+
+---
+
 ## T-20 — Sharded Location Store: Phases 1–4 (2026-03-23)
 
 Phase 5 (auto-adjustable shard size) remains deferred in TICKETS.md.

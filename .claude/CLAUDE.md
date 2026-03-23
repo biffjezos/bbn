@@ -63,6 +63,9 @@ Before writing any code for a ticket:
 
 ## Before Each Commit / Push
 
+- **Update tickets.** Reflect the current state of any ticket touched this session:
+  move completed phases/tickets to `TICKETS_DONE.md` (leave a stub), update status
+  lines, add any newly discovered tickets. Do this before every commit, not only at wrap-up.
 - **Reflect.** Identify anything that slowed the session down or caused
    friction: unclear rules, missing context, a workflow step that broke, a
    ticket structure that wasn't useful. Be brief and honest. You may ask the
@@ -163,7 +166,7 @@ Append an entry during every wrap-up. Two entry types:
 - **CHANGE:** a modification to CLAUDE.md or persistent file structure — what changed and why.
 - **REFLECTION:** a mistake or friction from the session — what went wrong and what rule was added or changed to prevent recurrence.
 
-Format: `YYYY-MM-DD — [CHANGE|REFLECTION]: <description>`.
+Format: `YYYY-MM-DD — [CHANGE|REFLECTION]: <description>`. Newest entries go at the top of the Log section.
 Never edit or remove existing entries.
 
 ---

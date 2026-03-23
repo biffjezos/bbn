@@ -5,49 +5,61 @@
 // ============================================================
 
 use std::env;
+use std::sync::Arc;
 
 use axum::{
     extract::{FromRef, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
-    routing::{delete, get, patch, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use common::{
     auth::{issue_user_token, AuthToken, JwtSecret, ServiceSecret, RequireRegistered, ServiceToken, UserTokenParams},
     mongo::safe_object_id,
 };
 use futures_util::TryStreamExt;
 use mongodb::{
-    bson::{doc, DateTime as BsonDateTime, Document},
+    bson::{doc, Binary, DateTime as BsonDateTime, Document},
+    bson::spec::BinarySubtype,
     options::ReturnDocument,
     Client, Database,
 };
+use opaque_ke::{CipherSuite, ServerRegistration, ServerSetup};
+
 use serde::Deserialize;
 use serde_json::json;
 
-// ── Email validation ──────────────────────────────────────────────────────────
+// ── OPAQUE cipher suite (must match auth-service and WASM client) ─────────────
 
-fn is_valid_email(email: &str) -> bool {
-    let mut parts = email.splitn(2, '@');
-    let local  = parts.next().unwrap_or("");
-    let domain = match parts.next() { Some(d) => d, None => return false };
-    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+// Server-side OPAQUE registration is stateless — the server only mediates
+// the OPRF blind. No in-memory session state is needed between start/finish.
+struct DefaultCs;
+impl CipherSuite for DefaultCs {
+    type OprfCs      = opaque_ke::Ristretto255;
+    type KeyExchange = opaque_ke::TripleDh<opaque_ke::Ristretto255, sha2::Sha512>;
+    type Ksf         = opaque_ke::argon2::Argon2<'static>;
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
+fn is_valid_email_hash(h: &str) -> bool {
+    h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 struct Config {
-    port:           u16,
-    mongo_uri:      String,
-    db_name:        String,
-    jwt_secret:     String,
-    service_secret: String,
+    port:                   u16,
+    mongo_uri:              String,
+    db_name:                String,
+    jwt_secret:             String,
+    service_secret:         String,
+    opaque_server_setup_b64: String,
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI"];
+        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "OPAQUE_SERVER_SETUP"];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
             return Err(format!(
@@ -56,11 +68,12 @@ impl Config {
             ));
         }
         Ok(Self {
-            port:           env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3002),
-            mongo_uri:      env::var("MONGO_URI").unwrap(),
-            db_name:        env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
-            jwt_secret:     env::var("JWT_SECRET").unwrap(),
-            service_secret: env::var("SERVICE_SECRET").unwrap(),
+            port:                   env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3002),
+            mongo_uri:              env::var("MONGO_URI").unwrap(),
+            db_name:                env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
+            jwt_secret:             env::var("JWT_SECRET").unwrap(),
+            service_secret:         env::var("SERVICE_SECRET").unwrap(),
+            opaque_server_setup_b64: env::var("OPAQUE_SERVER_SETUP").unwrap(),
         })
     }
 }
@@ -72,6 +85,7 @@ struct AppState {
     db:             Database,
     jwt_secret:     String,
     service_secret: String,
+    opaque_setup:   Arc<ServerSetup<DefaultCs>>,
 }
 
 impl FromRef<AppState> for JwtSecret {
@@ -87,16 +101,15 @@ impl FromRef<AppState> for Database {
 // ── DB document types ─────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct UserPassHash {
-    #[serde(rename = "passwordHash")]
-    password_hash: Option<String>,
+struct UserOpaqueRecord {
+    #[serde(rename = "opaqueRecord")]
+    opaque_record: Option<mongodb::bson::Binary>,
 }
 
 #[derive(Deserialize)]
 struct UserForToken {
     #[serde(rename = "_id")]
     id:            mongodb::bson::oid::ObjectId,
-    email:         Option<String>,
     nickname:      Option<String>,
     sex:           Option<String>,
     age:           Option<i32>,
@@ -145,7 +158,6 @@ struct AdminUserDoc {
     #[serde(rename = "_id")]
     id:            mongodb::bson::oid::ObjectId,
     nickname:      Option<String>,
-    email:         Option<String>,
     age:           Option<i32>,
     sex:           Option<String>,
     tier:          Option<String>,
@@ -188,7 +200,6 @@ fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
     issue_user_token(
         UserTokenParams {
             sub:          &user.id.to_hex(),
-            email:        user.email.as_deref().unwrap_or(""),
             nickname:     user.nickname.as_deref().unwrap_or(""),
             sex:          user.sex.as_deref().unwrap_or(""),
             age:          user.age.map(|a| a.max(0) as u32),
@@ -253,11 +264,7 @@ struct UpdateMeBody {
     venue_name:            Option<String>,
     age:                   Option<serde_json::Value>,
     sex:                   Option<String>,
-    email:                 Option<String>,
     tier:                  Option<serde_json::Value>,
-    password:              Option<String>,
-    #[serde(rename = "currentPassword")]
-    current_password:      Option<String>,
     #[serde(rename = "publicKey")]
     public_key:            Option<String>,
     #[serde(rename = "encryptedPrivateKey")]
@@ -318,65 +325,11 @@ async fn put_me(
         update.insert("sex", sex);
     }
 
-    if let Some(email) = body.email {
-        let email = email.to_lowercase();
-        let email = email.trim().to_string();
-        if !is_valid_email(&email) {
-            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid email address." }))).into_response();
-        }
-        update.insert("email", email);
-    }
-
-    let changing_password = body.password.as_ref().map(|p| p.len() >= 8).unwrap_or(false);
-
-    if changing_password {
-        let new_pass = body.password.unwrap();
-        let current_pass = match body.current_password {
-            Some(p) => p,
-            None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "currentPassword is required to change your password." }))).into_response(),
-        };
-
-        let existing: UserPassHash = match state.db.collection::<UserPassHash>("users")
-            .find_one(doc! { "_id": oid })
-            .projection(doc! { "passwordHash": 1 })
-            .await
-        {
-            Ok(Some(u)) => u,
-            Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
-            Err(e)      => { eprintln!("[users/me PUT] hash lookup: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
-
-        let stored_hash = existing.password_hash.unwrap_or_default();
-
-        // bcrypt::verify is CPU-bound — run in a blocking thread
-        let ok = match tokio::task::spawn_blocking({
-            let stored = stored_hash.clone();
-            let current = current_pass.clone();
-            move || bcrypt::verify(&current, &stored)
-        }).await {
-            Ok(Ok(v))  => v,
-            Ok(Err(e)) => { eprintln!("[users/me PUT] bcrypt verify: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-            Err(e)     => { eprintln!("[users/me PUT] spawn_blocking: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
-
-        if !ok {
-            return (StatusCode::FORBIDDEN, Json(json!({ "error": "Current password is incorrect." }))).into_response();
-        }
-
-        let new_hash = match tokio::task::spawn_blocking(move || bcrypt::hash(&new_pass, 12)).await {
-            Ok(Ok(h))  => h,
-            Ok(Err(e)) => { eprintln!("[users/me PUT] bcrypt hash: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-            Err(e)     => { eprintln!("[users/me PUT] spawn_blocking hash: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
-
-        update.insert("passwordHash", new_hash);
-
-        // Accept re-encrypted key blob (atomic with password change)
-        if let (Some(pk), Some(epk)) = (body.public_key, body.encrypted_private_key) {
-            if let Ok(epk_bson) = mongodb::bson::to_bson(&epk) {
-                update.insert("publicKey", pk);
-                update.insert("encryptedPrivateKey", epk_bson);
-            }
+    // Accept key update (profile update only — not tied to password change)
+    if let (Some(pk), Some(epk)) = (body.public_key, body.encrypted_private_key) {
+        if let Ok(epk_bson) = mongodb::bson::to_bson(&epk) {
+            update.insert("publicKey", pk);
+            update.insert("encryptedPrivateKey", epk_bson);
         }
     }
 
@@ -384,13 +337,8 @@ async fn put_me(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Nothing to update." }))).into_response();
     }
 
-    let mut mongo_update = doc! { "$set": update.clone() };
-    if changing_password {
-        mongo_update.insert("$inc", doc! { "tokenVersion": 1 });
-    }
-
     if let Err(e) = state.db.collection::<Document>("users")
-        .update_one(doc! { "_id": oid }, mongo_update)
+        .update_one(doc! { "_id": oid }, doc! { "$set": update.clone() })
         .await
     {
         eprintln!("[users/me PUT] update: {e}");
@@ -406,29 +354,6 @@ async fn put_me(
         let _ = state.db.collection::<Document>("locations")
             .update_one(doc! { "userId": &claims.sub }, doc! { "$set": loc_update })
             .await;
-    }
-
-    // Return fresh JWT after password change
-    if changing_password {
-        let updated: Option<UserForToken> = match state.db.collection::<UserForToken>("users")
-            .find_one(doc! { "_id": oid })
-            .projection(doc! { "passwordHash": 0 })
-            .await
-        {
-            Ok(u)  => u,
-            Err(e) => { eprintln!("[users/me PUT] re-fetch: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-        };
-
-        match updated {
-            None    => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(),
-            Some(u) => {
-                let token = match make_token(&u, &state.jwt_secret) {
-                    Ok(t)  => t,
-                    Err(e) => { eprintln!("[users/me PUT] token: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
-                };
-                return Json(json!({ "ok": true, "token": token })).into_response();
-            }
-        }
     }
 
     Json(json!({ "ok": true })).into_response()
@@ -867,7 +792,6 @@ async fn admin_get_users(
         let trimmed = query_str.trim();
         if !trimmed.is_empty() {
             match q.by.as_deref() {
-                Some("email") => { filter.insert("email", trimmed.to_lowercase()); }
                 Some("id")    => {
                     match safe_object_id(trimmed) {
                         Some(oid) => { filter.insert("_id", oid); }
@@ -934,7 +858,6 @@ async fn admin_get_users(
         json!({
             "userId":       uid,
             "nickname":     u.nickname.as_deref(),
-            "email":        u.email.as_deref(),
             "age":          u.age,
             "sex":          u.sex.as_deref(),
             "tier":         u.tier.as_deref().unwrap_or("regular"),
@@ -1361,6 +1284,122 @@ async fn delete_manager_venue(
     Json(json!({ "ok": true })).into_response()
 }
 
+// ── POST /users/me/password/start ─────────────────────────────────────────────
+//
+// Server-side OPAQUE registration is stateless — the OPRF mediator only needs
+// the ServerSetup and the credential identifier (userId from JWT).  No in-memory
+// session is required between start and finish.
+
+#[derive(Deserialize)]
+struct PwChangeStartBody {
+    #[serde(rename = "registrationRequest")]
+    registration_request: String, // base64-encoded RegistrationRequest
+}
+
+async fn users_me_password_start(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+    Json(body): Json<PwChangeStartBody>,
+) -> impl IntoResponse {
+    let req_bytes = match B64.decode(&body.registration_request) {
+        Ok(b)  => b,
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid registrationRequest encoding." }))).into_response(),
+    };
+
+    let reg_request = match opaque_ke::RegistrationRequest::<DefaultCs>::deserialize(&req_bytes) {
+        Ok(r)  => r,
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid registrationRequest." }))).into_response(),
+    };
+
+    let server_reg_start = match ServerRegistration::<DefaultCs>::start(
+        &state.opaque_setup,
+        reg_request,
+        claims.sub.as_bytes(),
+    ) {
+        Ok(r)  => r,
+        Err(e) => { eprintln!("[users/me/password/start] OPAQUE start: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+
+    let response_b64 = B64.encode(server_reg_start.message.serialize());
+    Json(json!({ "registrationResponse": response_b64 })).into_response()
+}
+
+// ── POST /users/me/password/finish ────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct PwChangeFinishBody {
+    #[serde(rename = "registrationUpload")]
+    registration_upload: String, // base64-encoded RegistrationUpload
+    #[serde(rename = "emailHash")]
+    email_hash:         Option<String>, // optional: update emailHash alongside password
+}
+
+async fn users_me_password_finish(
+    _svc: ServiceToken,
+    RequireRegistered(claims): RequireRegistered,
+    State(state): State<AppState>,
+    Json(body): Json<PwChangeFinishBody>,
+) -> impl IntoResponse {
+    let upload_bytes = match B64.decode(&body.registration_upload) {
+        Ok(b)  => b,
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid registrationUpload encoding." }))).into_response(),
+    };
+
+    let upload = match opaque_ke::RegistrationUpload::<DefaultCs>::deserialize(&upload_bytes) {
+        Ok(u)  => u,
+        Err(_) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid registrationUpload." }))).into_response(),
+    };
+
+    let password_file = ServerRegistration::<DefaultCs>::finish(upload);
+
+    let record_bytes = password_file.serialize().to_vec();
+    let opaque_record = Binary { subtype: BinarySubtype::Generic, bytes: record_bytes };
+
+    let oid = match safe_object_id(&claims.sub) {
+        Some(id) => id,
+        None     => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(),
+    };
+
+    // Build update — always update opaqueRecord + bump tokenVersion
+    let mut set_doc = doc! { "opaqueRecord": opaque_record };
+
+    // Optional email hash update (must be valid 64-char hex)
+    if let Some(ref eh) = body.email_hash {
+        if !is_valid_email_hash(eh) {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid emailHash." }))).into_response();
+        }
+        set_doc.insert("emailHash", eh.as_str());
+    }
+
+    if let Err(e) = state.db.collection::<Document>("users")
+        .update_one(
+            doc! { "_id": oid },
+            doc! { "$set": set_doc, "$inc": { "tokenVersion": 1 } },
+        )
+        .await
+    {
+        eprintln!("[users/me/password/finish] DB update: {e}");
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response();
+    }
+
+    // Return a fresh JWT with the new tokenVersion
+    let updated = match state.db.collection::<UserForToken>("users")
+        .find_one(doc! { "_id": oid })
+        .projection(doc! { "opaqueRecord": 0 })
+        .await
+    {
+        Ok(Some(u)) => u,
+        Ok(None)    => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(),
+        Err(e)      => { eprintln!("[users/me/password/finish] re-fetch: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+
+    match make_token(&updated, &state.jwt_secret) {
+        Ok(token) => Json(json!({ "ok": true, "token": token })).into_response(),
+        Err(e)    => { eprintln!("[users/me/password/finish] token: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -1380,7 +1419,19 @@ async fn main() {
         .database(&cfg.db_name);
     println!("[users] DB connected.");
 
-    let state = AppState { db, jwt_secret: cfg.jwt_secret, service_secret: cfg.service_secret };
+    let setup_bytes = B64.decode(&cfg.opaque_server_setup_b64)
+        .expect("OPAQUE_SERVER_SETUP: invalid base64");
+    let opaque_setup = Arc::new(
+        ServerSetup::<DefaultCs>::deserialize(&setup_bytes)
+            .expect("OPAQUE_SERVER_SETUP: invalid ServerSetup bytes"),
+    );
+
+    let state = AppState {
+        db,
+        jwt_secret:     cfg.jwt_secret,
+        service_secret: cfg.service_secret,
+        opaque_setup,
+    };
 
     let app = Router::new()
         .route("/health",                    get(health))
@@ -1392,6 +1443,8 @@ async fn main() {
         .route("/users/me/keys",             put(put_keys))
         .route("/users/me/keys",             get(get_keys))
         .route("/users/me/preferences",      get(get_preferences).put(put_preferences))
+        .route("/users/me/password/start",   post(users_me_password_start))
+        .route("/users/me/password/finish",  post(users_me_password_finish))
         .route("/admin/config",              get(admin_get_config))
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))

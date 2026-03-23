@@ -37,7 +37,11 @@ Target solution: OPAQUE / PAKE. `opaque-ke` (Rust) is production-ready; no equiv
 
 **Sequencing decision (2026-03-16):** Implement OPAQUE in `auth-service` (Rust). Unblocks this ticket and T-05b (encrypted block note). Also resolve items in AUDIT.md 6.1/6.3 before contemplating this ticket.
 
-**Priority:** HIGH — blocked on OPAQUE implementation decision.
+**Implementation plan approved (2026-03-23):** See T-23 in TICKETS.md. WASM approach confirmed. No migration — users collection wiped. Two new required env vars: `EMAIL_PEPPER`, `OPAQUE_SERVER_SETUP`.
+
+**Implemented 2026-03-23:** T-23 complete. Code merged to branch `claude/review-next-tasks-dPbAT`. Pending: production env vars, users collection wipe, migration run. See TICKETS_DONE.md for details.
+
+**Priority:** HIGH → **RESOLVED** (pending deployment).
 
 ---
 
@@ -140,7 +144,7 @@ Four `sort_unstable_by` calls used `.partial_cmp().unwrap()` on `f64` distance v
 
 | Status | ID | Severity | Finding |
 |---|---|---|---|
-| 🔲 | SEC-1.1 | HIGH | Plain password/email in POST request — needs OPAQUE/PAKE |
+| ✅ | SEC-1.1 | HIGH | Plain password/email in POST request — OPAQUE implemented (T-23, pending deploy) |
 | 🔲 | SEC-1.2 | MEDIUM | Gateway send-rate bypassable at messages-service HTTP endpoint |
 | 🔲 | SEC-1.3 | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — prefer `CF-Connecting-IP` |
 | 🔲 | SEC-1.4 | MEDIUM | User JWT TTL hardcoded at 7 days — should default to 24 h, be configurable |
