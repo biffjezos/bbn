@@ -32,7 +32,7 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 3. Server stores only ciphertext — never sees plaintext profile fields.
 4. Owner decrypts: `exportKey` → `privateKey` → `profileKey` → plaintext profile.
 5. Nearby users decrypt: they already receive each other's `publicKey`. The sender's `profileKey` is encrypted with the viewer's public key and included in the nearby payload. Viewer uses their own `privateKey` (decrypted with their `exportKey`) to get `profileKey`, then decrypts the profile.
-6. Admin access: admin's public key is used to encrypt the `profileKey` at registration/update time, same as any other authorised viewer.
+6. Admin access: same flow as nearby users — server encrypts `profileKey` with the admin's public key on demand when the admin requests a profile. Nothing extra stored in the DB.
 7. JWT `prof` claim: contains the AES-GCM ciphertext of `{ nickname, age, sex }` — same blob as stored in DB. JWT signature provides tamper-evidence. Client decrypts using `exportKey` → `privateKey` → `profileKey`.
 
 **Why exportKey, not emailSalt:**
@@ -46,7 +46,7 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 - **Password change invalidates exportKey.** New OPAQUE record → new `exportKey` → client must re-encrypt `privateKey` with new `exportKey` immediately after password change. Profile ciphertext itself is unchanged (it's locked to `profileKey`, not `exportKey` directly). `tokenVersion` bump already happens on password change.
 
-- **Authorised viewers.** For phase 1: nearby users and admin. The set of viewers is dynamic (nearby changes constantly) — the practical approach is to re-encrypt `profileKey` for the requesting viewer on demand rather than pre-encrypting for every possible viewer at write time.
+- **Authorised viewers.** The set of viewers is dynamic. `profileKey` is never pre-encrypted and stored per viewer. Instead, when a client requests another user's profile (nearby, admin panel), the server returns `profileCiphertext` + `profileKey` encrypted on demand with the requesting client's public key. The requesting client decrypts `profileKey` with their private key, then decrypts the profile. No per-viewer fields in the DB.
 
 **Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
 
