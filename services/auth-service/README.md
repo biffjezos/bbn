@@ -70,12 +70,23 @@ No panics, no `FATAL` lines.
 
 ### Step 4 — Admin bootstrap (optional)
 
-To promote an existing user to admin on first boot:
+This promotes a regular user to admin. The user must already exist in the database.
 
-1. Set `ADMIN_BOOTSTRAP_USER_ID=<mongodb-object-id>` in Railway.
-2. Redeploy auth-service — it will promote the user on boot.
-3. **Remove the variable immediately after** and redeploy again. It is a one-time
-   operation; leaving it set is a security risk.
+1. **Register a normal account** through the app (or API) so the user document is
+   created in MongoDB.
+2. **Find the user's `_id`** in the `users` collection. You can use MongoDB Compass,
+   `mongosh`, or Railway's built-in shell:
+   ```
+   db.users.findOne({ username: "<your-username>" }, { _id: 1 })
+   ```
+   Copy the ObjectId string (e.g. `507f1f77bcf86cd799439011`).
+3. **Set the env var** in Railway on the auth-service:
+   `ADMIN_BOOTSTRAP_USER_ID=507f1f77bcf86cd799439011`
+4. **Redeploy** auth-service — on boot it will find the user and set their role to
+   `admin`.
+5. **Remove `ADMIN_BOOTSTRAP_USER_ID`** from Railway env vars immediately and
+   redeploy again. Leaving it set is a security risk — it will re-run on every
+   restart.
 
 ---
 
