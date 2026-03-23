@@ -165,7 +165,7 @@ fn now_bson() -> BsonDateTime { BsonDateTime::now() }
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_millis() as i64
 }
 
@@ -275,10 +275,12 @@ async fn send_message(
     }
 
     let from_id = &claims.sub;
-    // Validate from_id is a safe ObjectId hex string before it reaches any URL (CodeQL #25).
-    if safe_object_id(from_id).is_none() {
-        return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid token subject." }))).into_response();
-    }
+    // Validate from_id is a safe ObjectId hex string. Capture the parsed OID so
+    // URL interpolation uses the structured hex form, not the raw JWT string (CWE-918).
+    let from_oid = match safe_object_id(from_id) {
+        Some(id) => id,
+        None     => return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid token subject." }))).into_response(),
+    };
 
     let to_oid = match safe_object_id(&to_id) {
         Some(id) => id,
@@ -341,7 +343,7 @@ async fn send_message(
         .get(format!(
             "{}/favourites/pair-status?sender={}&recipient={}",
             state.fav_service_url,
-            from_id,
+            from_oid.to_hex(),
             to_oid.to_hex(),
         ))
         .header("X-Service-Token", &svc_token)
@@ -369,7 +371,7 @@ async fn send_message(
 
     // ── Sender must be sharing location ──
     let from_resp = match state.http
-        .get(format!("{}/location/user/{}", state.loc_service_url, from_id))
+        .get(format!("{}/location/user/{}", state.loc_service_url, from_oid.to_hex()))
         .header("X-Service-Token", &svc_token)
         .timeout(Duration::from_secs(5))
         .send()

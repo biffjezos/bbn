@@ -96,5 +96,8 @@ When a finding is resolved: update the relevant concern file's summary, move the
 | 🔲 | SEC-1.4 | [Security](AUDIT_SECURITY.md) | MEDIUM | User JWT TTL hardcoded at 7 days — should default to 24 h, be configurable |
 | 🔲 | SEC-1.5 | [Security](AUDIT_SECURITY.md) | LOW | No request body size cap in gateway |
 | 🔲 | SEC-1.6 | [Security](AUDIT_SECURITY.md) | LOW | `msg_send` shares the general API rate bucket instead of a tighter dedicated limiter |
+| ✅ | SEC-1.7 | [Security](AUDIT_SECURITY.md) | MEDIUM | CWE-918 SSRF — JWT sub raw string interpolated into internal URLs — fixed 2026-03-23 |
+| ✅ | SEC-1.8 | [Security](AUDIT_SECURITY.md) | MEDIUM | NaN panic in location sort (`partial_cmp().unwrap()`) — fixed 2026-03-23 |
+| ✅ | SEC-1.9 | [Security](AUDIT_SECURITY.md) | LOW | Pre-epoch clock panic in `now_unix`/`now_ms` — fixed 2026-03-23 |
 | ⏸️ | PERF-4.1 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Send-rate bucket in-process — not safe for multi-instance gateway (deferred) |
 | 🔲 | PERF-4.2 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Notification poll scales linearly with active users |

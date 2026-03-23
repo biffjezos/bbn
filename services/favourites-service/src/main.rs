@@ -485,7 +485,7 @@ async fn post_range_sync(
     // Fetch active locations for the other users directly from DB (same instance)
     let location_ttl_ms = 10 * 60 * 1000_i64;
     let cutoff = BsonDateTime::from_millis(
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64 - location_ttl_ms
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as i64 - location_ttl_ms
     );
     let live_locs: Vec<LocationEntry> = match state.db
         .collection::<LocationEntry>("locations")

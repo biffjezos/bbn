@@ -277,7 +277,7 @@ impl MemoryStore {
             // point is farther than the current Nth result, no remaining shard
             // can displace any result.
             if limit > 0 && results.len() >= limit {
-                results.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                results.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
                 let nth_dist = results[limit - 1].0;
                 if let Some(next_key) = candidates.get(i + 1) {
                     if min_dist_to_shard(lat, lon, *next_key, self.shard_m) > nth_dist {
@@ -290,7 +290,7 @@ impl MemoryStore {
         }
 
         // Final sort.
-        results.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        results.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
 
         // For any always_include user not captured by the sorted traversal
         // (missed due to early exit), fetch them directly.
@@ -308,7 +308,7 @@ impl MemoryStore {
             }
         }
         results.extend(extra_favs);
-        results.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        results.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
 
         // Reserved-slot model: favourites occupy their slots first, then
         // remaining slots go to nearest non-favourites. Total ≤ limit.
@@ -325,7 +325,7 @@ impl MemoryStore {
 
         let mut final_results: Vec<(f64, LocationEntry)> = fav_results;
         final_results.extend(other_results.into_iter().take(other_limit));
-        final_results.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        final_results.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
 
         final_results
             .into_iter()
