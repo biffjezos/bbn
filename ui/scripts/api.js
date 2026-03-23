@@ -76,17 +76,61 @@ const Api = {
     });
   },
 
-  register({ email, nickname, password, age, sex }) {
-    return apiFetch('/auth/register', {
+  async register({ email, nickname, password, age, sex }) {
+    const opaque   = window.OpaqueClient;
+    const emailHash  = await opaque.hashEmail(email);
+    const regRequest = await opaque.registerStart(password);
+
+    // Round 1: server mediates OPRF blind (stateless — no stateToken)
+    const startRes = await apiFetch('/auth/register/start', {
       method: 'POST',
-      body: JSON.stringify({ email, nickname, password, age: Number(age), sex }),
+      body: JSON.stringify({ emailHash, registrationRequest: regRequest }),
+    });
+
+    const regUpload = await opaque.registerFinish(password, startRes.registrationResponse);
+
+    // Round 2: submit upload + all registration fields
+    return apiFetch('/auth/register/finish', {
+      method: 'POST',
+      body: JSON.stringify({ emailHash, registrationUpload: regUpload, nickname, age: Number(age), sex }),
     });
   },
 
-  login({ email, password, guestId }) {
-    return apiFetch('/auth/login', {
+  async login({ email, password, guestId }) {
+    const opaque    = window.OpaqueClient;
+    const emailHash  = await opaque.hashEmail(email);
+    const loginReq   = await opaque.loginStart(password);
+
+    const startRes = await apiFetch('/auth/login/start', {
       method: 'POST',
-      body: JSON.stringify({ email, password, guestId }),
+      body: JSON.stringify({ emailHash, loginRequest: loginReq, guestId }),
+    });
+
+    const finishData = await opaque.loginFinish(password, startRes.loginResponse);
+
+    return apiFetch('/auth/login/finish', {
+      method: 'POST',
+      body: JSON.stringify({ stateToken: startRes.stateToken, finalization: finishData.finalization }),
+    });
+  },
+
+  async changePassword({ password, emailHash }) {
+    const opaque   = window.OpaqueClient;
+    const regRequest = await opaque.registerStart(password);
+
+    const startRes = await apiFetch('/users/me/password/start', {
+      method: 'POST',
+      body: JSON.stringify({ registrationRequest: regRequest }),
+    });
+
+    const regUpload = await opaque.registerFinish(password, startRes.registrationResponse);
+
+    return apiFetch('/users/me/password/finish', {
+      method: 'POST',
+      body: JSON.stringify({
+        registrationUpload: regUpload,
+        ...(emailHash ? { emailHash } : {}),
+      }),
     });
   },
 

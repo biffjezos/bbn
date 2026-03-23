@@ -18,9 +18,25 @@ use axum::{
     http::{request::Parts, StatusCode},
     response::Json,
 };
+use hmac::{Hmac, Mac};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+type HmacSha256 = Hmac<Sha256>;
+
+/// Compute the DB-level email hash from the client's pre-hash.
+///
+/// - The client sends `hex(SHA-256(lowercase(email)))`.
+/// - The server applies HMAC-SHA256 with EMAIL_PEPPER before storage.
+/// - This prevents offline dictionary attacks against the DB even if it leaks.
+pub fn email_db_hash(client_prehash: &str, pepper: &str) -> String {
+    let mut mac = HmacSha256::new_from_slice(pepper.as_bytes())
+        .expect("HMAC accepts any key length");
+    mac.update(client_prehash.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
 
 // ── Shared secret newtypes ────────────────────────────────────────────────────
 
@@ -157,13 +173,13 @@ where
 
 /// Claims embedded in a user or guest JWT.
 /// All fields beyond `sub` and `role` are optional — guest tokens only set sub/role.
+/// Email is NOT included — the server never has the plaintext email (OPAQUE).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserClaims {
     pub sub:          String,
     pub role:         String, // "user" | "admin" | "venue_manager" | "guest"
     pub tier:         Option<String>,
     pub tv:           Option<u32>,   // tokenVersion
-    pub email:        Option<String>,
     pub nickname:     Option<String>,
     pub age:          Option<u32>,
     pub sex:          Option<String>,
@@ -192,7 +208,6 @@ const GUEST_TOKEN_EXPIRY_SECS: u64 = 15 * 60;        // 15 minutes
 #[derive(Serialize)]
 struct IssuedUserClaims {
     sub:          String,
-    email:        String,
     nickname:     String,
     sex:          String,
     age:          Option<u32>,
@@ -222,7 +237,6 @@ fn now_unix() -> u64 {
 
 pub struct UserTokenParams<'a> {
     pub sub:          &'a str,
-    pub email:        &'a str,
     pub nickname:     &'a str,
     pub sex:          &'a str,
     pub age:          Option<u32>,
@@ -242,7 +256,6 @@ pub fn issue_user_token(
         &Header::new(Algorithm::HS256),
         &IssuedUserClaims {
             sub:          p.sub.to_string(),
-            email:        p.email.to_string(),
             nickname:     p.nickname.to_string(),
             sex:          p.sex.to_string(),
             age:          p.age,

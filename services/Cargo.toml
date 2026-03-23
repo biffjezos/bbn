@@ -16,3 +16,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 bcrypt             = "0.15"
 reqwest            = { version = "0.12", features = ["json"] }
 tower-http         = { version = "0.6", features = ["cors"] }
+opaque-ke          = { version = "4.1.0-pre.1", features = ["ristretto255", "argon2", "std"] }
+sha2               = "0.10"
+hmac               = "0.12"
+hex                = "0.4"
+aes-gcm            = "0.10"
+base64             = "0.22"
+rand               = "0.8"

@@ -90,7 +90,7 @@ When a finding is resolved: update the relevant concern file's summary, move the
 | 🔲 | MAINT-2.5 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | No explicit WS close on message-page navigation |
 | 🔲 | MAINT-2.6 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
 | 🔲 | UX-3.1 | [Usability](AUDIT_USABILITY.md) | MEDIUM | Users enter password twice in cold login → messages flow |
-| 🔲 | SEC-1.1 | [Security](AUDIT_SECURITY.md) | HIGH | Plain password/email in POST request — needs OPAQUE/PAKE |
+| ✅ | SEC-1.1 | [Security](AUDIT_SECURITY.md) | HIGH | Plain password/email in POST request — OPAQUE implemented (T-23, pending deploy) |
 | 🔲 | SEC-1.2 | [Security](AUDIT_SECURITY.md) | MEDIUM | Gateway send-rate bypassable at messages-service HTTP endpoint |
 | 🔲 | SEC-1.3 | [Security](AUDIT_SECURITY.md) | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — prefer `CF-Connecting-IP` |
 | 🔲 | SEC-1.4 | [Security](AUDIT_SECURITY.md) | MEDIUM | User JWT TTL hardcoded at 7 days — should default to 24 h, be configurable |

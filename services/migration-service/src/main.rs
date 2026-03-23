@@ -88,6 +88,7 @@ const MIGRATIONS: &[&str] = &[
     "005_rename_developer_tier",
     "006_email_index_sparse",
     "007_shard_index",
+    "008_opaque_emailhash",
 ];
 
 async fn migration_001(db: &Database) -> Result<(), mongodb::error::Error> {
@@ -256,6 +257,33 @@ async fn migration_007(db: &Database) -> Result<(), mongodb::error::Error> {
     Ok(())
 }
 
+async fn migration_008(db: &Database) -> Result<(), mongodb::error::Error> {
+    // OPAQUE migration:
+    // 1. Drop the old plaintext-email indexes (001 and 006 created them).
+    // 2. Create a unique sparse index on emailHash (the client-side SHA-256 hash).
+    // 3. Drop the 2dsphere geo index on locations — the shard approach (T-20)
+    //    replaces geo queries; geo indexing is not needed in the foreseeable future.
+    let users = db.collection::<Document>("users");
+    let _ = users.drop_index("email_1").await; // sparse index from migration_006; ignore if already gone
+
+    users.create_index(
+        IndexModel::builder()
+            .keys(doc! { "emailHash": 1 })
+            .options(IndexOptions::builder()
+                .name("emailHash_1".to_string())
+                .unique(true)
+                .sparse(true)
+                .build())
+            .build(),
+    ).await?;
+
+    // Drop 2dsphere index on locations — no longer used after T-20 shard approach.
+    let locations = db.collection::<Document>("locations");
+    let _ = locations.drop_index("location_2dsphere").await; // ignore if already gone
+
+    Ok(())
+}
+
 async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Error> {
     match id {
         "001_indexes"                => migration_001(db).await,
@@ -265,6 +293,7 @@ async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Er
         "005_rename_developer_tier"  => migration_005(db).await,
         "006_email_index_sparse"     => migration_006(db).await,
         "007_shard_index"            => migration_007(db).await,
+        "008_opaque_emailhash"       => migration_008(db).await,
         _                            => Ok(()), // unknown migration — skip
     }
 }

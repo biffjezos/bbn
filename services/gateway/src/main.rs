@@ -374,13 +374,29 @@ async fn auth_guest(State(s): State<AppState>, headers: HeaderMap, body: Bytes) 
     if !s.lim_guest.check(real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/auth/guest", s.auth_url), auth_hdr(&headers), Some(body)).await
 }
-async fn auth_register(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+async fn auth_register_start(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
     if !s.lim_register.check(real_ip(&headers)) { return rate_limited(); }
-    proxy(&s, Method::POST, format!("{}/auth/register", s.auth_url), auth_hdr(&headers), Some(body)).await
+    proxy(&s, Method::POST, format!("{}/auth/register/start", s.auth_url), auth_hdr(&headers), Some(body)).await
 }
-async fn auth_login(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+async fn auth_register_finish(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+    if !s.lim_register.check(real_ip(&headers)) { return rate_limited(); }
+    proxy(&s, Method::POST, format!("{}/auth/register/finish", s.auth_url), auth_hdr(&headers), Some(body)).await
+}
+async fn auth_login_start(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
     if !s.lim_login.check(real_ip(&headers)) { return rate_limited(); }
-    proxy(&s, Method::POST, format!("{}/auth/login", s.auth_url), auth_hdr(&headers), Some(body)).await
+    proxy(&s, Method::POST, format!("{}/auth/login/start", s.auth_url), auth_hdr(&headers), Some(body)).await
+}
+async fn auth_login_finish(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+    if !s.lim_login.check(real_ip(&headers)) { return rate_limited(); }
+    proxy(&s, Method::POST, format!("{}/auth/login/finish", s.auth_url), auth_hdr(&headers), Some(body)).await
+}
+async fn users_pw_change_start(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    proxy(&s, Method::POST, format!("{}/users/me/password/start", s.user_url), auth_hdr(&headers), Some(body)).await
+}
+async fn users_pw_change_finish(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    proxy(&s, Method::POST, format!("{}/users/me/password/finish", s.user_url), auth_hdr(&headers), Some(body)).await
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -1041,13 +1057,17 @@ async fn main() {
         .route("/health",     get(health_gateway))
         .route("/api/health", get(health_api))
         // Auth
-        .route("/api/auth/guest",    post(auth_guest))
-        .route("/api/auth/register", post(auth_register))
-        .route("/api/auth/login",    post(auth_login))
+        .route("/api/auth/guest",            post(auth_guest))
+        .route("/api/auth/register/start",   post(auth_register_start))
+        .route("/api/auth/register/finish",  post(auth_register_finish))
+        .route("/api/auth/login/start",      post(auth_login_start))
+        .route("/api/auth/login/finish",     post(auth_login_finish))
         // Users
         .route("/api/users/me",                get(users_get_me).put(users_put_me).delete(users_delete_me))
         .route("/api/users/me/preferences",    get(users_get_preferences).put(users_put_preferences))
         .route("/api/users/me/keys",           get(users_get_keys).put(users_put_keys))
+        .route("/api/users/me/password/start",  post(users_pw_change_start))
+        .route("/api/users/me/password/finish", post(users_pw_change_finish))
         .route("/api/users/search",            get(users_search))
         .route("/api/users/{userId}/profile",  get(users_profile))
         // Location
