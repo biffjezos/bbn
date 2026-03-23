@@ -8,16 +8,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       # Checkout repository
@@ -37,22 +35,10 @@ jobs:
         env:
           JEKYLL_ENV: production
 
-      # Upload the generated site to GitHub Pages
-      - uses: actions/upload-pages-artifact@v3
+      # Deploy built site to gh-pages branch
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: public
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      # Deploy to GitHub Pages
-      - id: deployment
-        uses: actions/deploy-pages@v4
-
-      # Dummy step to ensure CI passes for Railway
-      - name: Mark CI success for Railway
-        run: echo "CI passed for Railway"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
