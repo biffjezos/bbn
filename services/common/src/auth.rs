@@ -221,11 +221,12 @@ struct IssuedUserClaims {
 
 #[derive(Serialize)]
 struct IssuedGuestClaims {
-    sub:  String,
-    role: String,
-    tier: String,
-    exp:  u64,
-    iat:  u64,
+    sub:          String,
+    role:         String,
+    tier:         String,
+    account_type: String,
+    exp:          u64,
+    iat:          u64,
 }
 
 fn now_unix() -> u64 {
@@ -397,11 +398,12 @@ pub fn issue_guest_token(
     encode(
         &Header::new(Algorithm::HS256),
         &IssuedGuestClaims {
-            sub:  guest_id.to_string(),
-            role: "guest".to_string(),
-            tier: "guest".to_string(),
-            exp:  now + GUEST_TOKEN_EXPIRY_SECS,
-            iat:  now,
+            sub:          guest_id.to_string(),
+            role:         "guest".to_string(),
+            tier:         "guest".to_string(),
+            account_type: "guest".to_string(),
+            exp:          now + GUEST_TOKEN_EXPIRY_SECS,
+            iat:          now,
         },
         &EncodingKey::from_secret(secret.as_bytes()),
     )
