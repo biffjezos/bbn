@@ -103,14 +103,14 @@ const Api = {
 
     const startRes = await apiFetch('/auth/login/start', {
       method: 'POST',
-      body: JSON.stringify({ emailHash, loginRequest: loginReq, guestId }),
+      body: JSON.stringify({ emailHash, credentialRequest: loginReq, guestId }),
     });
 
-    const finishData = await opaque.loginFinish(password, startRes.loginResponse);
+    const finishData = await opaque.loginFinish(password, startRes.credentialResponse);
 
     return apiFetch('/auth/login/finish', {
       method: 'POST',
-      body: JSON.stringify({ stateToken: startRes.stateToken, finalization: finishData.finalization }),
+      body: JSON.stringify({ emailHash, stateToken: startRes.stateToken, credentialFinalization: finishData.finalization, guestId }),
     });
   },
 
