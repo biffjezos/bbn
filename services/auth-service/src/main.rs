@@ -381,7 +381,7 @@ async fn auth_register_finish(
     // Per-user email salt — stored now, consumed by profile-data encryption
     // (items 4+5). Prevents bulk precomputation attacks even if EMAIL_PEPPER leaks:
     // each user's email must be attacked independently.
-    let email_salt_bytes: [u8; 16] = rand::thread_rng().gen();
+    let email_salt_bytes: [u8; 16] = rand::thread_rng().r#gen();
     let email_salt_b64 = BASE64_STANDARD.encode(email_salt_bytes);
 
     let insert_result = state.db
