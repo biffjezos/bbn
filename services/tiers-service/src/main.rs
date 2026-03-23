@@ -561,7 +561,7 @@ async fn seed_tiers(db: &Database) {
     let seeds: &[(&str, &str, &str, i32, i32, Option<i32>)] = &[
         ("guest",        "Guest",        "secondary", 0, 500,       None),
         ("regular",      "Regular",      "primary",   1, 1_000,     Some(100)),
-        ("premium",      "Premium",      "warning",   2, 1_000,     Some(1_000)),
+        ("premium",      "Premium",      "warning",   2, 23_000,    Some(23_000)),
         ("unrestricted", "Unrestricted", "warning",   3, 9_700_000, Some(9_700_000)),
     ];
     let mut seeded = 0u32;
