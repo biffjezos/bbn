@@ -1,44 +1,49 @@
 name: Deploy Jekyll to GitHub Pages
 
-# Trigger on any push to dev (your deploy branch)
 on:
   push:
     branches:
       - dev
+      - 'claude/**'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      # Checkout repository
       - uses: actions/checkout@v4
 
-      # Set up Ruby
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
           working-directory: ui
 
-      # Build Jekyll site (bundle install already done by setup-ruby bundler-cache)
       - name: Build Jekyll site
         working-directory: ui
         run: bundle exec jekyll build -d ../public
         env:
           JEKYLL_ENV: production
 
-      # Deploy built site to gh-pages branch
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-          publish_branch: gh-pages
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
