@@ -1,12 +1,10 @@
 name: Deploy Jekyll to GitHub Pages
 
+# Trigger on any push to dev (your deploy branch)
 on:
   push:
     branches:
       - dev
-      - 'claude/**'
-    paths:
-      - 'ui/**'
 
 permissions:
   contents: read
@@ -21,20 +19,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # Checkout repository
       - uses: actions/checkout@v4
 
+      # Set up Ruby
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
           working-directory: ui
 
+      # Install dependencies and build Jekyll
       - name: Build Jekyll site
         working-directory: ui
-        run: bundle exec jekyll build -d ../public
+        run: |
+          bundle install
+          bundle exec jekyll build -d ../public
         env:
           JEKYLL_ENV: production
 
+      # Upload the generated site to GitHub Pages
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
@@ -44,7 +48,10 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # Deploy to GitHub Pages
+      - uses: actions/deploy-pages@v4
+
+      # Dummy step to ensure CI passes for Railway
+      - name: Mark CI success for Railway
+        run: echo "CI passed for Railway"
