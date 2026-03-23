@@ -1,8 +1,0 @@
-name: CodeQL on ui + services change to dev branch
-
-on:
-  push:
-    branches: [dev]
-    paths:
-      - 'services/**'
-      - 'ui/**'
