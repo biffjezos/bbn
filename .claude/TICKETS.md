@@ -27,24 +27,25 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 **Context:** After the OPAQUE + PBKDF2 deploy, each user document will have an `emailSalt`. This ticket uses that salt to encrypt all personal profile fields (nickname, age, sex) so they are stored only in ciphertext and only decrypted by authorised clients.
 
 **Architecture sketch:**
-1. Client derives `profileKey = PBKDF2-SHA256(email, emailSalt, 100_000)` — same KDF as the email hash, different salt.
-2. Registration: client encrypts `{ nickname, age, sex }` with `profileKey` (AES-GCM) before sending to the server.
+1. `profileKey = exportKey` from `OpaqueClient.loginFinish()`. The WASM already returns `{ finalization, exportKey }` — the export key is a high-entropy value derived from the password, never sent to the server, identical on every correct login. No separate KDF or salt needed.
+2. Registration: client registers password → immediately performs a full login to obtain `exportKey` → encrypts `{ nickname, age, sex }` with `profileKey` (AES-GCM) → sends `profileCiphertext` to the server in a follow-up call (or piggybacks on the login/finish response flow).
 3. Server stores ciphertext only — never sees plaintext profile fields.
-4. Login: server returns `emailSalt`; client decrypts profile with `profileKey`.
+4. Login: `loginFinish` returns `exportKey`; client decrypts `prof` JWT claim with it. No extra data needed from the server.
 5. Nearby/search: clients receive ciphertext blobs + per-user public keys; decrypt only what they're authorised to see (users in range, favourites).
-6. JWT claims: strip `nickname`, `age`, `sex`. Add a `prof` claim containing the AES-GCM ciphertext of `{ nickname, age, sex }` (base64url-encoded). The JWT signature covers the ciphertext, preserving tamper-evidence. Only the owner's client can decrypt it using `profileKey`. Token size increase: ~110–140 bytes — negligible. Profile update requires re-issuing the JWT.
+6. JWT claims: strip `nickname`, `age`, `sex`. Add a `prof` claim containing the AES-GCM ciphertext of `{ nickname, age, sex }` (base64url-encoded). The JWT signature covers the ciphertext, preserving tamper-evidence. Only the owner's client can decrypt it using `exportKey`. Token size increase: ~110–140 bytes — negligible.
+
+**Why exportKey, not emailSalt:**
+`emailSalt` was previously proposed as the profileKey salt (`PBKDF2(email, emailSalt)`). This is weaker — email addresses are low-entropy and dictionary-attackable — and requires sending `emailSalt` to the client at login. The OPAQUE `exportKey` has full password entropy, is already produced by the existing WASM (`login_finish` returns `{ finalization, exportKey }`), and never leaves the client. `emailSalt` retains its original role (SEC-1.11: defence-in-depth on the server-side email hash) but is not involved in profile encryption.
 
 **Implementation notes (validated 2026-03-23):**
 
-- **emailSalt chicken-and-egg.** `profileKey` requires `emailSalt`, but the current server generates `emailSalt` inside `register/finish` — after the client needs it to encrypt the profile. Two clean options: (a) **client generates `emailSalt`** (16 random bytes) and sends it in the `register/finish` body alongside `profileCiphertext` — server just stores it; (b) server returns a fresh `emailSalt` in the `register/start` response and the client sends it back in `register/finish`. Option (a) is simpler. Decide before implementation.
+- **exportKey is only available after login, not after registration.** `register_finish` returns only the `RegistrationUpload` blob — no export key. Profile encryption must happen after the first login, not during registration. Flow: register → auto-login → encrypt profile with exportKey → store ciphertext. The app likely auto-logs in after registration already; the profile encryption step slots in at that point.
 
-- **`emailSalt` must be returned at login.** Current `login/finish` response does not include `emailSalt`. Without it the client cannot derive `profileKey` and therefore cannot decrypt the `prof` JWT claim. Add `emailSalt` to the `login/finish` response body.
+- **Profile updates must return a fresh JWT.** `PUT /users/me` accepts changes to `nickname`, `age`, `sex`. The client re-encrypts with `exportKey` (still in memory from login), sends new `profileCiphertext`, and the server returns a new JWT with the updated `prof` claim.
 
-- **`register/finish` response must also return `emailSalt`.** So the client has it immediately after registration (for the first JWT's `prof` claim to be usable without a separate login round-trip).
+- **Password change invalidates exportKey.** Changing the password produces a new OPAQUE record and therefore a new `exportKey`. The client must re-encrypt the profile immediately after a password change and update the stored ciphertext. `tokenVersion` is already bumped on password change — the new JWT must carry the new `prof` ciphertext.
 
-- **Profile updates must return a fresh JWT.** `PUT /users/me` accepts changes to `nickname`, `age`, `sex`. After update the server must re-encrypt the new values into a new `profileCiphertext` (supplied by the client), update the `prof` claim, and return a new JWT. The server cannot encrypt on the client's behalf — the client sends both the plaintext updates (for the location store) and the new `profileCiphertext`.
-
-- **Peer visibility is a separate phase.** The `prof` JWT claim covers the owner's own profile only. How peers (nearby, search) decrypt another user's profile is not solved here — that requires the asymmetric keypair (`publicKey`/`encryptedPrivateKey`) already in the schema and is out of scope for this ticket's first phase.
+- **Peer visibility is a separate phase.** The `prof` JWT claim covers the owner's own profile only. How peers (nearby, search) decrypt another user's profile requires the asymmetric keypair (`publicKey`/`encryptedPrivateKey`) already in the schema and is out of scope for this ticket's first phase.
 
 **Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
 
