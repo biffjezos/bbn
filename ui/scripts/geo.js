@@ -286,4 +286,19 @@
     window.MapModule && window.MapModule.onGuestExpired();
   };
 
+  // Remove location immediately when the tab is closed (privacy — prevents ghost
+  // "online" status and stops any stale session token from appearing active).
+  window.addEventListener('pagehide', function (event) {
+    if (event.persisted) return; // Page might be kept in bfcache — not truly closing.
+    var token = window.Auth && window.Auth.getToken && window.Auth.getToken();
+    if (!token) return;
+    try {
+      fetch(window.BOOMBOOM_API_URL + '/location', {
+        method: 'DELETE',
+        keepalive: true,
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      });
+    } catch (_) {}
+  });
+
 })();

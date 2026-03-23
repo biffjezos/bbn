@@ -350,24 +350,33 @@ async function saveUserChanges(userId) {
   statusEl.textContent = 'Saving…';
 
   try {
-    // Re-fetch current values to know what actually changed
-    var res   = await window.Api.adminSearchUsers({ q: userId, by: 'id' });
-    var user  = res.users && res.users[0];
+    // Re-fetch current values to know what actually changed.
+    var res  = await window.Api.adminSearchUsers({ q: userId, by: 'id' });
+    var user = res.users && res.users[0];
     if (!user) throw new Error('User not found.');
 
-    var ops = [];
-    if (newTier !== user.tier) ops.push(window.Api.adminSetTier(userId, newTier));
-    if (newRole !== null && newRole !== user.role) ops.push(window.Api.adminSetRole(userId, newRole));
+    var changes = {};
+    if (newTier !== user.tier) changes.tier = newTier;
+    if (newRole !== null && newRole !== user.role) changes.role = newRole;
 
-    if (!ops.length) {
+    if (!Object.keys(changes).length) {
       statusEl.className = 'text-muted-bb';
       statusEl.textContent = 'No changes.';
       return;
     }
 
-    await Promise.all(ops);
+    // Single atomic call — avoids token-version race when changing both tier and role.
+    var result = await window.Api.adminPatchUser(userId, changes);
+
+    // If the admin patched their own account the server returns a fresh JWT.
+    if (result.token && window.Auth) {
+      window.Auth.refreshToken(result.token);
+    }
+
     statusEl.className = 'text-success';
-    statusEl.textContent = newRole !== null ? 'Saved. User token invalidated — they will re-login on next request.' : 'Tier saved.';
+    statusEl.textContent = changes.role !== undefined
+      ? (result.token ? 'Saved. Session refreshed.' : 'Saved. User token invalidated — they will re-login on next request.')
+      : 'Tier saved.';
   } catch (err) {
     statusEl.className = 'text-danger';
     statusEl.textContent = err.message;

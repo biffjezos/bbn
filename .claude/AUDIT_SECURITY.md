@@ -176,5 +176,6 @@ for the per-user `profileKey = PBKDF2(email, emailSalt)` derivation when profile
 | ✅ | SEC-1.9 | LOW | Pre-epoch clock panic in now_unix/now_ms — fixed 2026-03-23 |
 | ✅ | SEC-1.10 | HIGH | Email pre-hash was plain SHA-256 — replaced with PBKDF2-SHA256 (100k iters, 2026-03-23, pending deploy) |
 | ✅ | SEC-1.11 | MEDIUM | No per-user email salt — `emailSalt` added to user document at registration (2026-03-23, pending deploy) |
+| ✅ | SEC-1.12 | HIGH | Auth token stored in `localStorage` persisted after tab close — session takeover risk — switched to `sessionStorage` + `pagehide` DELETE /location (2026-03-23) |
 
 Resolved items → AUDIT_DONE.md
