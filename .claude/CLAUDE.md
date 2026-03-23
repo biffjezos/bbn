@@ -63,6 +63,9 @@ Before writing any code for a ticket:
 
 ## Before Each Commit / Push
 
+- **Update tickets.** Reflect the current state of any ticket touched this session:
+  move completed phases/tickets to `TICKETS_DONE.md` (leave a stub), update status
+  lines, add any newly discovered tickets. Do this before every commit, not only at wrap-up.
 - **Reflect.** Identify anything that slowed the session down or caused
    friction: unclear rules, missing context, a workflow step that broke, a
    ticket structure that wasn't useful. Be brief and honest. You may ask the
