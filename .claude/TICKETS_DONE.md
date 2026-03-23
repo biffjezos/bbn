@@ -6,6 +6,29 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-20 — Sharded Location Store: Phases 1–4 (2026-03-23)
+
+Phase 5 (auto-adjustable shard size) remains deferred in TICKETS.md.
+
+### What was implemented
+
+| Phase | Status | What |
+|---|---|---|
+| 1 | ✅ | `common/src/shard.rs` — `ShardKey`, `shard_for_coords`, `intersecting_shards`, `min_dist_to_shard` + 16 unit tests |
+| 2 | ✅ | `location-service/src/store.rs` — `MemoryStore` with full sharded upsert/remove/nearby/sweep; `location-service/src/db_store.rs` — `DbStore` backed by MongoDB `locations` collection; `location-service/src/location_store.rs` — `Store` enum dispatching to either backend; `LOCATION_STORE=memory\|db` env var |
+| 3 | ✅ | `location-service/src/main.rs` — wired to `Arc<Store>`, reads all tuning env vars |
+| 4 | ✅ | `migration-service/src/main.rs` — migration `007_shard_index` adds compound `{ shard_key: 1, updatedAt: -1 }` index on `locations` |
+
+### Key design decisions
+
+- **Shard key format:** `"{lat_idx}:{lon_idx}"` string stored as `shard_key` field — simple, unambiguous, works with `$in` queries.
+- **Suppression in DbStore:** per-instance in-memory HashMap; avoids redundant DB writes without requiring shared state.
+- **Multi-replica:** `memory` mode is single-process only (documented). `db` mode is replica-safe; all instances query the same `locations` collection.
+- **early-exit traversal (memory only):** shards sorted by `min_dist_to_shard`; loop breaks when heap is full and next shard's nearest edge is farther than the Nth result.
+- **Favourites reserved-slot model:** favourites fill their positions first, then remaining `limit - K` slots go to nearest non-favourites. Total never exceeds `limit`.
+
+---
+
 ## T-17 — .unwrap() + email validation + logging in auth-service
 
 **Status:** ✅ Complete (2026-03-19).

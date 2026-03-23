@@ -7,11 +7,13 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ---
 
-## T-21 — Security Hardening & Capacity Tuning
+## T-22 — Security Hardening & Capacity Tuning
 
 **Status:** Planned. Self-contained — no prerequisites. Plan: `docs/superpowers/plans/2026-03-23-security-hardening-capacity.md`
 
 Closes SEC-1.2, SEC-1.3, SEC-1.4, SEC-1.5, SEC-1.6. Does not touch SEC-1.1 (OPAQUE — separate track).
+
+*(Was incorrectly numbered T-21; renamed T-22 to avoid conflict with T-21 continental routing.)*
 
 ### Changes
 
@@ -34,7 +36,7 @@ Gateway and all stateless services: safe to run 5 replicas. `location-service`: 
 
 ## T-20 — Sharded Location Store (performance at scale)
 
-**Status:** Not started. Self-contained — no prerequisites.
+**Status:** Phases 1–4 ✅ complete (2026-03-23). Phase 5 deferred. Details in TICKETS_DONE.md.
 
 ### Goal
 
