@@ -42,20 +42,37 @@ struct Config {
     fav_service_url:   Url,
 }
 
-/// Parse a service base URL from an env var and verify the scheme is http/https.
-/// Fails at startup so misconfigured URLs are caught immediately.
-fn parse_service_url(raw: &str, name: &str) -> Result<Url, String> {
+/// Parse a service base URL from an env var and verify:
+///   1. The scheme is http or https.
+///   2. The host exactly matches `allowed_host` (set via a separate env var).
+///
+/// Fails at startup so misconfigured or attacker-controlled URLs are caught
+/// immediately and never reach outbound HTTP calls (CWE-918 / SSRF).
+fn parse_service_url(raw: &str, name: &str, allowed_host: &str) -> Result<Url, String> {
     let url = Url::parse(raw)
         .map_err(|e| format!("FATAL: {name} is not a valid URL: {e}"))?;
     match url.scheme() {
-        "http" | "https" => Ok(url),
-        s => Err(format!("FATAL: {name} scheme must be http or https, got '{s}'")),
+        "http" | "https" => {}
+        s => return Err(format!("FATAL: {name} scheme must be http or https, got '{s}'")),
     }
+    let host = url.host_str().unwrap_or("");
+    if host != allowed_host {
+        return Err(format!(
+            "FATAL: {name} host '{host}' does not match allowed host '{allowed_host}' \
+             (set via {name}_ALLOWED_HOST)"
+        ));
+    }
+    Ok(url)
 }
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "LOC_SERVICE_URL", "TIERS_SERVICE_URL", "FAV_SERVICE_URL"];
+        let required = [
+            "JWT_SECRET", "SERVICE_SECRET", "MONGO_URI",
+            "LOC_SERVICE_URL",   "LOC_SERVICE_ALLOWED_HOST",
+            "TIERS_SERVICE_URL", "TIERS_SERVICE_ALLOWED_HOST",
+            "FAV_SERVICE_URL",   "FAV_SERVICE_ALLOWED_HOST",
+        ];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
             return Err(format!(
@@ -69,9 +86,21 @@ impl Config {
             db_name:           env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
             jwt_secret:        env::var("JWT_SECRET").unwrap(),
             service_secret:    env::var("SERVICE_SECRET").unwrap(),
-            loc_service_url:   parse_service_url(&env::var("LOC_SERVICE_URL").unwrap(),   "LOC_SERVICE_URL")?,
-            tiers_service_url: parse_service_url(&env::var("TIERS_SERVICE_URL").unwrap(), "TIERS_SERVICE_URL")?,
-            fav_service_url:   parse_service_url(&env::var("FAV_SERVICE_URL").unwrap(),   "FAV_SERVICE_URL")?,
+            loc_service_url:   parse_service_url(
+                &env::var("LOC_SERVICE_URL").unwrap(),
+                "LOC_SERVICE_URL",
+                &env::var("LOC_SERVICE_ALLOWED_HOST").unwrap(),
+            )?,
+            tiers_service_url: parse_service_url(
+                &env::var("TIERS_SERVICE_URL").unwrap(),
+                "TIERS_SERVICE_URL",
+                &env::var("TIERS_SERVICE_ALLOWED_HOST").unwrap(),
+            )?,
+            fav_service_url:   parse_service_url(
+                &env::var("FAV_SERVICE_URL").unwrap(),
+                "FAV_SERVICE_URL",
+                &env::var("FAV_SERVICE_ALLOWED_HOST").unwrap(),
+            )?,
         })
     }
 }
