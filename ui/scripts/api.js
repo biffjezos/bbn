@@ -106,33 +106,6 @@ const Api = {
       body: JSON.stringify({ emailHash, credentialRequest: loginReq, guestId }),
     });
 
-    // T-25: account exists but has no OPAQUE record (pre-OPAQUE account).
-    // Re-register silently using the password the user just typed, then retry login.
-    if (startRes.action === 'reregister') {
-      const regRequest  = await opaque.registerStart(password);
-      const regStartRes = await apiFetch('/auth/register/start', {
-        method: 'POST',
-        body: JSON.stringify({ emailHash, registrationRequest: regRequest }),
-      });
-      const regUpload = await opaque.registerFinish(password, regStartRes.registrationResponse);
-      await apiFetch('/auth/register/finish', {
-        method: 'POST',
-        // No nickname/age/sex — re-registration mode updates opaqueRecord only.
-        body: JSON.stringify({ emailHash, registrationUpload: regUpload.upload }),
-      });
-      // Retry login with fresh credentials.
-      const loginReq2  = await opaque.loginStart(password);
-      const startRes2  = await apiFetch('/auth/login/start', {
-        method: 'POST',
-        body: JSON.stringify({ emailHash, credentialRequest: loginReq2, guestId }),
-      });
-      const finishData2 = await opaque.loginFinish(password, startRes2.credentialResponse);
-      return apiFetch('/auth/login/finish', {
-        method: 'POST',
-        body: JSON.stringify({ emailHash, stateToken: startRes2.stateToken, credentialFinalization: finishData2.finalization, guestId }),
-      });
-    }
-
     const finishData = await opaque.loginFinish(password, startRes.credentialResponse);
 
     return apiFetch('/auth/login/finish', {

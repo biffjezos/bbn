@@ -54,45 +54,15 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ## T-25 — OPAQUE Server Setup Rotation
 
-**Status:** Phase 1 (re-registration for existing accounts) ✅ implemented 2026-03-23. Full rotation flow (new OPAQUE_SERVER_SETUP + DB wipe) still pending. Prerequisite: T-23 deployed (OPAQUE live).
+**Status:** ❌ Phase 1 reverted 2026-03-23 — owner confirmed there are no pre-OPAQUE accounts; backwards-compat re-registration code must not exist. Full rotation flow (new OPAQUE_SERVER_SETUP + DB wipe) still pending.
 
-**Context:** `OPAQUE_SERVER_SETUP` contains the server's OPRF private key. If it leaks, all `opaqueRecord` blobs are compromised. Rotation must be possible without wiping user accounts. No backward compatibility, no multi-setup versioning.
+**Context:** `OPAQUE_SERVER_SETUP` contains the server's OPRF private key. If it leaks, all `opaqueRecord` blobs are compromised. Rotation requires a DB wipe — no backwards compat.
 
-**Design:**
-
-A user's `opaqueRecord` is nullable. If it is missing or null, the server treats the account as "pending re-registration." The rotation flow:
-
-1. Admin generates a new `OPAQUE_SERVER_SETUP` value (auth-service prints one on startup when the env var is absent — same as initial setup).
-2. Admin sets the new value in Railway and redeploys auth-service.
-3. All existing `opaqueRecord` fields are cleared in one DB operation: `db.users.updateMany({}, { $unset: { opaqueRecord: '' } })`.
-4. Users log in as normal. Auth-service detects missing `opaqueRecord` and returns HTTP 202 with `{ action: "reregister" }` instead of starting the login ceremony.
-5. Client receives the signal, keeps the password in memory (user just typed it), silently runs the full OPAQUE registration ceremony (register/start → register/finish).
-6. New `opaqueRecord` written. Auth-service immediately proceeds to the login ceremony and issues the JWT.
-7. User experience: a brief extra round-trip. No extra password prompt.
-
-**What the client must handle:**
-- On `login/start` response with `action: "reregister"`: run register/start + register/finish with the current password, then retry login/start.
-- This must happen within the same login flow before the password is zeroed from memory.
-
-**What the server must handle:**
-- `login/start` returns 202 + `{ action: "reregister" }` when `opaqueRecord` is null/missing.
-- `register/finish` must be callable on an existing (partial) user account without wiping any other fields.
-
-**Implementation notes (validated 2026-03-23):**
-
-- **`register/finish` is INSERT-only — hard blocker.** The current handler does `insert_one` with `emailHash` as the lookup key. After rotation, the user document already exists with that `emailHash` — the insert will fail with a duplicate key error. The re-registration path needs a dedicated endpoint (e.g. `POST /auth/reregister/finish`) or a modified `register/finish` that performs an `$set` on `opaqueRecord` for an existing document rather than inserting a new one. It must touch only `opaqueRecord` — no other fields.
-
-- **`login/start` hard-errors on null `opaqueRecord`.** The current handler reads `opaqueRecord` and passes it to `ServerLogin::start()` immediately. A null value will cause an unwrap/error. The handler must check for null before entering the OPAQUE ceremony and return `202 { action: "reregister" }` instead.
-
-- **No email or nickname re-entry needed.** The re-registration ceremony only proves knowledge of the password — the user's profile data (nickname, age, sex) and all other fields remain untouched in the DB. Only `opaqueRecord` is updated.
-
-**DB operation for rotation (owner action, not code):**
-```
-db.users.updateMany({}, { $unset: { opaqueRecord: "" } })
-```
-Run in Railway MongoDB shell after deploying the new auth-service with the new `OPAQUE_SERVER_SETUP`.
-
-**No versioning, no migration logic, no coexistence of two setups.**
+**Rotation flow (owner action, no client code needed):**
+1. Generate a new `OPAQUE_SERVER_SETUP` (auth-service logs one on startup when env var is absent).
+2. Set the new value in Railway and redeploy auth-service.
+3. Wipe the `users` collection in the Railway MongoDB shell.
+4. Users re-register normally.
 
 **Relates to:** SEC-1.1, T-23.
 

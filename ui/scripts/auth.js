@@ -92,12 +92,6 @@ const Auth = (() => {
   return {
 
     async init() {
-      // Clear any legacy token left in localStorage from before the sessionStorage migration.
-      if (localStorage.getItem(STORAGE_TOKEN_KEY)) {
-        localStorage.removeItem(STORAGE_TOKEN_KEY);
-        localStorage.removeItem(STORAGE_NICK_KEY);
-        localStorage.removeItem(STORAGE_SEX_KEY);
-      }
       const stored = sessionStorage.getItem(STORAGE_TOKEN_KEY);
       if (stored && !isTokenExpired(stored)) {
         _token    = stored;
