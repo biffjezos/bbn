@@ -6,6 +6,14 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-18 — Login modal keeps credentials after logout
+
+**Status:** ✅ Complete (2026-03-22). Commit `f2e3918`.
+
+Added `hidden.bs.modal` listeners to `loginModal` and `registerModal` in `ui/scripts/app.js` that zero out all input fields and hide the error banner whenever either modal closes — regardless of how it was dismissed (successful login, backdrop click, Escape). Follows the existing pattern on `deleteConfirmModal`. Prevents credentials remaining in the DOM after immediate logout.
+
+---
+
 ## T-10 — Restore migration-service
 
 **Status:** ✅ Closed (2026-03-23) — ticket was invalid.
