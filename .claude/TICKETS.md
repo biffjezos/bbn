@@ -27,26 +27,24 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 **Context:** After the OPAQUE + PBKDF2 deploy, each user document will have an `emailSalt`. This ticket uses that salt to encrypt all personal profile fields (nickname, age, sex) so they are stored only in ciphertext and only decrypted by authorised clients.
 
 **Architecture sketch:**
-1. At registration, client generates an asymmetric keypair (e.g. X25519 or RSA-OAEP). Private key is encrypted with `exportKey` (from `OpaqueClient.loginFinish()` — high-entropy, password-derived, never sent to server). Both `encryptedPrivateKey` and `publicKey` are sent to the server and stored. These fields already exist in the schema.
-2. Profile (`{ nickname, age, sex }`) is encrypted with a random symmetric `profileKey` (AES-GCM). That `profileKey` is then encrypted once per authorised viewer with their **public key** and stored alongside the ciphertext.
-3. Server stores only ciphertext — never sees plaintext profile fields.
-4. Owner decrypts: `exportKey` → `privateKey` → `profileKey` → plaintext profile.
-5. Nearby users decrypt: they already receive each other's `publicKey`. The sender's `profileKey` is encrypted with the viewer's public key and included in the nearby payload. Viewer uses their own `privateKey` (decrypted with their `exportKey`) to get `profileKey`, then decrypts the profile.
-6. Admin access: same flow as nearby users — server encrypts `profileKey` with the admin's public key on demand when the admin requests a profile. Nothing extra stored in the DB.
-7. JWT `prof` claim: contains the AES-GCM ciphertext of `{ nickname, age, sex }` — same blob as stored in DB. JWT signature provides tamper-evidence. Client decrypts using `exportKey` → `privateKey` → `profileKey`.
 
-**Why exportKey, not emailSalt:**
-`emailSalt` was previously proposed as the key source. Dropped — email addresses are low-entropy and dictionary-attackable. `exportKey` has full password entropy, is already returned by the existing WASM `login_finish`, and never leaves the client. `emailSalt` keeps its original SEC-1.11 role only.
+1. Each user has an X25519 keypair. `privateKey` is encrypted with `exportKey` (from `OpaqueClient.loginFinish()`) and stored as `encryptedPrivateKey`. `publicKey` stored plaintext. Both fields already exist in the schema.
+2. Profile (`{ nickname, age, sex }`) is encrypted with a random symmetric `profileKey` (AES-GCM) → `profileCiphertext`. `profileKey` encrypted with owner's own public key → `encryptedProfileKey`. Both stored in DB. Server never has `profileKey` in plaintext.
+3. When B updates location (B is online — required to appear in nearby), B's client gets the nearby user list and for each viewer A computes: `sharedSecret = ECDH(B.privateKey, A.publicKey)`, encrypts `profileKey` with `sharedSecret`, sends the per-viewer blob to the server. Server stores it keyed to `(B.userId, A.userId)`.
+4. When A requests B's profile: server returns `profileCiphertext` + `profileKey` encrypted with `ECDH(B.privateKey, A.publicKey)`. A computes `sharedSecret = ECDH(A.privateKey, B.publicKey)` — identical value by ECDH property — decrypts `profileKey`, decrypts profile.
+5. If B has not updated location recently enough to have produced a blob for A, A cannot decrypt. No fallback.
+6. JWT `prof` claim: owner decrypts using `exportKey` → `privateKey` → `encryptedProfileKey` → `profileKey` → plaintext profile.
 
-**Implementation notes (validated 2026-03-23):**
+**Why exportKey:**
+`exportKey` has full password entropy, is produced by the existing WASM `login_finish`, and never leaves the client. `emailSalt` is not involved in profile encryption — it keeps its SEC-1.11 role only.
 
-- **exportKey only available after login, not after registration.** `register_finish` returns only the `RegistrationUpload` — no export key. Flow: register → auto-login → get `exportKey` → generate keypair → encrypt private key → encrypt profile → send to server. The app auto-logs in after registration already; keypair + profile encryption slots in at that point.
+**Implementation notes:**
 
-- **Profile updates.** Client re-encrypts profile with the same `profileKey`, re-encrypts `profileKey` for all current authorised viewers, sends new ciphertext. Server returns fresh JWT with updated `prof` claim.
+- **exportKey only available after login, not registration.** `register_finish` returns only `RegistrationUpload` — no export key. Flow: register → auto-login → get `exportKey` → generate keypair → encrypt private key → encrypt profile → send to server.
 
-- **Password change invalidates exportKey.** New OPAQUE record → new `exportKey` → client must re-encrypt `privateKey` with new `exportKey` immediately after password change. Profile ciphertext itself is unchanged (it's locked to `profileKey`, not `exportKey` directly). `tokenVersion` bump already happens on password change.
+- **Password change invalidates exportKey.** New OPAQUE record → new `exportKey` → client must immediately re-encrypt `privateKey` with new `exportKey`. `profileCiphertext` and `profileKey` are unchanged. `tokenVersion` bump already happens on password change.
 
-- **Authorised viewers.** The set of viewers is dynamic. `profileKey` is never pre-encrypted and stored per viewer. Instead, when a client requests another user's profile (nearby, admin panel), the server returns `profileCiphertext` + `profileKey` encrypted on demand with the requesting client's public key. The requesting client decrypts `profileKey` with their private key, then decrypts the profile. No per-viewer fields in the DB.
+- **Profile update.** Client re-encrypts `{ nickname, age, sex }` with same `profileKey`, sends new `profileCiphertext`. Per-viewer blobs are regenerated on next location update. Server returns fresh JWT with updated `prof` claim.
 
 **Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
 
