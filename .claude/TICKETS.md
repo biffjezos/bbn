@@ -7,6 +7,169 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ---
 
+## T-23 — OPAQUE Authentication + Email Privacy (SEC-1.1)
+
+**Status:** Plan approved. Ready to implement. Unblocks T-05b.
+
+**Closes:** SEC-1.1
+
+---
+
+### Overview
+
+Replace plain-password login/registration with OPAQUE (RFC 9807). Email is
+pre-hashed on the client (SHA-256) and pepper-hashed on the server before
+storage. Password never leaves the client in any form. No DB migration needed —
+users collection is wiped before this lands. Existing admin bootstrap mechanism
+is unchanged.
+
+---
+
+### New env vars (auth-service, all required)
+
+| Var | Purpose |
+|---|---|
+| `EMAIL_PEPPER` | 32-byte hex. Server-side HMAC key applied to client email hashes before DB storage. **Loss = no user can log in.** |
+| `OPAQUE_SERVER_SETUP` | Base64-encoded OPAQUE `ServerSetup` (keypair + params, ~96 bytes). If absent at startup: service prints a generated value and exits with instructions. Set it permanently in Railway. |
+
+---
+
+### DB changes (users collection — wiped before this lands)
+
+| Field | Before | After |
+|---|---|---|
+| `email` | plain string | **removed** |
+| `emailHash` | — | `hex(HMAC-SHA256(SHA256(email), EMAIL_PEPPER))`, unique index |
+| `passwordHash` | bcrypt string | **removed** |
+| `opaque_record` | — | binary blob ~500 bytes |
+
+---
+
+### Email hashing scheme
+
+- **Client:** `emailHash = hex(SHA-256(lowercase(email)))` — WebCrypto `crypto.subtle.digest`
+- **Server:** stores `hex(HMAC-SHA256(emailHash, EMAIL_PEPPER))` as the DB key
+- **Admin search:** client sends raw email input; server applies the same two-step hash before querying
+- **JWT:** `email` claim **removed**. Server never has plain email. Admin user list returns `emailHash` (opaque to the admin too).
+
+---
+
+### OPAQUE endpoints (auth-service — replaces old /auth/login and /auth/register)
+
+```
+POST /auth/register/start   { emailHash, opaque_msg }
+    → { opaque_response }
+
+POST /auth/register/finish  { emailHash, opaque_record, nickname, age, sex, guestId? }
+    → { token, nickname, sex, tier }
+
+POST /auth/login/start      { emailHash, opaque_msg }
+    → { opaque_response, state_token }
+
+POST /auth/login/finish     { emailHash, opaque_msg, state_token, guestId? }
+    → { token, nickname, sex, tier, role, accountType }
+```
+
+**Login state (stateless approach):** After `/login/start`, server serializes
+`ServerLoginState`, encrypts it with AES-256-GCM (key derived from `JWT_SECRET`),
+and returns it as `state_token`. Client sends it back with `/login/finish`. No
+in-memory session; works with multiple replicas.
+
+**Old endpoints removed:** `POST /auth/login` and `POST /auth/register` are gone.
+`POST /auth/guest` is unchanged.
+
+---
+
+### users-service changes
+
+- `PUT /users/me/email` — accepts `emailHash` (client pre-hashed); server applies pepper.
+- `PUT /users/me/password` → becomes 2-round OPAQUE re-registration:
+  - `POST /users/me/password/start` — returns `opaque_response`
+  - `POST /users/me/password/finish` — stores new `opaque_record`, bumps `tokenVersion`
+- `make_token()` — drop `email` parameter; update `UserTokenParams` in `common`
+- Admin user search by email: server hashes the raw input before querying
+
+---
+
+### common crate changes
+
+- Remove `email` field from `UserTokenParams`, `IssuedUserClaims`, `UserClaims`
+- Add `fn email_db_hash(client_hash: &str, pepper: &str) -> String` helper (used by auth-service and users-service)
+
+---
+
+### migration-service changes
+
+- New migration: ensure `users` collection has **unique index on `emailHash`** (not `email`)
+- Geo-location indexes: not added (T-20 shards approach — in-memory only)
+
+---
+
+### WASM crate: `opaque-client-wasm/`
+
+Located at repo root (outside the `services/` workspace — different build target).
+
+```
+opaque-client-wasm/
+  Cargo.toml          # opaque-ke = "3", wasm-bindgen
+  src/lib.rs          # exposes: register_start, register_finish, login_start, login_finish
+```
+
+- Built with: `wasm-pack build --target web`
+- Artifacts committed to: `ui/scripts/opaque-client/` (`.wasm` + `.js` glue, ~150 KB)
+- Rebuild script: `scripts/build-opaque-wasm.sh` — run **manually** only when
+  `opaque-client-wasm/src/` changes. CI does not rebuild; committed artifacts are used.
+- OPAQUE cipher suite: `Ristretto255` + `SHA-512` + `Argon2` (opaque-ke default)
+
+---
+
+### crypto-worker.js changes
+
+- New command: `hashEmail({ email })` → `{ emailHash }` — SHA-256 via `crypto.subtle.digest`
+- New commands: `opaqueRegisterStart`, `opaqueRegisterFinish`, `opaqueLoginStart`, `opaqueLoginFinish`
+  — lazily load WASM module, run the corresponding protocol step, return serialized message
+
+---
+
+### api.js changes
+
+- `register()` — becomes async 2-call flow: `/auth/register/start` then `/auth/register/finish`
+- `login()` — becomes async 2-call flow: `/auth/login/start` then `/auth/login/finish`
+- `updatePassword()` — becomes async 2-call flow via users-service
+
+---
+
+### UI changes
+
+- Login modal: email → `hashEmail` → `opaqueLoginStart` → `opaqueLoginFinish`
+- Register modal: email → `hashEmail` → `opaqueRegisterStart` → `opaqueRegisterFinish`
+- Settings/password-change: same pattern
+- Admin user list: displays `emailHash` where `email` was shown (or omits it)
+- Admin search: "Email" option sends raw email; hashing is server-side
+
+---
+
+### Admin bootstrap (unchanged mechanism)
+
+1. Owner registers a new account via the app → receives a user ID in Railway logs / JWT
+2. Owner sets `ADMIN_BOOTSTRAP_USER_ID=<id>` in Railway → restarts auth-service
+3. User is promoted to admin; owner logs in again to get an admin JWT
+
+---
+
+### Implementation order
+
+1. `opaque-client-wasm/` — standalone crate, build WASM artifacts, commit to `ui/scripts/opaque-client/`
+2. `common` — remove email from JWT structs, add `email_db_hash()` helper
+3. `auth-service` — new OPAQUE endpoints, remove old endpoints, email hashing, `OPAQUE_SERVER_SETUP` handling
+4. `users-service` — password change → 2-round OPAQUE, email update, admin search, drop email from token
+5. `migration-service` — update index setup (emailHash, no geo)
+6. `crypto-worker.js` — `hashEmail` + OPAQUE WASM commands
+7. `api.js` — updated 2-round flows
+8. UI modals + admin panel — updated call sites
+
+---
+
 ## T-22 — Security Hardening & Capacity Tuning
 
 **Status:** Planned. Self-contained — no prerequisites. Plan: `docs/superpowers/plans/2026-03-23-security-hardening-capacity.md`

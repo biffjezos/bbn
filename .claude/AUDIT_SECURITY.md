@@ -37,7 +37,9 @@ Target solution: OPAQUE / PAKE. `opaque-ke` (Rust) is production-ready; no equiv
 
 **Sequencing decision (2026-03-16):** Implement OPAQUE in `auth-service` (Rust). Unblocks this ticket and T-05b (encrypted block note). Also resolve items in AUDIT.md 6.1/6.3 before contemplating this ticket.
 
-**Priority:** HIGH — blocked on OPAQUE implementation decision.
+**Implementation plan approved (2026-03-23):** See T-23 in TICKETS.md. WASM approach confirmed. No migration — users collection wiped. Two new required env vars: `EMAIL_PEPPER`, `OPAQUE_SERVER_SETUP`.
+
+**Priority:** HIGH — T-23 ready to implement.
 
 ---
 
