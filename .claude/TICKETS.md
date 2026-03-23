@@ -7,6 +7,195 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ---
 
+## T-21 — Security Hardening & Capacity Tuning
+
+**Status:** Planned. Self-contained — no prerequisites. Plan: `docs/superpowers/plans/2026-03-23-security-hardening-capacity.md`
+
+Closes SEC-1.2, SEC-1.3, SEC-1.4, SEC-1.5, SEC-1.6. Does not touch SEC-1.1 (OPAQUE — separate track).
+
+### Changes
+
+| Service | Change |
+|---|---|
+| `common` | Add `ttl_secs: u64` to `UserTokenParams`; remove hardcoded 7-day constant from `issue_user_token` |
+| `auth-service` | Read `JWT_USER_TTL_SECS` (default 86 400 s = 24 h); pass to token calls |
+| `users-service` | Same `JWT_USER_TTL_SECS` pattern; thread through `make_token` helper |
+| `messages-service` | Per-userId `FixedWindow` in `send_message` (fixes SEC-1.2). Env: `MSG_SEND_RATE_MAX` (default 10), `MSG_SEND_RATE_WINDOW_SECS` (default 10) |
+| `gateway` | `real_ip()` prefers `CF-Connecting-IP` (SEC-1.3); `DefaultBodyLimit` via `HTTP_BODY_LIMIT_BYTES` (SEC-1.5); all 4 rate limits configurable via env vars with tighter production defaults; new `lim_msg` for `msg_send` (SEC-1.6) |
+| All READMEs | Document every new env var and production capacity guidance |
+
+### No backend changes required until deployment
+New env vars have safe defaults — services behave as before if vars are not set. Set them in Railway when deploying.
+
+### Multi-replica note
+Gateway and all stateless services: safe to run 5 replicas. `location-service`: **1 replica only** until T-20 DB-mode is implemented (rate-limit buckets and memory store are in-process).
+
+---
+
+## T-20 — Sharded Location Store (performance at scale)
+
+**Status:** Not started. Self-contained — no prerequisites.
+
+### Goal
+
+Replace the current full-collection location scan with a sparse shard grid so that nearby queries touch only the geographic cells that intersect the search circle. Both in-memory and DB backends use the same sharded structure, selected at startup by an env var.
+
+### Design decisions (agreed 2026-03-22)
+
+| Question | Decision |
+|---|---|
+| Shard size | Configurable via `LOCATION_SHARD_SIZE_M` (default 2000 m). Auto-adjustment deferred to Phase 2. |
+| Storage backend | Env var `LOCATION_STORE=memory\|db` (default `memory`). In-memory is single-process only — not safe for multi-instance deployments; this is documented, not enforced. |
+| Restart behaviour | In-memory store loses all locations on restart. Acceptable — clients re-publish every N seconds. |
+| 2dsphere index | Never existed. DB mode adds a compound `(shard_key, updatedAt)` index — the first index on this collection. |
+| 10k-in-one-shard | Haversine post-filter still scans all candidates in matching shards. Smaller shard size is the mitigation — tune `LOCATION_SHARD_SIZE_M` for the expected density. |
+| Suppression thresholds | `LOCATION_UPDATE_INTERVAL_SECS` and `LOCATION_UPDATE_DISTANCE_M` both kept and made configurable (currently hardcoded at 15 s and 100 m). |
+
+### Shard key
+
+`ShardKey = (i64, i64)` — `(floor(lat / cell_deg_lat), floor(lon / cell_deg_lon))`.
+
+`cell_deg_lat = shard_m / 111_320.0` (metres per degree latitude, fixed).
+`cell_deg_lon = shard_m / (111_320.0 * cos(lat.to_radians()))` (varies with latitude — computed at query time).
+
+### Shard intersection test (AABB vs circle)
+
+For a circle of radius R centred at (lat, lon): find the closest point on the shard's bounding rectangle to (lat, lon). If the Haversine distance to that closest point is ≤ R, the shard intersects the circle and must be queried.
+
+Iterate over the grid of shards covering the bounding box of the search circle (fast, integer arithmetic). Most shards outside the circle are eliminated by the test; corner shards are the key case.
+
+---
+
+### Phase 1 — Shard primitives in `common`
+
+**Location:** `services/common/src/shard.rs` (new module, exported from `common`).
+
+Implement:
+- `ShardKey` — `(i64, i64)` newtype, `Hash + Eq + Clone + Copy`.
+- `shard_for_coords(lat: f64, lon: f64, shard_m: f64) -> ShardKey`
+- `intersecting_shards(lat: f64, lon: f64, radius_m: f64, shard_m: f64) -> Vec<ShardKey>` — AABB-vs-circle test, returns the minimal set of shard keys that overlap the search circle.
+- Unit tests: zero-radius (single shard), exactly-centered small radius (single shard), edge case (user at shard border), large radius (many shards), polar-distortion (high latitude).
+
+No changes to location-service in this phase.
+
+---
+
+### Phase 2 — `LocationStore` trait + both backends
+
+**Trait** (`services/common/src/location_store.rs` or inline in location-service):
+
+```rust
+pub trait LocationStore: Send + Sync {
+    async fn upsert(&self, user_id: &str, lat: f64, lon: f64, tier: &str) -> Result<(), StoreError>;
+    async fn remove(&self, user_id: &str);
+    async fn get_user(&self, user_id: &str) -> Option<LocationEntry>;
+    async fn nearby(
+        &self,
+        lat: f64,
+        lon: f64,
+        radius_m: f64,
+        ttl: Duration,
+        limit: usize,                        // 0 = unlimited
+        exclude_ids: &HashSet<String>,
+        always_include: &HashSet<String>,    // favourites — bypass limit
+    ) -> Vec<LocationEntry>;
+}
+```
+
+**Limit configuration:** `LOCATION_NEARBY_LIMIT` env var (default `200`). Same value for all tiers at launch; per-tier overrides deferred. The caller (location-service Phase 3) passes the configured value. `always_include` ids (favourites) are collected unconditionally — they never count against the limit and are never dropped.
+
+**MemoryStore:**
+- `Arc<RwLock<HashMap<ShardKey, Arc<RwLock<HashMap<String, LocationEntry>>>>>>` — outer `RwLock` guards shard-map mutations (inserting/dropping shards); each shard has its own `Arc<RwLock<...>>` so concurrent reads to different shards do not block each other.
+- `upsert`: suppression check (interval + distance) using a per-user `last_written` map. Moves user between shards if they crossed a shard boundary.
+- `remove`: deletes user from their shard; drops the shard entry if it becomes empty.
+- `nearby` — **sorted-shard traversal with per-shard early exit:**
+  1. Compute `intersecting_shards(lat, lon, radius_m, shard_m)` — the AABB-vs-circle set.
+  2. For each candidate shard, compute `min_dist_to_shard(lat, lon, shard_key, shard_m)` — distance from query point to the nearest point on the shard's bounding rectangle (0 if the query point is inside the shard).
+  3. Sort candidate shards ascending by `min_dist_to_shard`.
+  4. Process shards in order: acquire read lock, iterate entries, evict stale (`now - updated_at > ttl`), haversine-filter survivors within `radius_m`, accumulate into a min-heap of size `limit` keyed by distance.
+  5. After each shard: if `heap.len() >= limit` AND `heap.peek_max().distance < next_shard.min_dist` → break. No user in any remaining shard can displace the current Nth result.
+  6. Always-include ids are collected in a separate pass over their known shards, bypassing the heap limit.
+  7. Return heap contents + always-include entries, sorted by distance.
+- This makes query cost proportional to actual user density near the caller, not to the search radius. Dense city: often stops after 1–3 shards. Rural/unrestricted: expands until limit filled or radius exhausted.
+- No DB calls in this path.
+
+**DbStore:** deferred — implement only if `LOCATION_STORE=db` is ever needed (multi-instance deployment). Design is documented in SHARD.md and the notes below; skip implementation for now.
+
+**Suppression state:** `HashMap<String, (Instant, f64, f64)>` (user_id → last_write time + lat/lon) under a separate `RwLock` to enforce `UPDATE_INTERVAL` / `UPDATE_DISTANCE_M`.
+
+**Sweep task (MemoryStore only):** a Tokio background task runs every `LOCATION_SWEEP_INTERVAL_SECS` (default `300`, i.e. 5 min). Each shard maintains a min-heap of `(expiry_instant, user_id)` alongside its HashMap. The sweep pops from the heap until the top entry has not yet expired; for each popped entry it verifies the user still exists in the map with a matching expiry (lazy deletion of invalidated heap entries from prior updates). Drop empty shards after eviction. This makes the sweep O(k) in expired entries rather than O(n) in total entries. Read-path eviction (see `nearby` above) means most stale entries are already gone before the sweep runs.
+
+---
+
+### Phase 3 — Wire into location-service
+
+- Read `LOCATION_SHARD_SIZE_M` (default `2000.0`).
+- Read `LOCATION_UPDATE_INTERVAL_SECS` (default `15`).
+- Read `LOCATION_UPDATE_DISTANCE_M` (default `100.0`).
+- Read `LOCATION_SWEEP_INTERVAL_SECS` (default `300`).
+- Read `LOCATION_NEARBY_LIMIT` (default `200`).
+- Remove `LOCATION_STORE` env var — memory-only for now; DbStore deferred.
+- Replace `AppState.db`-direct location queries with `AppState.store: Arc<MemoryStore>`.
+- Remove `ActiveUsersCache` (replaced by shard store; the 2 s nearby cache can be kept as a thin wrapper on top if needed).
+- Keep block cache, tier radius cache, and nearby results cache unchanged.
+- All existing HTTP endpoints retain the same contract (gateway needs no changes).
+
+---
+
+### Phase 4 — DB migration
+
+New migration `007_shard_index`:
+- Create compound index: `{ shard_key: 1, updatedAt: -1 }` on `locations`.
+- No backfill — location collection starts empty (clean slate; no historical location data to preserve).
+- No index to drop — the collection currently has no geospatial index.
+
+Add to `migration-service/src/main.rs`. Idempotent — safe to re-run.
+
+---
+
+### Phase 5 — Auto-adjustable shard size (deferred)
+
+Track here, implement later. Idea: a background task monitors shard population sizes. If any shard exceeds a configurable `SHARD_MAX_USERS` threshold, halve `SHARD_SIZE_M` for the next startup (write to a `_meta` doc). If all shards fall below `SHARD_MIN_USERS`, double it. Requires graceful re-bucketing logic. Low priority until real load data exists.
+
+---
+
+### Notes
+
+- In-memory mode is **single-instance only**. If Railway ever scales location-service beyond one replica, switch to `LOCATION_STORE=db`. Document prominently in the README.
+- Privacy: no new PII exposure. `LocationEntry` stores only `user_id`, `lat`, `lon`, `tier`, timestamp — same as today.
+- No new infrastructure required. Both backends use existing dependencies (Tokio `RwLock`, existing MongoDB client).
+- **Unrestricted tier (9,700 km radius):** the shard intersection test returns every shard at this radius — spatial pruning of the candidate set is impossible. However, the sorted-shard traversal + early-exit naturally limits the actual work: if `LOCATION_NEARBY_LIMIT` is satisfied within the first few dense shards, all remaining shards are skipped regardless of the nominal radius. In a sparse region, cost is O(active users on that continental instance) — acceptable with T-21 routing in place.
+- **Favourites bypass:** `always_include` ids are reserved slots within the limit, not additions on top of it. Algorithm: collect all `always_include` users found within the radius first (these occupy the first K slots of the result), then fill the remaining `limit - K` slots with the nearest non-favourite users. Total result count never exceeds `limit`. This ensures a favourite 5 m outside the Nth-nearest cutoff still appears, while preventing abuse (adding users as favourites cannot increase the number of visible pins on the map).
+
+---
+
+## T-21 — Continental location-service routing
+
+**Status:** Deferred. Prerequisite: T-20 complete and deployed.
+
+### Goal
+
+Run one `location-service` instance per continent (e.g. `americas`, `europe`, `africa-asia`). Users in different continents never appear in each other's nearby queries, so there is no cross-instance state or coordination needed. Each instance runs `LOCATION_STORE=memory` independently.
+
+### Design
+
+- **Gateway routing:** the gateway derives the continent from the lat/lon in every location request (a simple bounding-box lookup — no geospatial library needed) and forwards to the appropriate upstream. Clients remain unaware of the topology.
+- **Location-service:** no code changes required. Each deployment is a standard location-service instance with its own env vars.
+- **User travel:** when a user crosses a continent boundary their old entry expires via `LOCATION_TTL` on the old instance and they appear on the new one after their next update. No explicit migration needed.
+- **Boundary placement:** draw boundaries conservatively away from dense border regions (e.g. Atlantic mid-ocean, Sahara) to avoid edge cases where two users at a boundary cannot see each other.
+
+### What this unlocks
+
+Removes the single-instance ceiling entirely without switching to `LOCATION_STORE=db`. Each continental instance scales to ~50,000–200,000 active users independently.
+
+### Infrastructure required (owner action, not code)
+
+- 2–3 additional Railway service deployments of `location-service`.
+- Gateway env vars for each continental upstream URL.
+- Continent bounding-box table added to gateway config.
+
+---
+
 ## Recommended Implementation Order
 
 Before any marketing or scaling push, the order of priority is:

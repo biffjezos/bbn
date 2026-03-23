@@ -129,6 +129,19 @@
       });
     }
 
+    // Clear login credentials whenever the modal closes (any path: success, dismiss, Escape)
+    var loginModal = $('loginModal');
+    if (loginModal) {
+      loginModal.addEventListener('hidden.bs.modal', function () {
+        var emailEl = $('loginEmail');
+        var pwEl    = $('loginPassword');
+        var errEl   = $('loginError');
+        if (emailEl) emailEl.value = '';
+        if (pwEl)    pwEl.value    = '';
+        if (errEl)   errEl.classList.add('d-none');
+      });
+    }
+
     // Register modal
     var regBtn = $('regSubmitBtn');
     if (regBtn) {
@@ -161,6 +174,19 @@
           regBtn.disabled = false;
           regBtn.textContent = 'Create Account';
         }
+      });
+    }
+
+    // Clear register credentials whenever the modal closes
+    var registerModal = $('registerModal');
+    if (registerModal) {
+      registerModal.addEventListener('hidden.bs.modal', function () {
+        ['regEmail', 'regNickname', 'regPassword', 'regAge', 'regSex'].forEach(function(id) {
+          var el = $(id);
+          if (el) el.value = '';
+        });
+        var errEl = $('registerError');
+        if (errEl) errEl.classList.add('d-none');
       });
     }
 

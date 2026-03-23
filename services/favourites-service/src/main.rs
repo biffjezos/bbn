@@ -181,6 +181,12 @@ async fn get_message_radius(state: &AppState, tier: &str) -> Option<f64> {
         }
     }
 
+    // Guard against SSRF: tier must be a safe path segment (CodeQL #25).
+    if tier.is_empty() || tier.len() > 64 || !tier.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        eprintln!("[favourites] get_message_radius: invalid tier string");
+        return None;
+    }
+
     let svc_token = state.svc_token_cache.get("favourites", &state.service_secret).await.ok()?;
 
     let resp = state.http

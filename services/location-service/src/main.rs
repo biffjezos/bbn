@@ -4,11 +4,13 @@
 // Identical HTTP contract — gateway needs no changes.
 // ============================================================
 
+mod store;
+
 use std::{
     collections::{HashMap, HashSet},
     env,
     sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use axum::{
@@ -20,29 +22,35 @@ use axum::{
 };
 use common::{
     auth::{AuthToken, JwtSecret, ServiceSecret, ServiceToken, UserClaims},
-    geo::haversine_distance,
     models::BlockDoc,
     service_token::ServiceTokenCache,
 };
 use futures_util::TryStreamExt;
 use mongodb::{
-    bson::{doc, Bson, DateTime as BsonDateTime, Document},
+    bson::{doc, Document},
     Client, Database,
 };
 use serde::Deserialize;
 use serde_json::json;
+use store::{LocationEntry, MemoryStore, UpsertResult};
 use tokio::sync::RwLock;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 struct Config {
-    port:              u16,
-    mongo_uri:         String,
-    db_name:           String,
-    jwt_secret:        String,
-    service_secret:    String,
-    fav_service_url:   String,
-    tiers_service_url: String,
+    port:               u16,
+    mongo_uri:          String,
+    db_name:            String,
+    jwt_secret:         String,
+    service_secret:     String,
+    fav_service_url:    String,
+    tiers_service_url:  String,
+    shard_m:            f64,
+    nearby_limit:       usize,
+    ttl:                Duration,
+    update_interval:    Duration,
+    update_distance_m:  f64,
+    sweep_interval:     Duration,
 }
 
 impl Config {
@@ -63,34 +71,45 @@ impl Config {
             service_secret:    env::var("SERVICE_SECRET").unwrap(),
             fav_service_url:   env::var("FAV_SERVICE_URL").unwrap(),
             tiers_service_url: env::var("TIERS_SERVICE_URL").unwrap(),
+            shard_m:           env::var("LOCATION_SHARD_SIZE_M")
+                                   .ok().and_then(|v| v.parse().ok()).unwrap_or(2_000.0),
+            nearby_limit:      env::var("LOCATION_NEARBY_LIMIT")
+                                   .ok().and_then(|v| v.parse().ok()).unwrap_or(200),
+            ttl:               Duration::from_secs(
+                                   env::var("LOCATION_TTL_SECS")
+                                       .ok().and_then(|v| v.parse().ok()).unwrap_or(600)),
+            update_interval:   Duration::from_secs(
+                                   env::var("LOCATION_UPDATE_INTERVAL_SECS")
+                                       .ok().and_then(|v| v.parse().ok()).unwrap_or(15)),
+            update_distance_m: env::var("LOCATION_UPDATE_DISTANCE_M")
+                                   .ok().and_then(|v| v.parse().ok()).unwrap_or(100.0),
+            sweep_interval:    Duration::from_secs(
+                                   env::var("LOCATION_SWEEP_INTERVAL_SECS")
+                                       .ok().and_then(|v| v.parse().ok()).unwrap_or(300)),
         })
     }
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const UPDATE_INTERVAL:     Duration = Duration::from_secs(15);
-const UPDATE_DISTANCE_M:   f64      = 100.0;
-const LOCATION_TTL:        Duration = Duration::from_secs(10 * 60);
-const NEARBY_CACHE_TTL:    Duration = Duration::from_millis(2_000);
-const BLOCK_CACHE_TTL:     Duration = Duration::from_secs(30);
+const BLOCK_CACHE_TTL:      Duration = Duration::from_secs(30);
 const TIER_RADIUS_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 
 // ── Cache structs ─────────────────────────────────────────────────────────────
 
-struct ActiveUsersCache {
-    users:      Vec<LocationDoc>,
-    expires_at: Instant,
-}
-
 struct BlockCacheEntry {
     ids:        HashSet<String>,
-    expires_at: Instant,
+    expires_at: std::time::Instant,
 }
 
 struct TierRadiusCacheEntry {
     radius_m:   f64,
-    expires_at: Instant,
+    expires_at: std::time::Instant,
+}
+
+struct NearbyCache {
+    results:    Vec<store::NearbyResult>,
+    expires_at: std::time::Instant,
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
@@ -98,13 +117,15 @@ struct TierRadiusCacheEntry {
 #[derive(Clone)]
 struct AppState {
     db:                  Database,
+    store:               Arc<MemoryStore>,
+    nearby_limit:        usize,
     jwt_secret:          String,
     service_secret:      String,
     fav_service_url:     String,
     tiers_service_url:   String,
     http:                reqwest::Client,
     svc_token_cache:     Arc<ServiceTokenCache>,
-    active_users_cache:  Arc<RwLock<Option<ActiveUsersCache>>>,
+    nearby_cache:        Arc<RwLock<HashMap<String, NearbyCache>>>,
     block_cache:         Arc<RwLock<HashMap<String, BlockCacheEntry>>>,
     tier_radius_cache:   Arc<RwLock<HashMap<String, TierRadiusCacheEntry>>>,
 }
@@ -119,38 +140,14 @@ impl FromRef<AppState> for Database {
     fn from_ref(state: &AppState) -> Self { state.db.clone() }
 }
 
-// ── DB document types ─────────────────────────────────────────────────────────
-
-/// Minimal projection used for the time-gate check in PUT /location.
-#[derive(Deserialize)]
-struct LocationCheck {
-    lat:        f64,
-    lon:        f64,
-    #[serde(rename = "updatedAt")]
-    updated_at: BsonDateTime,
-}
-
-/// Full document used for the nearby cache and response.
-#[derive(Deserialize, Clone)]
-struct LocationDoc {
-    #[serde(rename = "userId")]
-    user_id:      String,
-    lat:          f64,
-    lon:          f64,
-    #[serde(rename = "isRegistered", default)]
-    is_registered: bool,
-    sex:          Option<String>,
-    nickname:     Option<String>,
-    age:          Option<i32>,
-    accuracy:     Option<String>,
-}
+// ── DB document types (non-location) ──────────────────────────────────────────
 
 /// Venue document — queried from the `users` collection for nearby results.
 #[derive(Deserialize, Clone)]
 struct VenueDoc {
     #[serde(rename = "_id")]
-    id:       mongodb::bson::oid::ObjectId,
-    nickname: Option<String>,
+    id:        mongodb::bson::oid::ObjectId,
+    nickname:  Option<String>,
     #[serde(rename = "fixedLat")]
     fixed_lat: f64,
     #[serde(rename = "fixedLon")]
@@ -169,7 +166,7 @@ async fn get_blocked_ids(
     {
         let cache = block_cache.read().await;
         if let Some(entry) = cache.get(caller_id) {
-            if entry.expires_at > Instant::now() {
+            if entry.expires_at > std::time::Instant::now() {
                 return entry.ids.clone();
             }
         }
@@ -200,7 +197,7 @@ async fn get_blocked_ids(
 
     block_cache.write().await.insert(
         caller_id.to_string(),
-        BlockCacheEntry { ids: ids.clone(), expires_at: Instant::now() + BLOCK_CACHE_TTL },
+        BlockCacheEntry { ids: ids.clone(), expires_at: std::time::Instant::now() + BLOCK_CACHE_TTL },
     );
 
     ids
@@ -212,7 +209,7 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
     {
         let cache = state.tier_radius_cache.read().await;
         if let Some(entry) = cache.get(tier) {
-            if entry.expires_at > Instant::now() {
+            if entry.expires_at > std::time::Instant::now() {
                 return entry.radius_m;
             }
         }
@@ -222,6 +219,12 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
         "premium" | "regular" => 1_000.0,
         _ => 500.0,
     };
+
+    // Guard against SSRF: tier must be a safe path segment.
+    if tier.is_empty() || tier.len() > 64 || !tier.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        eprintln!("[location] tier radius: invalid tier string");
+        return fallback;
+    }
 
     let svc_token = match state.svc_token_cache.get("location", &state.service_secret).await {
         Ok(t)  => t,
@@ -246,7 +249,7 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
 
     state.tier_radius_cache.write().await.insert(
         tier.to_string(),
-        TierRadiusCacheEntry { radius_m, expires_at: Instant::now() + TIER_RADIUS_CACHE_TTL },
+        TierRadiusCacheEntry { radius_m, expires_at: std::time::Instant::now() + TIER_RADIUS_CACHE_TTL },
     );
 
     radius_m
@@ -269,42 +272,6 @@ fn notify_range_sync(state: AppState, user_id: String, lat: f64, lon: f64) {
             eprintln!("[location] range-sync: {e}");
         }
     });
-}
-
-/// Build the BSON document used for the $set in PUT /location upserts.
-fn build_location_doc(
-    user_id:  &str,
-    lat:      f64,
-    lon:      f64,
-    is_user:  bool,
-    claims:   &UserClaims,
-    accuracy: &str,
-) -> Document {
-    let sex      = claims.sex.as_deref().map(|s| Bson::String(s.to_string())).unwrap_or(Bson::Null);
-    let nickname = claims.nickname.as_deref().map(|s| Bson::String(s.to_string())).unwrap_or(Bson::Null);
-    let age      = claims.age.map(|a| Bson::Int32(a as i32)).unwrap_or(Bson::Null);
-    doc! {
-        "userId":       user_id,
-        "lat":          lat,
-        "lon":          lon,
-        "location": {
-            "type":        "Point",
-            "coordinates": [lon, lat],   // GeoJSON: [longitude, latitude]
-        },
-        "isRegistered": is_user,
-        "sex":          sex,
-        "nickname":     nickname,
-        "age":          age,
-        "accuracy":     accuracy,
-        "updatedAt":    BsonDateTime::now(),
-    }
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as i64
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -347,58 +314,29 @@ async fn put_location(
     let is_user  = matches!(claims.role.as_str(), "user" | "admin");
     let accuracy = if body.accuracy.as_deref() == Some("ip") { "ip" } else { "gps" };
 
-    let existing = match state.db
-        .collection::<LocationCheck>("locations")
-        .find_one(doc! { "userId": user_id })
-        .projection(doc! { "lat": 1, "lon": 1, "updatedAt": 1 })
-        .await
-    {
-        Ok(v)  => v,
-        Err(e) => { eprintln!("[location PUT] find: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    // First push of a session: user not yet in the store.
+    let is_first_push = state.store.get_user(user_id).await.is_none();
+
+    let entry = LocationEntry {
+        user_id:       user_id.clone(),
+        lat,
+        lon,
+        is_registered: is_user,
+        sex:           claims.sex.clone(),
+        nickname:      claims.nickname.clone(),
+        age:           claims.age.map(|a| a as i32),
+        accuracy:      accuracy.to_string(),
+        updated_at:    std::time::Instant::now(),
     };
 
-    if let Some(ref prev) = existing {
-        let moved_far = haversine_distance(prev.lat, prev.lon, lat, lon) >= UPDATE_DISTANCE_M;
-        if !moved_far {
-            // Atomic time-gated update: only writes if the record is old enough.
-            let cutoff = BsonDateTime::from_millis(now_ms() - UPDATE_INTERVAL.as_millis() as i64);
-            return match state.db
-                .collection::<Document>("locations")
-                .update_one(
-                    doc! { "userId": user_id, "updatedAt": { "$lt": cutoff } },
-                    doc! { "$set": build_location_doc(user_id, lat, lon, is_user, &claims, accuracy) },
-                )
-                .await
-            {
-                Ok(r)  => Json(json!({ "ok": true, "skipped": r.matched_count == 0 })).into_response(),
-                Err(e) => { eprintln!("[location PUT] time-gate: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
-            };
-        }
-    }
+    let result = state.store.upsert(entry).await;
+    let skipped = result == UpsertResult::Skipped;
 
-    // New user or moved far enough: unconditional upsert.
-    if let Err(e) = state.db
-        .collection::<Document>("locations")
-        .update_one(
-            doc! { "userId": user_id },
-            doc! {
-                "$set":         build_location_doc(user_id, lat, lon, is_user, &claims, accuracy),
-                "$setOnInsert": { "createdAt": BsonDateTime::now() },
-            },
-        )
-        .upsert(true)
-        .await
-    {
-        eprintln!("[location PUT] upsert: {e}");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response();
-    }
-
-    // Range-sync on first push of a session.
-    if is_user && existing.is_none() {
+    if is_user && is_first_push && !skipped {
         notify_range_sync(state, user_id.clone(), lat, lon);
     }
 
-    Json(json!({ "ok": true })).into_response()
+    Json(json!({ "ok": true, "skipped": skipped })).into_response()
 }
 
 // ── DELETE /location ──────────────────────────────────────────────────────────
@@ -408,14 +346,8 @@ async fn delete_location(
     AuthToken(claims): AuthToken,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    match state.db
-        .collection::<Document>("locations")
-        .delete_one(doc! { "userId": &claims.sub })
-        .await
-    {
-        Ok(_)  => Json(json!({ "ok": true })).into_response(),
-        Err(e) => { eprintln!("[location DELETE] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
-    }
+    state.store.remove(&claims.sub).await;
+    Json(json!({ "ok": true })).into_response()
 }
 
 // ── GET /location/nearby ──────────────────────────────────────────────────────
@@ -436,71 +368,49 @@ async fn get_nearby(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "lat and lon query params required." }))).into_response();
     };
 
-    // Load active users, refreshing the 2-second cache if stale.
-    // Avoid holding the lock across any await point.
-    let needs_refresh = state.active_users_cache.read().await
-        .as_ref()
-        .map_or(true, |c| c.expires_at <= Instant::now());
-
-    if needs_refresh {
-        let cutoff = BsonDateTime::from_millis(now_ms() - LOCATION_TTL.as_millis() as i64);
-        match state.db
-            .collection::<LocationDoc>("locations")
-            .find(doc! { "updatedAt": { "$gt": cutoff } })
-            .await
-        {
-            Ok(cursor) => match cursor.try_collect::<Vec<_>>().await {
-                Ok(all) => {
-                    *state.active_users_cache.write().await = Some(ActiveUsersCache {
-                        users:      all,
-                        expires_at: Instant::now() + NEARBY_CACHE_TTL,
-                    });
-                }
-                Err(e) => eprintln!("[location/nearby] cursor: {e}"),
-            },
-            Err(e) => eprintln!("[location/nearby] find: {e}"),
-        }
-    }
-
-    let mut nearby: Vec<LocationDoc> = state.active_users_cache.read().await
-        .as_ref()
-        .map(|c| c.users.iter().filter(|u| u.user_id != claims.sub).cloned().collect())
-        .unwrap_or_default();
-
-    // Filter out users with a block relationship (registered users only).
-    if matches!(claims.role.as_str(), "user" | "admin") {
-        let blocked = get_blocked_ids(&state.db, &state.block_cache, &claims.sub).await;
-        if !blocked.is_empty() {
-            nearby.retain(|u| !blocked.contains(&u.user_id));
-        }
-    }
-
     let tier     = claims.tier.as_deref().unwrap_or("guest");
     let radius_m = get_nearby_radius_m(&state, tier).await;
 
-    let mut users: Vec<_> = nearby
-        .into_iter()
-        .filter_map(|u| {
-            let dist = haversine_distance(lat, lon, u.lat, u.lon);
-            if dist <= radius_m {
-                Some(json!({
-                    "userId":       u.user_id,
-                    "lat":          u.lat,
-                    "lon":          u.lon,
-                    "isRegistered": u.is_registered,
-                    "sex":          u.sex,
-                    "nickname":     u.nickname,
-                    "age":          u.age,
-                    "accuracy":     u.accuracy.as_deref().unwrap_or("gps"),
-                    "distanceM":    dist.round() as i64,
-                }))
+    // Block list (registered users only).
+    let mut exclude_ids: HashSet<String> = HashSet::new();
+    exclude_ids.insert(claims.sub.clone()); // never show yourself
+    if matches!(claims.role.as_str(), "user" | "admin") {
+        let blocked = get_blocked_ids(&state.db, &state.block_cache, &claims.sub).await;
+        exclude_ids.extend(blocked);
+    }
+
+    // Favourite ids — reserved slots that bypass the limit cap.
+    // Use the 2-second nearby cache to avoid hammering favourites-service.
+    let cache_key = format!("fav:{}", claims.sub);
+    let fav_ids: HashSet<String> = {
+        let cache_r = state.nearby_cache.read().await;
+        if let Some(cached) = cache_r.get(&cache_key) {
+            if cached.expires_at > std::time::Instant::now() {
+                // Reuse cached fav results as ids (stored as NearbyResult but we
+                // only need the ids here — we re-fetch below anyway).
+                cached.results.iter().map(|r| r.entry.user_id.clone()).collect()
             } else {
-                None
+                HashSet::new()
             }
-        })
-        .collect();
+        } else {
+            HashSet::new()
+        }
+    };
+
+    // Fetch fresh fav ids if cache missed.
+    let fav_ids = if fav_ids.is_empty() {
+        fetch_favourite_ids(&state, &claims).await
+    } else {
+        fav_ids
+    };
+
+    let nearby = state
+        .store
+        .nearby(lat, lon, radius_m, state.nearby_limit, &exclude_ids, &fav_ids)
+        .await;
 
     // Include venue accounts (fixed location, always visible within range).
+    // Venues are separate from the memory store — queried from the users collection.
     let venues: Vec<VenueDoc> = match state.db
         .collection::<VenueDoc>("users")
         .find(doc! { "accountType": "venue", "fixedLat": { "$exists": true }, "fixedLon": { "$exists": true } })
@@ -511,14 +421,32 @@ async fn get_nearby(
         Err(e) => { eprintln!("[location/nearby] venues: {e}"); vec![] }
     };
 
+    let mut users: Vec<serde_json::Value> = nearby
+        .iter()
+        .map(|r| json!({
+            "userId":       r.entry.user_id,
+            "lat":          r.entry.lat,
+            "lon":          r.entry.lon,
+            "isRegistered": r.entry.is_registered,
+            "sex":          r.entry.sex,
+            "nickname":     r.entry.nickname,
+            "age":          r.entry.age,
+            "accuracy":     r.entry.accuracy,
+            "distanceM":    r.distance_m.round() as i64,
+        }))
+        .collect();
+
+    let blocked_for_venues = if matches!(claims.role.as_str(), "user" | "admin") {
+        get_blocked_ids(&state.db, &state.block_cache, &claims.sub).await
+    } else {
+        HashSet::new()
+    };
+
     for v in venues {
         let venue_id = v.id.to_hex();
-        if venue_id == claims.sub { continue; } // don't show yourself
-        if matches!(claims.role.as_str(), "user" | "admin") {
-            let blocked = get_blocked_ids(&state.db, &state.block_cache, &claims.sub).await;
-            if blocked.contains(&venue_id) { continue; }
-        }
-        let dist = haversine_distance(lat, lon, v.fixed_lat, v.fixed_lon);
+        if venue_id == claims.sub { continue; }
+        if blocked_for_venues.contains(&venue_id) { continue; }
+        let dist = common::geo::haversine_distance(lat, lon, v.fixed_lat, v.fixed_lon);
         if dist <= radius_m {
             users.push(json!({
                 "userId":       venue_id,
@@ -536,6 +464,36 @@ async fn get_nearby(
     }
 
     Json(json!({ "users": users })).into_response()
+}
+
+/// Fetch the caller's favourite user IDs from favourites-service.
+/// Returns an empty set on any error (graceful degradation).
+async fn fetch_favourite_ids(state: &AppState, claims: &UserClaims) -> HashSet<String> {
+    if !matches!(claims.role.as_str(), "user" | "admin") {
+        return HashSet::new();
+    }
+    let svc_token = match state.svc_token_cache.get("location", &state.service_secret).await {
+        Ok(t)  => t,
+        Err(e) => { eprintln!("[location] fav ids: token error: {e}"); return HashSet::new(); }
+    };
+    match state.http
+        .get(format!("{}/favourites/ids", state.fav_service_url))
+        .header("X-Service-Token", &svc_token)
+        .header("X-User-Id", &claims.sub)
+        .timeout(Duration::from_secs(2))
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => {
+            r.json::<serde_json::Value>().await
+                .ok()
+                .and_then(|v| v["userIds"].as_array().cloned())
+                .map(|arr| arr.into_iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default()
+        }
+        Ok(r)  => { eprintln!("[location] fav ids: HTTP {}", r.status()); HashSet::new() }
+        Err(e) => { eprintln!("[location] fav ids: {e}"); HashSet::new() }
+    }
 }
 
 // ── POST /location/online-batch ───────────────────────────────────────────────
@@ -559,7 +517,10 @@ async fn post_online_batch(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "userIds must be a non-empty array of strings." }))).into_response();
     }
 
-    // Venues are always online — query users collection for venue accounts in the list.
+    // Check live users via memory store.
+    let mut online: Vec<String> = state.store.online_ids(&body.user_ids).await.into_iter().collect();
+
+    // Venues are always online — check which requested IDs are venue accounts.
     let venue_ids: HashSet<String> = match state.db
         .collection::<Document>("users")
         .find(doc! { "_id": { "$in": body.user_ids.iter().filter_map(|id| {
@@ -578,30 +539,15 @@ async fn post_online_batch(
         Err(e) => { eprintln!("[location/online-batch] venue lookup: {e}"); HashSet::new() }
     };
 
-    let cutoff = BsonDateTime::from_millis(now_ms() - LOCATION_TTL.as_millis() as i64);
-    match state.db
-        .collection::<Document>("locations")
-        .find(doc! { "userId": { "$in": &body.user_ids }, "updatedAt": { "$gt": cutoff } })
-        .projection(doc! { "userId": 1 })
-        .await
-    {
-        Ok(cursor) => {
-            let docs: Vec<Document> = cursor.try_collect().await.unwrap_or_default();
-            let mut online: Vec<String> = docs.iter()
-                .filter_map(|d| d.get_str("userId").ok().map(|s| s.to_string()))
-                .collect();
-            // Merge venue IDs — venues are always online.
-            for vid in venue_ids {
-                if !online.contains(&vid) { online.push(vid); }
-            }
-            Json(json!({ "online": online })).into_response()
-        }
-        Err(e) => { eprintln!("[location/online-batch] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    for vid in venue_ids {
+        if !online.contains(&vid) { online.push(vid); }
     }
+
+    Json(json!({ "online": online })).into_response()
 }
 
 // ── GET /location/user/:userId ────────────────────────────────────────────────
-// Internal: called by messages-service only (also requires a valid user JWT).
+// Internal: called by messages-service only.
 
 async fn get_user_location(
     ServiceToken(svc): ServiceToken,
@@ -612,39 +558,33 @@ async fn get_user_location(
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Not authorised." }))).into_response();
     }
 
-    match state.db
-        .collection::<LocationCheck>("locations")
-        .find_one(doc! { "userId": &user_id })
-        .await
-    {
-        Ok(Some(loc)) => Json(json!({
-            "lat":       loc.lat,
-            "lon":       loc.lon,
-            "updatedAt": loc.updated_at.to_string(),
-        })).into_response(),
-        Ok(None) => {
-            // Not in the live-location collection — check if this is a venue
-            // with a fixed position stored in the users collection.
-            let oid = mongodb::bson::oid::ObjectId::parse_str(&user_id).ok();
-            if let Some(oid) = oid {
-                match state.db
-                    .collection::<VenueDoc>("users")
-                    .find_one(doc! { "_id": oid, "accountType": "venue", "fixedLat": { "$exists": true } })
-                    .await
-                {
-                    Ok(Some(venue)) => return Json(json!({
-                        "lat":       venue.fixed_lat,
-                        "lon":       venue.fixed_lon,
-                        "updatedAt": "fixed",
-                    })).into_response(),
-                    Ok(None)  => {}
-                    Err(e) => eprintln!("[location/user/:id] venue fallback: {e}"),
-                }
-            }
-            (StatusCode::NOT_FOUND, Json(json!({ "error": "Location not found." }))).into_response()
-        }
-        Err(e)    => { eprintln!("[location/user/:id] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    if let Some(entry) = state.store.get_user(&user_id).await {
+        return Json(json!({
+            "lat":       entry.lat,
+            "lon":       entry.lon,
+            "updatedAt": format!("{:?}", entry.updated_at),
+        })).into_response();
     }
+
+    // Not in the live store — check if this is a venue with a fixed position.
+    let oid = mongodb::bson::oid::ObjectId::parse_str(&user_id).ok();
+    if let Some(oid) = oid {
+        match state.db
+            .collection::<VenueDoc>("users")
+            .find_one(doc! { "_id": oid, "accountType": "venue", "fixedLat": { "$exists": true } })
+            .await
+        {
+            Ok(Some(venue)) => return Json(json!({
+                "lat":       venue.fixed_lat,
+                "lon":       venue.fixed_lon,
+                "updatedAt": "fixed",
+            })).into_response(),
+            Ok(None)  => {}
+            Err(e) => eprintln!("[location/user/:id] venue fallback: {e}"),
+        }
+    }
+
+    (StatusCode::NOT_FOUND, Json(json!({ "error": "Location not found." }))).into_response()
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -666,17 +606,40 @@ async fn main() {
         .database(&cfg.db_name);
     println!("[location] DB connected.");
 
+    let store = MemoryStore::new(
+        cfg.shard_m,
+        cfg.ttl,
+        cfg.update_interval,
+        cfg.update_distance_m,
+    );
+
+    // Background sweep task.
+    {
+        let store_sweep = store.clone();
+        let interval = cfg.sweep_interval;
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            ticker.tick().await; // skip immediate first tick
+            loop {
+                ticker.tick().await;
+                store_sweep.sweep().await;
+            }
+        });
+    }
+
     let state = AppState {
         db,
-        jwt_secret:         cfg.jwt_secret,
-        service_secret:     cfg.service_secret,
-        fav_service_url:    cfg.fav_service_url,
-        tiers_service_url:  cfg.tiers_service_url,
-        http:               reqwest::Client::new(),
-        svc_token_cache:    Arc::new(ServiceTokenCache::new()),
-        active_users_cache: Arc::new(RwLock::new(None)),
-        block_cache:        Arc::new(RwLock::new(HashMap::new())),
-        tier_radius_cache:  Arc::new(RwLock::new(HashMap::new())),
+        store,
+        nearby_limit:        cfg.nearby_limit,
+        jwt_secret:          cfg.jwt_secret,
+        service_secret:      cfg.service_secret,
+        fav_service_url:     cfg.fav_service_url,
+        tiers_service_url:   cfg.tiers_service_url,
+        http:                reqwest::Client::new(),
+        svc_token_cache:     Arc::new(ServiceTokenCache::new()),
+        nearby_cache:        Arc::new(RwLock::new(HashMap::new())),
+        block_cache:         Arc::new(RwLock::new(HashMap::new())),
+        tier_radius_cache:   Arc::new(RwLock::new(HashMap::new())),
     };
 
     let app = Router::new()

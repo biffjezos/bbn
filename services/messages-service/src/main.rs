@@ -275,6 +275,10 @@ async fn send_message(
     }
 
     let from_id = &claims.sub;
+    // Validate from_id is a safe ObjectId hex string before it reaches any URL (CodeQL #25).
+    if safe_object_id(from_id).is_none() {
+        return (StatusCode::UNAUTHORIZED, Json(json!({ "error": "Invalid token subject." }))).into_response();
+    }
 
     let to_oid = match safe_object_id(&to_id) {
         Some(id) => id,
@@ -338,7 +342,7 @@ async fn send_message(
             "{}/favourites/pair-status?sender={}&recipient={}",
             state.fav_service_url,
             from_id,
-            &to_id,
+            to_oid.to_hex(),
         ))
         .header("X-Service-Token", &svc_token)
         .timeout(Duration::from_secs(5))
@@ -386,7 +390,7 @@ async fn send_message(
 
     // ── Recipient location + proximity ──
     let to_resp = match state.http
-        .get(format!("{}/location/user/{}", state.loc_service_url, &to_id))
+        .get(format!("{}/location/user/{}", state.loc_service_url, to_oid.to_hex()))
         .header("X-Service-Token", &svc_token)
         .timeout(Duration::from_secs(5))
         .send()
@@ -405,6 +409,16 @@ async fn send_message(
 
         let sender_tier    = claims.tier.as_deref().unwrap_or("regular");
         let recipient_tier = to_user.get_str("tier").unwrap_or("regular");
+
+        // Guard against SSRF: tier strings must be safe path segments before
+        // being interpolated into internal service URLs (CodeQL alert #25).
+        fn is_valid_tier(t: &str) -> bool {
+            !t.is_empty() && t.len() <= 64
+                && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        }
+        if !is_valid_tier(sender_tier) || !is_valid_tier(recipient_tier) {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid tier value." }))).into_response();
+        }
 
         let (s_res, r_res) = tokio::join!(
             state.http
