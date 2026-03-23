@@ -20,6 +20,85 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ---
 
+## T-24 — Profile Data Encryption (SEC items 4+5)
+
+**Status:** Planned. Prerequisites: T-23 deployed (OPAQUE live), SEC-1.10/1.11 deployed (PBKDF2 + emailSalt in DB).
+
+**Context:** After the OPAQUE + PBKDF2 deploy, each user document will have an `emailSalt`. This ticket uses that salt to encrypt all personal profile fields (nickname, age, sex) so they are stored only in ciphertext and only decrypted by authorised clients.
+
+**Architecture sketch:**
+1. `profileKey = exportKey` from `OpaqueClient.loginFinish()`. The WASM already returns `{ finalization, exportKey }` — the export key is a high-entropy value derived from the password, never sent to the server, identical on every correct login. No separate KDF or salt needed.
+2. Registration: client registers password → immediately performs a full login to obtain `exportKey` → encrypts `{ nickname, age, sex }` with `profileKey` (AES-GCM) → sends `profileCiphertext` to the server in a follow-up call (or piggybacks on the login/finish response flow).
+3. Server stores ciphertext only — never sees plaintext profile fields.
+4. Login: `loginFinish` returns `exportKey`; client decrypts `prof` JWT claim with it. No extra data needed from the server.
+5. Nearby/search: clients receive ciphertext blobs + per-user public keys; decrypt only what they're authorised to see (users in range, favourites).
+6. JWT claims: strip `nickname`, `age`, `sex`. Add a `prof` claim containing the AES-GCM ciphertext of `{ nickname, age, sex }` (base64url-encoded). The JWT signature covers the ciphertext, preserving tamper-evidence. Only the owner's client can decrypt it using `exportKey`. Token size increase: ~110–140 bytes — negligible.
+
+**Why exportKey, not emailSalt:**
+`emailSalt` was previously proposed as the profileKey salt (`PBKDF2(email, emailSalt)`). This is weaker — email addresses are low-entropy and dictionary-attackable — and requires sending `emailSalt` to the client at login. The OPAQUE `exportKey` has full password entropy, is already produced by the existing WASM (`login_finish` returns `{ finalization, exportKey }`), and never leaves the client. `emailSalt` retains its original role (SEC-1.11: defence-in-depth on the server-side email hash) but is not involved in profile encryption.
+
+**Implementation notes (validated 2026-03-23):**
+
+- **exportKey is only available after login, not after registration.** `register_finish` returns only the `RegistrationUpload` blob — no export key. Profile encryption must happen after the first login, not during registration. Flow: register → auto-login → encrypt profile with exportKey → store ciphertext. The app likely auto-logs in after registration already; the profile encryption step slots in at that point.
+
+- **Profile updates must return a fresh JWT.** `PUT /users/me` accepts changes to `nickname`, `age`, `sex`. The client re-encrypts with `exportKey` (still in memory from login), sends new `profileCiphertext`, and the server returns a new JWT with the updated `prof` claim.
+
+- **Password change invalidates exportKey.** Changing the password produces a new OPAQUE record and therefore a new `exportKey`. The client must re-encrypt the profile immediately after a password change and update the stored ciphertext. `tokenVersion` is already bumped on password change — the new JWT must carry the new `prof` ciphertext.
+
+- **Peer visibility is a separate phase.** The `prof` JWT claim covers the owner's own profile only. How peers (nearby, search) decrypt another user's profile requires the asymmetric keypair (`publicKey`/`encryptedPrivateKey`) already in the schema and is out of scope for this ticket's first phase.
+
+**Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
+
+**Complexity:** HIGH — touches auth-service, users-service, location-service, frontend, JWT claims, and all profile read paths.
+
+---
+
+## T-25 — OPAQUE Server Setup Rotation
+
+**Status:** Planned. Prerequisite: T-23 deployed (OPAQUE live).
+
+**Context:** `OPAQUE_SERVER_SETUP` contains the server's OPRF private key. If it leaks, all `opaqueRecord` blobs are compromised. Rotation must be possible without wiping user accounts. No backward compatibility, no multi-setup versioning.
+
+**Design:**
+
+A user's `opaqueRecord` is nullable. If it is missing or null, the server treats the account as "pending re-registration." The rotation flow:
+
+1. Admin generates a new `OPAQUE_SERVER_SETUP` value (auth-service prints one on startup when the env var is absent — same as initial setup).
+2. Admin sets the new value in Railway and redeploys auth-service.
+3. All existing `opaqueRecord` fields are cleared in one DB operation: `db.users.updateMany({}, { $unset: { opaqueRecord: '' } })`.
+4. Users log in as normal. Auth-service detects missing `opaqueRecord` and returns HTTP 202 with `{ action: "reregister" }` instead of starting the login ceremony.
+5. Client receives the signal, keeps the password in memory (user just typed it), silently runs the full OPAQUE registration ceremony (register/start → register/finish).
+6. New `opaqueRecord` written. Auth-service immediately proceeds to the login ceremony and issues the JWT.
+7. User experience: a brief extra round-trip. No extra password prompt.
+
+**What the client must handle:**
+- On `login/start` response with `action: "reregister"`: run register/start + register/finish with the current password, then retry login/start.
+- This must happen within the same login flow before the password is zeroed from memory.
+
+**What the server must handle:**
+- `login/start` returns 202 + `{ action: "reregister" }` when `opaqueRecord` is null/missing.
+- `register/finish` must be callable on an existing (partial) user account without wiping any other fields.
+
+**Implementation notes (validated 2026-03-23):**
+
+- **`register/finish` is INSERT-only — hard blocker.** The current handler does `insert_one` with `emailHash` as the lookup key. After rotation, the user document already exists with that `emailHash` — the insert will fail with a duplicate key error. The re-registration path needs a dedicated endpoint (e.g. `POST /auth/reregister/finish`) or a modified `register/finish` that performs an `$set` on `opaqueRecord` for an existing document rather than inserting a new one. It must touch only `opaqueRecord` — no other fields.
+
+- **`login/start` hard-errors on null `opaqueRecord`.** The current handler reads `opaqueRecord` and passes it to `ServerLogin::start()` immediately. A null value will cause an unwrap/error. The handler must check for null before entering the OPAQUE ceremony and return `202 { action: "reregister" }` instead.
+
+- **No email or nickname re-entry needed.** The re-registration ceremony only proves knowledge of the password — the user's profile data (nickname, age, sex) and all other fields remain untouched in the DB. Only `opaqueRecord` is updated.
+
+**DB operation for rotation (owner action, not code):**
+```
+db.users.updateMany({}, { $unset: { opaqueRecord: "" } })
+```
+Run in Railway MongoDB shell after deploying the new auth-service with the new `OPAQUE_SERVER_SETUP`.
+
+**No versioning, no migration logic, no coexistence of two setups.**
+
+**Relates to:** SEC-1.1, T-23.
+
+---
+
 ## T-22 — Security Hardening & Capacity Tuning
 
 **Status:** Planned. Self-contained — no prerequisites. Plan: `docs/superpowers/plans/2026-03-23-security-hardening-capacity.md`

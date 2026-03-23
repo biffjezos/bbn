@@ -103,40 +103,61 @@ Axum's default body limit is 2 MB. There is no explicit cap. A client can send a
 
 ---
 
-### SEC-1.7 CWE-918 SSRF — JWT sub interpolated raw into internal service URLs
+### SEC-1.7 ✅ CWE-918 SSRF — JWT sub raw string in internal URLs
 
-**File:** `services/messages-service/src/main.rs` (previously lines 341, 372)
-
-**Flagged by:** GitHub CodeQL (commit `037735f2`)
-
-`claims.sub` (JWT token subject, set by the user) was validated with `safe_object_id()` but the original raw string — not the validated output — was then interpolated directly into internal HTTP URLs (`fav_service_url` and `loc_service_url` path segments). CodeQL's taint analysis correctly identified that the raw string still flowed into the URL despite the guard, as the sanitized ObjectId was discarded.
-
-**Fix applied (2026-03-23):** Changed the validation block to capture the parsed `ObjectId`, then use `.to_hex()` at every URL interpolation point. The URL components now derive from a structured Rust type rather than the raw JWT string.
-
-**Priority:** MEDIUM — internal services only, but defence-in-depth requires this to be clean.
+Fixed 2026-03-23. Full details in AUDIT_DONE.md.
 
 ---
 
-### SEC-1.8 Panic on NaN in location sort (`partial_cmp().unwrap()`)
+### SEC-1.8 ✅ Panic on NaN in location sort (`partial_cmp().unwrap()`)
 
-**File:** `services/location-service/src/store.rs` (previously lines 280, 293, 311, 328)
-
-Four `sort_unstable_by` calls used `.partial_cmp().unwrap()` on `f64` distance values. `partial_cmp` returns `None` when either operand is `NaN`, causing an unwrap panic. A malformed location write with `NaN` coordinates would crash the location-service sort path.
-
-**Fix applied (2026-03-23):** Replaced all four with `.total_cmp()`, which defines a total order on all `f64` values including `NaN` (NaN sorts last).
+Fixed 2026-03-23. Full details in AUDIT_DONE.md.
 
 ---
 
-### SEC-1.9 Panic on pre-epoch system clock (`SystemTime::unwrap()`)
+### SEC-1.9 ✅ Panic on pre-epoch system clock (`SystemTime::unwrap()`)
 
-**Files:**
-- `services/common/src/auth.rs` — `now_unix()`
-- `services/messages-service/src/main.rs` — `now_ms()`
-- `services/favourites-service/src/main.rs` — range-sync cutoff
+Fixed 2026-03-23. Full details in AUDIT_DONE.md.
 
-`duration_since(UNIX_EPOCH)` returns `Err` if the system clock is set before 1970-01-01. All three call sites used `.unwrap()`, crashing the service in any containerised environment with a reset or misconfigured clock.
+---
 
-**Fix applied (2026-03-23):** Replaced `.unwrap()` with `.unwrap_or_default()` at all three sites. A clock-before-epoch condition now returns 0 s / 0 ms instead of panicking.
+### SEC-1.10 ✅ Email pre-hash uses plain SHA-256 — no work factor
+
+**File:** `ui/scripts/opaque-client.js:hashEmail`
+
+**Finding (2026-03-23):** The client computed `emailHash = hex(SHA-256(lowercase(email)))` before
+sending to the server. SHA-256 has no work factor: an attacker who captures the in-transit value
+(TLS termination, infra logging) or obtains the DB + `EMAIL_PEPPER` can reverse any email address
+using a dictionary at essentially zero cost. The email received none of OPAQUE's privacy guarantees.
+
+**Fix (2026-03-23):** Replaced with `PBKDF2-SHA256(password=email, salt='boomboom-email-v2', iterations=100_000)`
+via WebCrypto's native `crypto.subtle`. The fixed domain salt is not secret; protection comes from
+the iteration count. Bulk reversal now requires ~100k SHA-256 ops per candidate email per target user,
+making dictionary attacks computationally expensive.
+
+**Pending deploy:** users collection wipe (same step as SEC-1.1 / T-23 deploy).
+
+**Priority:** HIGH
+
+---
+
+### SEC-1.11 ✅ No per-user salt on email hash — pepper leak enables bulk precomputation
+
+**File:** `services/auth-service/src/main.rs:auth_register_finish`
+
+**Finding (2026-03-23):** `emailHash` stored in the DB was derived as `HMAC(pepper, SHA-256(email))` with no
+per-user random component. If `EMAIL_PEPPER` leaks, an attacker can precompute the entire hash space for
+all known email addresses in one pass and cross-reference the full `users` collection.
+
+**Fix (2026-03-23):** At registration the server now generates a random 16-byte `emailSalt` per user and
+stores it alongside `emailHash`. The PBKDF2 work factor from SEC-1.10 already makes bulk precomputation
+expensive; `emailSalt` adds defence-in-depth and is the foundation for profile-data encryption (items 4+5).
+Note: `emailSalt` is not currently mixed into the lookup hash (that would break lookup); it is reserved
+for the per-user `profileKey = PBKDF2(email, emailSalt)` derivation when profile encryption lands.
+
+**Pending deploy:** users collection wipe (same step as SEC-1.1 / T-23 deploy).
+
+**Priority:** MEDIUM
 
 ---
 
@@ -153,5 +174,7 @@ Four `sort_unstable_by` calls used `.partial_cmp().unwrap()` on `f64` distance v
 | ✅ | SEC-1.7 | MEDIUM | CWE-918 SSRF — JWT sub raw string in internal URLs — fixed 2026-03-23 |
 | ✅ | SEC-1.8 | MEDIUM | NaN panic in location sort — fixed 2026-03-23 |
 | ✅ | SEC-1.9 | LOW | Pre-epoch clock panic in now_unix/now_ms — fixed 2026-03-23 |
+| ✅ | SEC-1.10 | HIGH | Email pre-hash was plain SHA-256 — replaced with PBKDF2-SHA256 (100k iters, 2026-03-23, pending deploy) |
+| ✅ | SEC-1.11 | MEDIUM | No per-user email salt — `emailSalt` added to user document at registration (2026-03-23, pending deploy) |
 
 Resolved items → AUDIT_DONE.md

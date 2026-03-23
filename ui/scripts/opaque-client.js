@@ -23,11 +23,32 @@ function toBytes(str) {
   return enc.encode(str);
 }
 
+// Email is hashed with PBKDF2-SHA256 before leaving the browser.
+// Using a KDF (not plain SHA-256) adds a work factor that makes
+// offline brute-forcing infeasible even if the in-transit value is
+// captured or the server-side pepper leaks.
+// Fixed domain salt 'boomboom-email-v2' is a version+app separator;
+// it is not secret — the protection comes from the iteration count.
 async function hashEmail(email) {
-  const lower   = email.trim().toLowerCase();
-  const encoded = enc.encode(lower);
-  const hashBuf = await crypto.subtle.digest('SHA-256', encoded);
-  return Array.from(new Uint8Array(hashBuf))
+  const lower       = email.trim().toLowerCase();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(lower),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name:       'PBKDF2',
+      salt:       enc.encode('boomboom-email-v2'),
+      iterations: 100_000,
+      hash:       'SHA-256',
+    },
+    keyMaterial,
+    256,
+  );
+  return Array.from(new Uint8Array(bits))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }

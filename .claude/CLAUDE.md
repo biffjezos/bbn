@@ -66,6 +66,9 @@ Before writing any code for a ticket:
 - **Update tickets.** Reflect the current state of any ticket touched this session:
   move completed phases/tickets to `TICKETS_DONE.md` (leave a stub), update status
   lines, add any newly discovered tickets. Do this before every commit, not only at wrap-up.
+- **Update audit files.** If any audit item was resolved or its status changed during this
+  session, move it to `AUDIT_DONE.md` (leave a stub), update the source concern file, and
+  keep the global summary table in `AUDIT.md` in sync. Do this before every commit, not only at wrap-up.
 - **Reflect.** Identify anything that slowed the session down or caused
    friction: unclear rules, missing context, a workflow step that broke, a
    ticket structure that wasn't useful. Be brief and honest. You may ask the
@@ -141,6 +144,15 @@ Filed separately for the same reason. Same ownership rules as AUDIT.md.
 ### `.claude/AUDIT_DONE.md` — Resolved audit items archive
 Contains: resolved findings from any audit file. Move items here when fixed —
 never delete them. Note which file they came from and when they were resolved.
+
+Rules for moving:
+- Move an item only when the fix is confirmed in code (not just planned).
+- After moving, leave a one-line stub in the source concern file pointing to AUDIT_DONE.md
+  (e.g. `SEC-1.7 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md`).
+- Items that are code-complete but have outstanding deployment steps (env vars, DB ops)
+  stay in the concern file until fully live.
+- Read AUDIT_DONE.md only when you need historical context for a specific item —
+  not on session start, not speculatively.
 
 ### `.claude/TICKETS.md` — Feature backlog
 Contains: planned features, postponed work, architectural proposals,

@@ -5,6 +5,42 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ---
 
+## From AUDIT_SECURITY.md (2026-03-23)
+
+### DONE — SEC-1.7 CWE-918 SSRF — JWT sub interpolated raw into internal service URLs
+
+**Original severity:** MEDIUM
+**Resolved:** 2026-03-23
+
+**File:** `services/messages-service/src/main.rs` (previously lines 341, 372)
+**Flagged by:** GitHub CodeQL (commit `037735f2`)
+
+`claims.sub` (JWT token subject) was validated with `safe_object_id()` but the raw string — not the validated output — was interpolated directly into internal HTTP URLs. Fix: capture the parsed `ObjectId`, then use `.to_hex()` at every URL interpolation point. URL components now derive from a structured Rust type, not the raw JWT string.
+
+---
+
+### DONE — SEC-1.8 Panic on NaN in location sort (`partial_cmp().unwrap()`)
+
+**Original severity:** MEDIUM
+**Resolved:** 2026-03-23
+
+**File:** `services/location-service/src/store.rs` (previously lines 280, 293, 311, 328)
+
+Four `sort_unstable_by` calls used `.partial_cmp().unwrap()` on `f64` distance values. `partial_cmp` returns `None` when either operand is `NaN`, causing an unwrap panic. Fix: replaced all four with `.total_cmp()`, which defines a total order on all `f64` values including `NaN` (NaN sorts last).
+
+---
+
+### DONE — SEC-1.9 Panic on pre-epoch system clock (`SystemTime::unwrap()`)
+
+**Original severity:** LOW
+**Resolved:** 2026-03-23
+
+**Files:** `services/common/src/auth.rs` (`now_unix()`), `services/messages-service/src/main.rs` (`now_ms()`), `services/favourites-service/src/main.rs` (range-sync cutoff)
+
+`duration_since(UNIX_EPOCH)` returns `Err` if the system clock is set before 1970-01-01. All three call sites used `.unwrap()`. Fix: replaced with `.unwrap_or_default()` — a clock-before-epoch condition now returns 0 s / 0 ms instead of panicking.
+
+---
+
 ## From AUDIT_MAINTAINABILITY.md (2026-03-19)
 
 ### DONE — MAINT-2.1 `haversine_distance` duplicated across three Rust services
