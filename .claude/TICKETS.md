@@ -54,7 +54,7 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ## T-25 — OPAQUE Server Setup Rotation
 
-**Status:** Planned. Prerequisite: T-23 deployed (OPAQUE live).
+**Status:** Phase 1 (re-registration for existing accounts) ✅ implemented 2026-03-23. Full rotation flow (new OPAQUE_SERVER_SETUP + DB wipe) still pending. Prerequisite: T-23 deployed (OPAQUE live).
 
 **Context:** `OPAQUE_SERVER_SETUP` contains the server's OPRF private key. If it leaks, all `opaqueRecord` blobs are compromised. Rotation must be possible without wiping user accounts. No backward compatibility, no multi-setup versioning.
 

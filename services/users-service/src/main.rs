@@ -984,6 +984,78 @@ async fn admin_patch_role(
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
 }
 
+// ── PATCH /admin/users/:id ────────────────────────────────────────────────────
+// Atomically update tier and/or role in one request. When an admin patches their
+// own account a fresh JWT is returned so their session stays valid.
+
+#[derive(Deserialize)]
+struct AdminPatchBody {
+    tier: Option<String>,
+    role: Option<String>,
+}
+
+async fn admin_patch_user(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<AdminPatchBody>,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+    if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own tier or role.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
+    }
+
+    let oid = match safe_object_id(&id) {
+        Some(o) => o,
+        None    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid userId." }))).into_response(),
+    };
+
+    let mut set_doc = Document::new();
+    if let Some(ref tier) = body.tier {
+        if tier.is_empty() || tier.len() > 64 {
+            return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Valid tier name required." }))).into_response();
+        }
+        set_doc.insert("tier", tier.as_str());
+    }
+    if let Some(ref role) = body.role {
+        match role.as_str() {
+            "user" | "admin" | "venue_manager" => { set_doc.insert("role", role.as_str()); }
+            _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "role must be 'user', 'admin', or 'venue_manager'." }))).into_response(),
+        }
+    }
+    if set_doc.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "No changes provided." }))).into_response();
+    }
+
+    let result = match state.db.collection::<UserForToken>("users")
+        .find_one_and_update(
+            doc! { "_id": oid },
+            doc! { "$set": set_doc, "$inc": { "tokenVersion": 1 } },
+        )
+        .return_document(ReturnDocument::After)
+        .projection(doc! { "nickname": 1, "sex": 1, "age": 1, "role": 1, "tier": 1, "accountType": 1, "tokenVersion": 1 })
+        .await
+    {
+        Ok(Some(u)) => u,
+        Ok(None)    => return (StatusCode::NOT_FOUND, Json(json!({ "error": "User not found." }))).into_response(),
+        Err(e)      => { eprintln!("[admin/users PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+
+    let tv = result.token_version.unwrap_or(0).max(0) as u32;
+
+    // When admin patches their own account issue a fresh JWT so their session isn't immediately invalidated.
+    if claims.sub == id {
+        if let Ok(token) = make_token(&result, &state.jwt_secret) {
+            return Json(json!({ "ok": true, "tokenVersion": tv, "token": token })).into_response();
+        }
+    }
+
+    Json(json!({ "ok": true, "tokenVersion": tv })).into_response()
+}
+
 // ── PATCH /admin/venues/:id/manager ──────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -1447,6 +1519,7 @@ async fn main() {
         .route("/users/me/password/finish",  post(users_me_password_finish))
         .route("/admin/config",              get(admin_get_config))
         .route("/admin/users",               get(admin_get_users))
+        .route("/admin/users/{id}",              patch(admin_patch_user))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
         .route("/admin/users/{id}/role",         patch(admin_patch_role))
         .route("/admin/venues/{id}/manager",     patch(admin_patch_venue_manager))
