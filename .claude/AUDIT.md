@@ -1,6 +1,6 @@
 # bOOmbOOm.NOW! — Audit Index
 
-**Last updated:** 2026-03-19
+**Last updated:** 2026-03-23
 **Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
 **Auditor:** Claude (claude-sonnet-4-6)
 
@@ -92,5 +92,9 @@ When a finding is resolved: update the relevant concern file's summary, move the
 | 🔲 | UX-3.1 | [Usability](AUDIT_USABILITY.md) | MEDIUM | Users enter password twice in cold login → messages flow |
 | 🔲 | SEC-1.1 | [Security](AUDIT_SECURITY.md) | HIGH | Plain password/email in POST request — needs OPAQUE/PAKE |
 | 🔲 | SEC-1.2 | [Security](AUDIT_SECURITY.md) | MEDIUM | Gateway send-rate bypassable at messages-service HTTP endpoint |
+| 🔲 | SEC-1.3 | [Security](AUDIT_SECURITY.md) | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — prefer `CF-Connecting-IP` |
+| 🔲 | SEC-1.4 | [Security](AUDIT_SECURITY.md) | MEDIUM | User JWT TTL hardcoded at 7 days — should default to 24 h, be configurable |
+| 🔲 | SEC-1.5 | [Security](AUDIT_SECURITY.md) | LOW | No request body size cap in gateway |
+| 🔲 | SEC-1.6 | [Security](AUDIT_SECURITY.md) | LOW | `msg_send` shares the general API rate bucket instead of a tighter dedicated limiter |
 | ⏸️ | PERF-4.1 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Send-rate bucket in-process — not safe for multi-instance gateway (deferred) |
 | 🔲 | PERF-4.2 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Notification poll scales linearly with active users |

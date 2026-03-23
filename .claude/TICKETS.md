@@ -7,6 +7,31 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ---
 
+## T-21 — Security Hardening & Capacity Tuning
+
+**Status:** Planned. Self-contained — no prerequisites. Plan: `docs/superpowers/plans/2026-03-23-security-hardening-capacity.md`
+
+Closes SEC-1.2, SEC-1.3, SEC-1.4, SEC-1.5, SEC-1.6. Does not touch SEC-1.1 (OPAQUE — separate track).
+
+### Changes
+
+| Service | Change |
+|---|---|
+| `common` | Add `ttl_secs: u64` to `UserTokenParams`; remove hardcoded 7-day constant from `issue_user_token` |
+| `auth-service` | Read `JWT_USER_TTL_SECS` (default 86 400 s = 24 h); pass to token calls |
+| `users-service` | Same `JWT_USER_TTL_SECS` pattern; thread through `make_token` helper |
+| `messages-service` | Per-userId `FixedWindow` in `send_message` (fixes SEC-1.2). Env: `MSG_SEND_RATE_MAX` (default 10), `MSG_SEND_RATE_WINDOW_SECS` (default 10) |
+| `gateway` | `real_ip()` prefers `CF-Connecting-IP` (SEC-1.3); `DefaultBodyLimit` via `HTTP_BODY_LIMIT_BYTES` (SEC-1.5); all 4 rate limits configurable via env vars with tighter production defaults; new `lim_msg` for `msg_send` (SEC-1.6) |
+| All READMEs | Document every new env var and production capacity guidance |
+
+### No backend changes required until deployment
+New env vars have safe defaults — services behave as before if vars are not set. Set them in Railway when deploying.
+
+### Multi-replica note
+Gateway and all stateless services: safe to run 5 replicas. `location-service`: **1 replica only** until T-20 DB-mode is implemented (rate-limit buckets and memory store are in-process).
+
+---
+
 ## T-20 — Sharded Location Store (performance at scale)
 
 **Status:** Not started. Self-contained — no prerequisites.
