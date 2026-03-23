@@ -245,6 +245,9 @@ pub struct UserTokenParams<'a> {
     pub tier:         &'a str,
     pub tv:           u32,
     pub account_type: &'a str,
+    /// Token lifetime in seconds. Defaults to `USER_TOKEN_EXPIRY_SECS` (7 days legacy
+    /// value kept as fallback; callers should pass the admin-configured TTL instead).
+    pub ttl_secs:     Option<u64>,
 }
 
 /// Sign a user JWT. `role` is typically `"user"` or `"admin"`.
@@ -253,6 +256,7 @@ pub fn issue_user_token(
     secret: &str,
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let now = now_unix();
+    let ttl = p.ttl_secs.unwrap_or(USER_TOKEN_EXPIRY_SECS);
     encode(
         &Header::new(Algorithm::HS256),
         &IssuedUserClaims {
@@ -263,7 +267,7 @@ pub fn issue_user_token(
             role:         p.role.to_string(),
             tier:         p.tier.to_string(),
             tv:           p.tv,
-            exp:          now + USER_TOKEN_EXPIRY_SECS,
+            exp:          now + ttl,
             iat:          now,
             account_type: p.account_type.to_string(),
         },

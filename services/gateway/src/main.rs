@@ -8,7 +8,7 @@ use std::{
     collections::HashMap,
     env,
     net::IpAddr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
@@ -16,7 +16,7 @@ use axum::{
     body::Bytes,
     extract::{
         ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
-        RawQuery, State,
+        DefaultBodyLimit, RawQuery, State,
     },
     http::{header, HeaderMap, Method, StatusCode},
     response::{IntoResponse, Json},
@@ -65,6 +65,20 @@ impl FixedWindow {
         entry.0 += 1;
         true
     }
+}
+
+/// A rate limiter whose max/window can be swapped at runtime without losing state continuity.
+/// Handlers read the inner `Arc<FixedWindow>` under a short-lived read lock.
+/// The background-refresh task replaces it under a write lock when settings change.
+type LiveLimiter = Arc<RwLock<Arc<FixedWindow>>>;
+
+fn live_lim(max: u32, window: Duration) -> LiveLimiter {
+    Arc::new(RwLock::new(FixedWindow::new(max, window)))
+}
+
+/// Check a LiveLimiter for a given IP. Acquires a read lock, clones the inner Arc, then releases.
+fn check_lim(lim: &LiveLimiter, ip: IpAddr) -> bool {
+    lim.read().unwrap().check(ip)
 }
 
 // ── WS message send rate (per userId, shared across connections) ──────────────
@@ -151,11 +165,12 @@ struct AppState {
     migration_url:   String,
     http:            reqwest::Client,
     svc_token_cache: Arc<ServiceTokenCache>,
-    // Rate limiters
-    lim_login:       Arc<FixedWindow>,
-    lim_register:    Arc<FixedWindow>,
-    lim_guest:       Arc<FixedWindow>,
-    lim_api:         Arc<FixedWindow>,
+    // Rate limiters (LiveLimiter — swappable at runtime via background refresh)
+    lim_login:       LiveLimiter,
+    lim_register:    LiveLimiter,
+    lim_guest:       LiveLimiter,
+    lim_api:         LiveLimiter,
+    lim_msg:         LiveLimiter,  // dedicated msg_send limiter (SEC-1.6)
     // Health cache
     health_cache:    Arc<Mutex<Option<HealthCache>>>,
     // WS send buckets
@@ -165,10 +180,17 @@ struct AppState {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn real_ip(headers: &HeaderMap) -> IpAddr {
-    headers.get("x-forwarded-for")
+    // Prefer CF-Connecting-IP (SEC-1.3): Cloudflare sets this to the true client IP
+    // and it cannot be spoofed through X-Forwarded-For by clients.
+    headers.get("cf-connecting-ip")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
         .and_then(|s| s.trim().parse().ok())
+        .or_else(|| {
+            headers.get("x-forwarded-for")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.split(',').next())
+                .and_then(|s| s.trim().parse().ok())
+        })
         .unwrap_or_else(|| IpAddr::from([127, 0, 0, 1]))
 }
 
@@ -371,86 +393,86 @@ async fn health_api(State(state): State<AppState>) -> impl IntoResponse {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 async fn auth_guest(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_guest.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_guest, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/auth/guest", s.auth_url), auth_hdr(&headers), Some(body)).await
 }
 async fn auth_register_start(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_register.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_register, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/auth/register/start", s.auth_url), auth_hdr(&headers), Some(body)).await
 }
 async fn auth_register_finish(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_register.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_register, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/auth/register/finish", s.auth_url), auth_hdr(&headers), Some(body)).await
 }
 async fn auth_login_start(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_login.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_login, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/auth/login/start", s.auth_url), auth_hdr(&headers), Some(body)).await
 }
 async fn auth_login_finish(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_login.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_login, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/auth/login/finish", s.auth_url), auth_hdr(&headers), Some(body)).await
 }
 async fn users_pw_change_start(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/users/me/password/start", s.user_url), auth_hdr(&headers), Some(body)).await
 }
 async fn users_pw_change_finish(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/users/me/password/finish", s.user_url), auth_hdr(&headers), Some(body)).await
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 async fn users_get_me(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/users/me", s.user_url), auth_hdr(&headers), None).await
 }
 async fn users_put_me(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::PUT, format!("{}/users/me", s.user_url), auth_hdr(&headers), Some(body)).await
 }
 async fn users_delete_me(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::DELETE, format!("{}/users/me", s.user_url), auth_hdr(&headers), None).await
 }
 async fn users_get_keys(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/users/me/keys", s.user_url), auth_hdr(&headers), None).await
 }
 async fn users_put_keys(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::PUT, format!("{}/users/me/keys", s.user_url), auth_hdr(&headers), Some(body)).await
 }
 async fn users_get_preferences(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/users/me/preferences", s.user_url), auth_hdr(&headers), None).await
 }
 async fn users_put_preferences(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::PUT, format!("{}/users/me/preferences", s.user_url), auth_hdr(&headers), Some(body)).await
 }
 async fn users_search(State(s): State<AppState>, headers: HeaderMap, RawQuery(q): RawQuery) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     let qs = q.unwrap_or_default();
     proxy(&s, Method::GET, format!("{}/users/search?{}", s.user_url, qs), auth_hdr(&headers), None).await
 }
 async fn users_profile(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/users/{}/profile", s.user_url, uid), auth_hdr(&headers), None).await
 }
 
 // ── Location ──────────────────────────────────────────────────────────────────
 
 async fn loc_put(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::PUT, format!("{}/location", s.loc_url), auth_hdr(&headers), Some(body)).await
 }
 async fn loc_delete(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::DELETE, format!("{}/location", s.loc_url), auth_hdr(&headers), None).await
 }
 async fn loc_nearby(State(s): State<AppState>, headers: HeaderMap, RawQuery(q): RawQuery) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     let qs = q.unwrap_or_default();
     proxy(&s, Method::GET, format!("{}/location/nearby?{}", s.loc_url, qs), auth_hdr(&headers), None).await
 }
@@ -458,22 +480,23 @@ async fn loc_nearby(State(s): State<AppState>, headers: HeaderMap, RawQuery(q): 
 // ── Messages ──────────────────────────────────────────────────────────────────
 
 async fn msg_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = tier_guard(&s, &headers, "message_online").await { return e; }
     proxy(&s, Method::GET, format!("{}/messages", s.msg_url), auth_hdr(&headers), None).await
 }
 async fn msg_thread(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = tier_guard(&s, &headers, "message_online").await { return e; }
     proxy(&s, Method::GET, format!("{}/messages/{}", s.msg_url, uid), auth_hdr(&headers), None).await
 }
 async fn msg_send(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_msg,  real_ip(&headers)) { return rate_limited(); }  // SEC-1.6: dedicated msg limiter
     if let Some(e) = tier_guard(&s, &headers, "message_online").await { return e; }
     proxy(&s, Method::POST, format!("{}/messages/{}", s.msg_url, uid), auth_hdr(&headers), Some(body)).await
 }
 async fn msg_delete(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = tier_guard(&s, &headers, "message_online").await { return e; }
     proxy(&s, Method::DELETE, format!("{}/messages/{}", s.msg_url, id), auth_hdr(&headers), None).await
 }
@@ -481,37 +504,37 @@ async fn msg_delete(State(s): State<AppState>, headers: HeaderMap, axum::extract
 // ── Tiers ─────────────────────────────────────────────────────────────────────
 
 async fn tiers_nearby_radius(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(tier): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/tiers/radius/nearby/{}", s.tiers_url, tier), auth_hdr(&headers), None).await
 }
 async fn tiers_msg_radius(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(tier): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/tiers/radius/message/{}", s.tiers_url, tier), auth_hdr(&headers), None).await
 }
 async fn tiers_info(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(tier): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/tiers/{}/info", s.tiers_url, tier), auth_hdr(&headers), None).await
 }
 
 // ── Favourites ────────────────────────────────────────────────────────────────
 
 async fn fav_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = tier_guard(&s, &headers, "manage_favourites").await { return e; }
     proxy(&s, Method::GET, format!("{}/favourites", s.fav_url), auth_hdr(&headers), None).await
 }
 async fn fav_is_mutual(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = tier_guard(&s, &headers, "manage_favourites").await { return e; }
     proxy(&s, Method::GET, format!("{}/favourites/is-mutual/{}", s.fav_url, uid), auth_hdr(&headers), None).await
 }
 async fn fav_add(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = tier_guard(&s, &headers, "manage_favourites").await { return e; }
     proxy(&s, Method::POST, format!("{}/favourites/{}", s.fav_url, uid), auth_hdr(&headers), Some(body)).await
 }
 async fn fav_remove(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = tier_guard(&s, &headers, "manage_favourites").await { return e; }
     proxy(&s, Method::DELETE, format!("{}/favourites/{}", s.fav_url, uid), auth_hdr(&headers), None).await
 }
@@ -519,79 +542,90 @@ async fn fav_remove(State(s): State<AppState>, headers: HeaderMap, axum::extract
 // ── Blocks ────────────────────────────────────────────────────────────────────
 
 async fn blocks_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/blocks", s.blocks_url), auth_hdr(&headers), None).await
 }
 async fn blocks_add(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::POST, format!("{}/blocks/{}", s.blocks_url, uid), auth_hdr(&headers), Some(body)).await
 }
 async fn blocks_remove(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::DELETE, format!("{}/blocks/{}", s.blocks_url, uid), auth_hdr(&headers), None).await
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 async fn notif_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::GET, format!("{}/notifications", s.fav_url), auth_hdr(&headers), None).await
 }
 async fn notif_delete(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     proxy(&s, Method::DELETE, format!("{}/notifications/{}", s.fav_url, id), auth_hdr(&headers), None).await
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
+async fn admin_get_settings(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
+    proxy(&s, Method::GET, format!("{}/admin/settings", s.user_url), auth_hdr(&headers), None).await
+}
+async fn admin_put_setting(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(key): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
+    proxy(&s, Method::PUT, format!("{}/admin/settings/{}", s.user_url, key), auth_hdr(&headers), Some(body)).await
+}
+
 async fn admin_users(State(s): State<AppState>, headers: HeaderMap, RawQuery(q): RawQuery) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     let qs = q.unwrap_or_default();
     proxy(&s, Method::GET, format!("{}/admin/users?{}", s.user_url, qs), auth_hdr(&headers), None).await
 }
 async fn admin_get_config(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::GET, format!("{}/admin/config", s.user_url), auth_hdr(&headers), None).await
 }
 async fn admin_patch_user(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::PATCH, format!("{}/admin/users/{}", s.user_url, id), auth_hdr(&headers), Some(body)).await
 }
 async fn admin_patch_tier(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::PATCH, format!("{}/admin/users/{}/tier", s.user_url, id), auth_hdr(&headers), Some(body)).await
 }
 async fn admin_patch_role(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::PATCH, format!("{}/admin/users/{}/role", s.user_url, id), auth_hdr(&headers), Some(body)).await
 }
 async fn admin_patch_venue_manager(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::PATCH, format!("{}/admin/venues/{}/manager", s.user_url, id), auth_hdr(&headers), Some(body)).await
 }
 async fn admin_tiers_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::GET, format!("{}/admin/tiers", s.tiers_url), auth_hdr(&headers), None).await
 }
 async fn admin_tiers_post(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::POST, format!("{}/admin/tiers", s.tiers_url), auth_hdr(&headers), Some(body)).await
 }
 async fn admin_tiers_put(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(name): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::PUT, format!("{}/admin/tiers/{}", s.tiers_url, name), auth_hdr(&headers), Some(body)).await
 }
 async fn admin_tiers_delete(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(name): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = admin_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::DELETE, format!("{}/admin/tiers/{}", s.tiers_url, name), auth_hdr(&headers), None).await
 }
@@ -599,22 +633,22 @@ async fn admin_tiers_delete(State(s): State<AppState>, headers: HeaderMap, axum:
 // ── Manager ───────────────────────────────────────────────────────────────────
 
 async fn manager_venues_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::GET, format!("{}/manager/venues", s.user_url), auth_hdr(&headers), None).await
 }
 async fn manager_venues_post(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::POST, format!("{}/manager/venues", s.user_url), auth_hdr(&headers), Some(body)).await
 }
 async fn manager_venue_put(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::PUT, format!("{}/manager/venues/{}", s.user_url, id), auth_hdr(&headers), Some(body)).await
 }
 async fn manager_venue_delete(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>) -> impl IntoResponse {
-    if !s.lim_api.check(real_ip(&headers)) { return rate_limited(); }
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     if let Some(e) = manager_guard(&headers, &s.jwt_secret) { return e; }
     proxy(&s, Method::DELETE, format!("{}/manager/venues/{}", s.user_url, id), auth_hdr(&headers), None).await
 }
@@ -1032,6 +1066,24 @@ async fn main() {
         Err(e) => eprintln!("[gateway] Could not reach migration service: {e}"),
     }
 
+    // ── Load initial rate-limit config from admin_settings (via users-service) ──
+    // Uses hardcoded defaults if users-service is not yet ready — background task
+    // will apply DB values within the first 60 s interval.
+    let mut body_limit_bytes: usize = 65536;
+
+    if let Ok(svc_tok) = svc_cache.get("gateway", &cfg.service_secret).await {
+        if let Ok(resp) = http.get(format!("{}/internal/settings", cfg.user_url))
+            .header("X-Service-Token", &svc_tok)
+            .timeout(Duration::from_secs(5))
+            .send().await
+        {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                body_limit_bytes = json["http_body_limit_bytes"]
+                    .as_i64().unwrap_or(65536) as usize;
+            }
+        }
+    }
+
     let state = AppState {
         jwt_secret:      cfg.jwt_secret,
         service_secret:  cfg.service_secret,
@@ -1045,13 +1097,56 @@ async fn main() {
         migration_url:   cfg.migration_url,
         http,
         svc_token_cache: svc_cache,
-        lim_login:       FixedWindow::new(20,  Duration::from_secs(15 * 60)),
-        lim_register:    FixedWindow::new(5,   Duration::from_secs(60 * 60)),
-        lim_guest:       FixedWindow::new(40,  Duration::from_secs(60 * 60)),
-        lim_api:         FixedWindow::new(120, Duration::from_secs(60)),
+        lim_login:    live_lim(10,  Duration::from_secs(900)),
+        lim_register: live_lim(5,   Duration::from_secs(3600)),
+        lim_guest:    live_lim(40,  Duration::from_secs(3600)),
+        lim_api:      live_lim(120, Duration::from_secs(60)),
+        lim_msg:      live_lim(30,  Duration::from_secs(60)),
         health_cache:    Arc::new(Mutex::new(None)),
         send_buckets:    Arc::new(Mutex::new(HashMap::new())),
     };
+
+    // Background task: refresh all rate limiters from admin_settings every 60 s.
+    {
+        let s2 = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                let svc_tok = match s2.svc_token_cache.get("gateway", &s2.service_secret).await {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+                let resp = s2.http
+                    .get(format!("{}/internal/settings", s2.user_url))
+                    .header("X-Service-Token", &svc_tok)
+                    .timeout(Duration::from_secs(5))
+                    .send().await;
+                let json = match resp {
+                    Ok(r) if r.status().is_success() => match r.json::<serde_json::Value>().await {
+                        Ok(j) => j,
+                        Err(_) => continue,
+                    },
+                    _ => continue,
+                };
+                let get_u32 = |k: &str, d: u32| json[k].as_i64().unwrap_or(d as i64) as u32;
+                let get_u64 = |k: &str, d: u64| json[k].as_i64().unwrap_or(d as i64) as u64;
+                macro_rules! refresh {
+                    ($lim:expr, $max_k:expr, $win_k:expr, $dm:expr, $dw:expr) => {
+                        *$lim.write().unwrap() = FixedWindow::new(
+                            get_u32($max_k, $dm),
+                            Duration::from_secs(get_u64($win_k, $dw)),
+                        );
+                    };
+                }
+                refresh!(s2.lim_login,    "login_rate_max",    "login_rate_window_secs",    10,  900);
+                refresh!(s2.lim_register, "register_rate_max", "register_rate_window_secs", 5,  3600);
+                refresh!(s2.lim_guest,    "guest_rate_max",    "guest_rate_window_secs",    40, 3600);
+                refresh!(s2.lim_api,      "api_rate_max",      "api_rate_window_secs",      120,   60);
+                refresh!(s2.lim_msg,      "msg_ip_rate_max",   "msg_ip_rate_window_secs",   30,    60);
+            }
+        });
+    }
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(
@@ -1102,6 +1197,8 @@ async fn main() {
         .route("/api/notifications/{id}", delete(notif_delete))
         // Admin
         .route("/api/admin/config",             get(admin_get_config))
+        .route("/api/admin/settings",           get(admin_get_settings))
+        .route("/api/admin/settings/{key}",     put(admin_put_setting))
         .route("/api/admin/users",              get(admin_users))
         .route("/api/admin/users/{id}",              patch(admin_patch_user))
         .route("/api/admin/users/{id}/tier",         patch(admin_patch_tier))
@@ -1116,6 +1213,7 @@ async fn main() {
         .route("/ws/location", get(ws_location))
         .route("/ws/messages", get(ws_messages))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
+        .layer(DefaultBodyLimit::max(body_limit_bytes)) // SEC-1.5
         .layer(cors)
         .with_state(state);
 

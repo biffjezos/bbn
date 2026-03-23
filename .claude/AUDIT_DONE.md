@@ -7,6 +7,61 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ## From AUDIT_SECURITY.md (2026-03-23)
 
+### DONE — SEC-1.2 Gateway send-rate bypassable at messages-service HTTP endpoint
+
+**Original severity:** MEDIUM
+**Resolved:** 2026-03-23 (T-22)
+
+**File:** `services/messages-service/src/main.rs` — `send_message` handler
+
+Gateway's per-IP rate limiter on `msg_send` could be bypassed by a caller that reached `messages-service` directly (e.g. via a leaked internal URL). Fix: `send_message` now maintains a per-userId `FixedWindow` bucket in-process (`UserBuckets = Arc<Mutex<HashMap<String, (u32, Instant)>>>`). Every call to send a message is checked against this bucket; callers exceeding `msg_user_rate_max` (default 10) within `msg_user_rate_window` (default 10 s) receive `429`. This is a defence-in-depth layer — the gateway IP limiter still applies first.
+
+---
+
+### DONE — SEC-1.3 `real_ip()` trusts spoofable `X-Forwarded-For`
+
+**Original severity:** MEDIUM
+**Resolved:** 2026-03-23 (T-22)
+
+**File:** `services/gateway/src/main.rs` — `real_ip()`
+
+`real_ip()` previously read only `X-Forwarded-For`, which any caller can spoof by sending a forged header. Fix: `real_ip()` now checks `CF-Connecting-IP` first (set by Cloudflare and not spoofable by end users when all traffic flows through Cloudflare). `X-Forwarded-For` is used only as a fallback (for local dev without Cloudflare). Fallback: `127.0.0.1`.
+
+---
+
+### DONE — SEC-1.4 User JWT TTL hardcoded at 7 days
+
+**Original severity:** MEDIUM
+**Resolved:** 2026-03-23 (T-22)
+
+**Files:** `services/common/src/auth.rs`, `services/auth-service/src/main.rs`, `services/users-service/src/main.rs`
+
+JWT TTL was a hardcoded constant of 7 days with no mechanism to change it. Fix: `UserTokenParams` now has an optional `ttl_secs: Option<u64>` field. `issue_user_token` uses it, defaulting to 86 400 s (24 h) when not provided. Both `auth-service` and `users-service` read the live value from the `admin_settings` MongoDB collection at startup and refresh it every 60 s via a background task. Admins can update it without a redeploy via the admin Settings tab.
+
+---
+
+### DONE — SEC-1.5 No request body size cap in gateway
+
+**Original severity:** LOW
+**Resolved:** 2026-03-23 (T-22)
+
+**File:** `services/gateway/src/main.rs`
+
+Gateway accepted request bodies of arbitrary size, enabling memory exhaustion / slow-request attacks. Fix: `DefaultBodyLimit::max(body_limit_bytes)` layer added to the Axum router. `body_limit_bytes` is seeded from `admin_settings` (`http_body_limit_bytes`, default 65 536 bytes) at startup. Requests exceeding the limit are rejected with `413` before the body is read. This setting requires a gateway restart to take effect (`restartRequired: true`).
+
+---
+
+### DONE — SEC-1.6 `msg_send` shares the general API rate bucket
+
+**Original severity:** LOW
+**Resolved:** 2026-03-23 (T-22)
+
+**File:** `services/gateway/src/main.rs`
+
+`POST /api/messages/:id` shared the general `lim_api` rate bucket (120 req / 60 s by default), meaning a user could flood messages up to the general API cap. Fix: a dedicated `lim_msg` `LiveLimiter` (30 req / 60 s by default, `msg_ip_rate_max` / `msg_ip_rate_window_secs` in `admin_settings`) is now applied to `msg_send` in addition to the existing general limiter. Both limiters must pass for the request to proceed.
+
+---
+
 ### DONE — SEC-1.7 CWE-918 SSRF — JWT sub interpolated raw into internal service URLs
 
 **Original severity:** MEDIUM

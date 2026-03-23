@@ -91,11 +91,11 @@ When a finding is resolved: update the relevant concern file's summary, move the
 | 🔲 | MAINT-2.6 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
 | 🔲 | UX-3.1 | [Usability](AUDIT_USABILITY.md) | MEDIUM | Users enter password twice in cold login → messages flow |
 | ✅ | SEC-1.1 | [Security](AUDIT_SECURITY.md) | HIGH | Plain password/email in POST request — OPAQUE implemented (T-23, pending deploy) |
-| 🔲 | SEC-1.2 | [Security](AUDIT_SECURITY.md) | MEDIUM | Gateway send-rate bypassable at messages-service HTTP endpoint |
-| 🔲 | SEC-1.3 | [Security](AUDIT_SECURITY.md) | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — prefer `CF-Connecting-IP` |
-| 🔲 | SEC-1.4 | [Security](AUDIT_SECURITY.md) | MEDIUM | User JWT TTL hardcoded at 7 days — should default to 24 h, be configurable |
-| 🔲 | SEC-1.5 | [Security](AUDIT_SECURITY.md) | LOW | No request body size cap in gateway |
-| 🔲 | SEC-1.6 | [Security](AUDIT_SECURITY.md) | LOW | `msg_send` shares the general API rate bucket instead of a tighter dedicated limiter |
+| ✅ | SEC-1.2 | [Security](AUDIT_SECURITY.md) | MEDIUM | Gateway send-rate bypassable at messages-service — per-userId bucket added (T-22, 2026-03-23) |
+| ✅ | SEC-1.3 | [Security](AUDIT_SECURITY.md) | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — CF-Connecting-IP preferred (T-22, 2026-03-23) |
+| ✅ | SEC-1.4 | [Security](AUDIT_SECURITY.md) | MEDIUM | User JWT TTL hardcoded at 7 days — configurable via admin_settings, default 24 h (T-22, 2026-03-23) |
+| ✅ | SEC-1.5 | [Security](AUDIT_SECURITY.md) | LOW | No request body size cap — DefaultBodyLimit added, configurable via admin_settings (T-22, 2026-03-23) |
+| ✅ | SEC-1.6 | [Security](AUDIT_SECURITY.md) | LOW | `msg_send` shares general API rate bucket — dedicated lim_msg added (T-22, 2026-03-23) |
 | ✅ | SEC-1.7 | [Security](AUDIT_SECURITY.md) | MEDIUM | CWE-918 SSRF — JWT sub raw string interpolated into internal URLs — fixed 2026-03-23 |
 | ✅ | SEC-1.8 | [Security](AUDIT_SECURITY.md) | MEDIUM | NaN panic in location sort (`partial_cmp().unwrap()`) — fixed 2026-03-23 |
 | ✅ | SEC-1.9 | [Security](AUDIT_SECURITY.md) | LOW | Pre-epoch clock panic in `now_unix`/`now_ms` — fixed 2026-03-23 |

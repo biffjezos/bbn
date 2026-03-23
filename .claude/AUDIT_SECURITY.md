@@ -45,61 +45,23 @@ Target solution: OPAQUE / PAKE. `opaque-ke` (Rust) is production-ready; no equiv
 
 ---
 
-### SEC-1.2 Gateway send-rate limit bypassable at messages-service level
-
-**File:** `services/gateway/src/main.rs` (`_wsSendCounts`), `services/messages-service/src/main.rs`
-
-The per-user send rate (10 msg / 10 s) is enforced only at the WebSocket layer in the gateway. The messages-service HTTP endpoint has no independent rate limit. A client with a valid JWT hitting the HTTP endpoint directly (or via multiple tabs) can exceed the per-user budget. messages-service needs its own per-userId in-memory rate check.
-
-**Priority:** MEDIUM — T-05 blocking is live which reduces abuse risk, but the HTTP bypass remains.
+SEC-1.2 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
 
 ---
 
-### SEC-1.3 `real_ip()` trusts a spoofable header
-
-**File:** `services/gateway/src/main.rs:167`
-
-`real_ip()` reads the first entry of `X-Forwarded-For`. Without Cloudflare in front any client can inject any value into this header, bypassing the per-IP rate limits entirely. Once Cloudflare is deployed the authoritative header is `CF-Connecting-IP`, which the client cannot forge.
-
-**Fix (T-21):** Rewrite `real_ip()` to check `CF-Connecting-IP` first, fall back to `X-Forwarded-For` when that header is absent. No env flag needed — the header is simply absent when Cloudflare is not in front.
-
-**Priority:** MEDIUM
+SEC-1.3 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
 
 ---
 
-### SEC-1.4 User JWT TTL is 7 days (hardcoded)
-
-**File:** `services/common/src/auth.rs:189`
-
-`USER_TOKEN_EXPIRY_SECS = 7 * 24 * 3600`. A stolen JWT is valid for up to 7 days. The `tokenVersion` mechanism can invalidate it early only if the owner changes their password — a silent theft is undetected. `tokenVersion` does NOT auto-increment on logout.
-
-**Fix (T-21):** Add `ttl_secs: u64` to `UserTokenParams`; callers read `JWT_USER_TTL_SECS` from env (default 86 400 — 24 h). Does not require a refresh-token mechanism.
-
-**Priority:** MEDIUM
+SEC-1.4 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
 
 ---
 
-### SEC-1.5 No request body size limit in gateway
-
-**File:** `services/gateway/src/main.rs`
-
-Axum's default body limit is 2 MB. There is no explicit cap. A client can send arbitrarily large payloads to any endpoint, potentially exhausting RAM or causing slow reads. Legitimate payloads are at most a few KB (E2EE message ~6 KB, auth bodies ~200 bytes).
-
-**Fix (T-21):** Add `DefaultBodyLimit::max(HTTP_BODY_LIMIT_BYTES)` layer to the gateway router (default 32 KB).
-
-**Priority:** LOW
+SEC-1.5 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
 
 ---
 
-### SEC-1.6 `msg_send` shares the general API rate bucket
-
-**File:** `services/gateway/src/main.rs`
-
-`POST /api/messages/:id` uses `lim_api` (120 req/min per IP), identical to profile reads and other low-risk endpoints. This allows 120 message-send attempts per minute per IP while the WS path allows only 10 per 10 seconds.
-
-**Fix (T-21):** Add a dedicated `lim_msg` limiter for `msg_send` (default 20/min per IP).
-
-**Priority:** LOW
+SEC-1.6 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
 
 ---
 
@@ -166,11 +128,11 @@ for the per-user `profileKey = PBKDF2(email, emailSalt)` derivation when profile
 | Status | ID | Severity | Finding |
 |---|---|---|---|
 | ✅ | SEC-1.1 | HIGH | Plain password/email in POST request — OPAQUE implemented (T-23, pending deploy) |
-| 🔲 | SEC-1.2 | MEDIUM | Gateway send-rate bypassable at messages-service HTTP endpoint |
-| 🔲 | SEC-1.3 | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — prefer `CF-Connecting-IP` |
-| 🔲 | SEC-1.4 | MEDIUM | User JWT TTL hardcoded at 7 days — should default to 24 h, be configurable |
-| 🔲 | SEC-1.5 | LOW | No request body size cap in gateway |
-| 🔲 | SEC-1.6 | LOW | `msg_send` shares the general API rate bucket instead of a tighter dedicated limiter |
+| ✅ | SEC-1.2 | MEDIUM | Gateway send-rate bypassable at messages-service — per-userId bucket added (T-22, 2026-03-23) |
+| ✅ | SEC-1.3 | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — CF-Connecting-IP preferred (T-22, 2026-03-23) |
+| ✅ | SEC-1.4 | MEDIUM | User JWT TTL hardcoded at 7 days — configurable via admin_settings, default 24 h (T-22, 2026-03-23) |
+| ✅ | SEC-1.5 | LOW | No request body size cap — DefaultBodyLimit added, configurable via admin_settings (T-22, 2026-03-23) |
+| ✅ | SEC-1.6 | LOW | `msg_send` shares general API rate bucket — dedicated lim_msg added (T-22, 2026-03-23) |
 | ✅ | SEC-1.7 | MEDIUM | CWE-918 SSRF — JWT sub raw string in internal URLs — fixed 2026-03-23 |
 | ✅ | SEC-1.8 | MEDIUM | NaN panic in location sort — fixed 2026-03-23 |
 | ✅ | SEC-1.9 | LOW | Pre-epoch clock panic in now_unix/now_ms — fixed 2026-03-23 |

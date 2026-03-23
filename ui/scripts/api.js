@@ -360,6 +360,17 @@ const Api = {
     return apiFetch(`/admin/tiers/${encodeURIComponent(name)}`, { method: 'DELETE' });
   },
 
+  adminGetSettings() {
+    return apiFetch('/admin/settings');
+  },
+
+  adminUpdateSetting(key, value) {
+    return apiFetch(`/admin/settings/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  },
+
   // ---- Notifications ------------------------------------------
 
   getNotifications() {

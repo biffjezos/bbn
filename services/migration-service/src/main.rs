@@ -89,6 +89,7 @@ const MIGRATIONS: &[&str] = &[
     "006_email_index_sparse",
     "007_shard_index",
     "008_opaque_emailhash",
+    "009_admin_settings",
 ];
 
 async fn migration_001(db: &Database) -> Result<(), mongodb::error::Error> {
@@ -284,6 +285,61 @@ async fn migration_008(db: &Database) -> Result<(), mongodb::error::Error> {
     Ok(())
 }
 
+async fn migration_009(db: &Database) -> Result<(), mongodb::error::Error> {
+    // Create admin_settings collection with a unique index on key.
+    // Seed default values for all runtime-configurable settings.
+    let col = db.collection::<Document>("admin_settings");
+    col.create_index(
+        IndexModel::builder()
+            .keys(doc! { "key": 1 })
+            .options(IndexOptions::builder().unique(true).build())
+            .build(),
+    ).await?;
+
+    // Each entry: { key, value (i64), section, label, description, restart_required }
+    let seeds: &[(&str, i64, &str, &str, &str, bool)] = &[
+        // ── Rate limits (gateway, per IP) ──────────────────────────────────────
+        ("login_rate_max",             10,       "rate_limits", "Login: max requests",              "Maximum login attempts per window (per IP).",                        false),
+        ("login_rate_window_secs",     900,      "rate_limits", "Login: window (s)",                "Window size in seconds for login rate limiter.",                     false),
+        ("register_rate_max",          5,        "rate_limits", "Register: max requests",           "Maximum registration attempts per window (per IP).",                 false),
+        ("register_rate_window_secs",  3600,     "rate_limits", "Register: window (s)",             "Window size in seconds for register rate limiter.",                  false),
+        ("api_rate_max",               120,      "rate_limits", "API: max requests",                "Maximum general API requests per window (per IP).",                  false),
+        ("api_rate_window_secs",       60,       "rate_limits", "API: window (s)",                  "Window size in seconds for general API rate limiter.",               false),
+        ("guest_rate_max",             40,       "rate_limits", "Guest session: max requests",      "Maximum guest-session creations per window (per IP).",               false),
+        ("guest_rate_window_secs",     3600,     "rate_limits", "Guest session: window (s)",        "Window size in seconds for guest rate limiter.",                     false),
+        ("msg_ip_rate_max",            30,       "rate_limits", "Msg send: max (per IP)",           "Maximum message-send requests per window at the gateway (per IP).", false),
+        ("msg_ip_rate_window_secs",    60,       "rate_limits", "Msg send: window (s)",             "Window size in seconds for gateway message-send rate limiter.",      false),
+        // ── Rate limits (messages-service, per user) ───────────────────────────
+        ("msg_user_rate_max",          10,       "rate_limits", "Msg send: max (per user)",         "Maximum message sends per window per authenticated user.",           false),
+        ("msg_user_rate_window_secs",  10,       "rate_limits", "Msg send: user window (s)",        "Window size in seconds for per-user message-send rate limiter.",     false),
+        // ── Authentication ─────────────────────────────────────────────────────
+        ("jwt_user_ttl_secs",          86400,    "auth",        "User JWT TTL (s)",                 "Lifetime of issued user JWTs in seconds. Default: 86 400 (24 h).",  false),
+        // ── Messages ───────────────────────────────────────────────────────────
+        ("message_ttl_ms",             14400000, "messages",    "Message TTL (ms)",                 "Time before stored messages are auto-deleted. Default: 4 h.",        false),
+        ("message_max_chars",          4096,     "messages",    "Message max length (chars)",       "Maximum length of the E2EE ciphertext string per message.",          false),
+        // ── Requests ───────────────────────────────────────────────────────────
+        ("http_body_limit_bytes",      65536,    "requests",    "HTTP body limit (bytes)",          "Maximum allowed request body size at the gateway. Requires restart.", true),
+    ];
+
+    for (key, value, section, label, description, restart_required) in seeds {
+        col.update_one(
+            doc! { "key": *key },
+            doc! { "$setOnInsert": doc! {
+                "key":             *key,
+                "value":           *value,
+                "section":         *section,
+                "label":           *label,
+                "description":     *description,
+                "restartRequired": *restart_required,
+            }},
+        )
+        .upsert(true)
+        .await?;
+    }
+
+    Ok(())
+}
+
 async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Error> {
     match id {
         "001_indexes"                => migration_001(db).await,
@@ -294,6 +350,7 @@ async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Er
         "006_email_index_sparse"     => migration_006(db).await,
         "007_shard_index"            => migration_007(db).await,
         "008_opaque_emailhash"       => migration_008(db).await,
+        "009_admin_settings"         => migration_009(db).await,
         _                            => Ok(()), // unknown migration — skip
     }
 }

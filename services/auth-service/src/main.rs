@@ -21,7 +21,7 @@
 use std::{
     collections::HashMap,
     env,
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -132,12 +132,14 @@ impl Config {
 
 #[derive(Clone)]
 struct AppState {
-    db:             Database,
-    jwt_secret:     String,
-    service_secret: String,
-    email_pepper:   String,
-    opaque_setup:   Arc<ServerSetup<DefaultCs>>,
-    login_sessions: LoginSessions,
+    db:                 Database,
+    jwt_secret:         String,
+    service_secret:     String,
+    email_pepper:       String,
+    opaque_setup:       Arc<ServerSetup<DefaultCs>>,
+    login_sessions:     LoginSessions,
+    /// Cached user JWT TTL from admin_settings. Refreshed every 60 s.
+    user_jwt_ttl_secs:  Arc<RwLock<u64>>,
 }
 
 impl FromRef<AppState> for ServiceSecret {
@@ -441,6 +443,7 @@ async fn auth_register_finish(
         tier:         "regular",
         tv:           0,
         account_type: "user",
+        ttl_secs:     Some(*state.user_jwt_ttl_secs.read().unwrap()),
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => {
@@ -637,6 +640,7 @@ async fn auth_login_finish(
         tier:         &tier,
         tv,
         account_type: &user.account_type,
+        ttl_secs:     Some(*state.user_jwt_ttl_secs.read().unwrap()),
     }, &state.jwt_secret) {
         Ok(t)  => t,
         Err(e) => {
@@ -700,14 +704,45 @@ async fn main() {
         bootstrap_admin(&db, uid).await;
     }
 
+    // Load initial JWT TTL from admin_settings (falls back to 86400 s if not yet seeded).
+    let initial_ttl = db.collection::<mongodb::bson::Document>("admin_settings")
+        .find_one(doc! { "key": "jwt_user_ttl_secs" })
+        .await
+        .ok()
+        .flatten()
+        .and_then(|d| d.get_i64("value").ok())
+        .unwrap_or(86_400) as u64;
+    let user_jwt_ttl_secs = Arc::new(RwLock::new(initial_ttl));
+
     let state = AppState {
         db,
-        jwt_secret:     cfg.jwt_secret,
-        service_secret: cfg.service_secret,
-        email_pepper:   cfg.email_pepper,
-        opaque_setup:   Arc::new(opaque_setup),
-        login_sessions: Arc::new(Mutex::new(HashMap::new())),
+        jwt_secret:        cfg.jwt_secret,
+        service_secret:    cfg.service_secret,
+        email_pepper:      cfg.email_pepper,
+        opaque_setup:      Arc::new(opaque_setup),
+        login_sessions:    Arc::new(Mutex::new(HashMap::new())),
+        user_jwt_ttl_secs,
     };
+
+    // Background task: refresh JWT TTL from admin_settings every 60 s.
+    {
+        let state2 = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            interval.tick().await; // skip first tick (already loaded)
+            loop {
+                interval.tick().await;
+                let v = state2.db.collection::<mongodb::bson::Document>("admin_settings")
+                    .find_one(doc! { "key": "jwt_user_ttl_secs" })
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|d| d.get_i64("value").ok())
+                    .unwrap_or(86_400) as u64;
+                *state2.user_jwt_ttl_secs.write().unwrap() = v;
+            }
+        });
+    }
 
     let app = Router::new()
         .route("/health",                  get(health))
