@@ -27,25 +27,26 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 **Context:** After the OPAQUE + PBKDF2 deploy, each user document will have an `emailSalt`. This ticket uses that salt to encrypt all personal profile fields (nickname, age, sex) so they are stored only in ciphertext and only decrypted by authorised clients.
 
 **Architecture sketch:**
-1. `profileKey = exportKey` from `OpaqueClient.loginFinish()`. The WASM already returns `{ finalization, exportKey }` — the export key is a high-entropy value derived from the password, never sent to the server, identical on every correct login. No separate KDF or salt needed.
-2. Registration: client registers password → immediately performs a full login to obtain `exportKey` → encrypts `{ nickname, age, sex }` with `profileKey` (AES-GCM) → sends `profileCiphertext` to the server in a follow-up call (or piggybacks on the login/finish response flow).
-3. Server stores ciphertext only — never sees plaintext profile fields.
-4. Login: `loginFinish` returns `exportKey`; client decrypts `prof` JWT claim with it. No extra data needed from the server.
-5. Nearby/search: clients receive ciphertext blobs + per-user public keys; decrypt only what they're authorised to see (users in range, favourites).
-6. JWT claims: strip `nickname`, `age`, `sex`. Add a `prof` claim containing the AES-GCM ciphertext of `{ nickname, age, sex }` (base64url-encoded). The JWT signature covers the ciphertext, preserving tamper-evidence. Only the owner's client can decrypt it using `exportKey`. Token size increase: ~110–140 bytes — negligible.
+1. At registration, client generates an asymmetric keypair (e.g. X25519 or RSA-OAEP). Private key is encrypted with `exportKey` (from `OpaqueClient.loginFinish()` — high-entropy, password-derived, never sent to server). Both `encryptedPrivateKey` and `publicKey` are sent to the server and stored. These fields already exist in the schema.
+2. Profile (`{ nickname, age, sex }`) is encrypted with a random symmetric `profileKey` (AES-GCM). That `profileKey` is then encrypted once per authorised viewer with their **public key** and stored alongside the ciphertext.
+3. Server stores only ciphertext — never sees plaintext profile fields.
+4. Owner decrypts: `exportKey` → `privateKey` → `profileKey` → plaintext profile.
+5. Nearby users decrypt: they already receive each other's `publicKey`. The sender's `profileKey` is encrypted with the viewer's public key and included in the nearby payload. Viewer uses their own `privateKey` (decrypted with their `exportKey`) to get `profileKey`, then decrypts the profile.
+6. Admin access: admin's public key is used to encrypt the `profileKey` at registration/update time, same as any other authorised viewer.
+7. JWT `prof` claim: contains the AES-GCM ciphertext of `{ nickname, age, sex }` — same blob as stored in DB. JWT signature provides tamper-evidence. Client decrypts using `exportKey` → `privateKey` → `profileKey`.
 
 **Why exportKey, not emailSalt:**
-`emailSalt` was previously proposed as the profileKey salt (`PBKDF2(email, emailSalt)`). This is weaker — email addresses are low-entropy and dictionary-attackable — and requires sending `emailSalt` to the client at login. The OPAQUE `exportKey` has full password entropy, is already produced by the existing WASM (`login_finish` returns `{ finalization, exportKey }`), and never leaves the client. `emailSalt` retains its original role (SEC-1.11: defence-in-depth on the server-side email hash) but is not involved in profile encryption.
+`emailSalt` was previously proposed as the key source. Dropped — email addresses are low-entropy and dictionary-attackable. `exportKey` has full password entropy, is already returned by the existing WASM `login_finish`, and never leaves the client. `emailSalt` keeps its original SEC-1.11 role only.
 
 **Implementation notes (validated 2026-03-23):**
 
-- **exportKey is only available after login, not after registration.** `register_finish` returns only the `RegistrationUpload` blob — no export key. Profile encryption must happen after the first login, not during registration. Flow: register → auto-login → encrypt profile with exportKey → store ciphertext. The app likely auto-logs in after registration already; the profile encryption step slots in at that point.
+- **exportKey only available after login, not after registration.** `register_finish` returns only the `RegistrationUpload` — no export key. Flow: register → auto-login → get `exportKey` → generate keypair → encrypt private key → encrypt profile → send to server. The app auto-logs in after registration already; keypair + profile encryption slots in at that point.
 
-- **Profile updates must return a fresh JWT.** `PUT /users/me` accepts changes to `nickname`, `age`, `sex`. The client re-encrypts with `exportKey` (still in memory from login), sends new `profileCiphertext`, and the server returns a new JWT with the updated `prof` claim.
+- **Profile updates.** Client re-encrypts profile with the same `profileKey`, re-encrypts `profileKey` for all current authorised viewers, sends new ciphertext. Server returns fresh JWT with updated `prof` claim.
 
-- **Password change invalidates exportKey.** Changing the password produces a new OPAQUE record and therefore a new `exportKey`. The client must re-encrypt the profile immediately after a password change and update the stored ciphertext. `tokenVersion` is already bumped on password change — the new JWT must carry the new `prof` ciphertext.
+- **Password change invalidates exportKey.** New OPAQUE record → new `exportKey` → client must re-encrypt `privateKey` with new `exportKey` immediately after password change. Profile ciphertext itself is unchanged (it's locked to `profileKey`, not `exportKey` directly). `tokenVersion` bump already happens on password change.
 
-- **Peer visibility is a separate phase.** The `prof` JWT claim covers the owner's own profile only. How peers (nearby, search) decrypt another user's profile requires the asymmetric keypair (`publicKey`/`encryptedPrivateKey`) already in the schema and is out of scope for this ticket's first phase.
+- **Authorised viewers.** For phase 1: nearby users and admin. The set of viewers is dynamic (nearby changes constantly) — the practical approach is to re-encrypt `profileKey` for the requesting viewer on demand rather than pre-encrypting for every possible viewer at write time.
 
 **Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
 
