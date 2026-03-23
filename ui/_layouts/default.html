@@ -54,7 +54,7 @@
     var isAdmin    = ADMIN_ONLY.some(function(p) { return path.startsWith(p); });
     var isProt     = PROTECTED.some(function(p)  { return path.startsWith(p); });
     if (!isAdmin && !isProt) return;
-    var token = localStorage.getItem('bbm_token');
+    var token = sessionStorage.getItem('bbm_token');
     var valid = false;
     if (token) {
       try {
