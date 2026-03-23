@@ -6,6 +6,62 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-22 — Security Hardening & Capacity Tuning
+
+**Status:** ✅ Implemented 2026-03-23. Branch: `claude/review-next-tasks-Ag7D8`.
+
+Closes SEC-1.2, SEC-1.3, SEC-1.4, SEC-1.5, SEC-1.6.
+Also implements admin runtime-configurable settings (T-16 partial): `admin_settings` collection + admin Settings tab.
+
+### What was done
+
+**`services/common/src/auth.rs`**
+- Added `ttl_secs: Option<u64>` to `UserTokenParams`. `issue_user_token` uses it, defaulting to 86 400 s (24 h).
+
+**`services/migration-service/src/main.rs`**
+- Added migration `009_admin_settings`: creates unique-indexed `admin_settings` collection and seeds 16 default values (login/register/api/guest/msg IP+user rate limits, JWT TTL, message TTL, message max chars, HTTP body limit).
+
+**`services/users-service/src/main.rs`**
+- Added `admin_settings` read/write endpoints: `GET /admin/settings`, `PUT /admin/settings/:key`, `GET /internal/settings` (service-token auth).
+- `user_jwt_ttl_secs` cached in `AppState` (`Arc<RwLock<u64>>`), refreshed every 60 s from DB.
+- `make_token` now accepts explicit `ttl_secs: u64`; both token-issuing call sites read from the live cache.
+
+**`services/auth-service/src/main.rs`**
+- `user_jwt_ttl_secs` in `AppState`, seeded from `admin_settings` at startup, refreshed every 60 s.
+- Both `UserTokenParams` call sites pass `ttl_secs: Some(...)` (SEC-1.4).
+
+**`services/messages-service/src/main.rs`**
+- `MsgSettings` struct (user rate limit, message TTL, max chars) loaded from `admin_settings`, refreshed every 60 s.
+- Per-userId `UserBuckets` (`Arc<Mutex<HashMap<String, (u32, Instant)>>>`) added to `AppState`.
+- `send_message`: per-userId rate check at top using `check_user_rate()` (SEC-1.2).
+- Dynamic `max_chars` and TTL replace former hardcoded constants.
+
+**`services/gateway/src/main.rs`**
+- `real_ip()` checks `cf-connecting-ip` first (SEC-1.3); falls back to `X-Forwarded-For`.
+- `LiveLimiter = Arc<RwLock<Arc<FixedWindow>>>` — all 5 rate limiters (login, register, api, guest, msg) are now swappable at runtime.
+- `lim_msg` dedicated rate limiter applied to `msg_send` in addition to `lim_api` (SEC-1.6).
+- `DefaultBodyLimit::max(body_limit_bytes)` layer on the router (SEC-1.5); value seeded from `admin_settings` at startup.
+- Background task refreshes all 5 limiters from `/internal/settings` every 60 s via `macro_rules! refresh!`.
+- Proxy routes added: `GET /admin/settings`, `PUT /admin/settings/:key`.
+
+**`ui/scripts/api.js`**
+- `adminGetSettings()` and `adminUpdateSetting(key, value)` added.
+
+**`ui/scripts/admin.js`**
+- New "Settings" tab (`bi-sliders`) added to admin tab bar.
+- `renderSettingsTab()`: fetches all settings, groups by section with icons, renders editable number inputs with Save buttons and description tooltips.
+- `saveSettingValue(key)`: validates non-negative integer, calls PUT API, shows inline feedback.
+
+### New env vars (all have safe defaults — no Railway action needed unless tuning)
+
+None required. All settings are seeded by migration `009_admin_settings` and editable at runtime via the admin Settings tab. The one exception: `http_body_limit_bytes` requires a gateway restart to take effect.
+
+### Backend actions required before going live
+
+- Run migration-service to apply `009_admin_settings`.
+
+---
+
 ## T-23 — OPAQUE Authentication + Email Privacy (SEC-1.1)
 
 **Status:** ✅ Implemented 2026-03-23. Branch: `claude/review-next-tasks-dPbAT`.

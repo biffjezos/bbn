@@ -5,7 +5,7 @@
 // ============================================================
 
 use std::env;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use axum::{
     extract::{FromRef, Path, Query, State},
@@ -28,7 +28,7 @@ use mongodb::{
 };
 use opaque_ke::{CipherSuite, ServerRegistration, ServerSetup};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 // ── OPAQUE cipher suite (must match auth-service and WASM client) ─────────────
@@ -82,10 +82,12 @@ impl Config {
 
 #[derive(Clone)]
 struct AppState {
-    db:             Database,
-    jwt_secret:     String,
-    service_secret: String,
-    opaque_setup:   Arc<ServerSetup<DefaultCs>>,
+    db:                 Database,
+    jwt_secret:         String,
+    service_secret:     String,
+    opaque_setup:       Arc<ServerSetup<DefaultCs>>,
+    /// Cached user JWT TTL from admin_settings. Refreshed every 60 s.
+    user_jwt_ttl_secs:  Arc<RwLock<u64>>,
 }
 
 impl FromRef<AppState> for JwtSecret {
@@ -196,7 +198,7 @@ fn regex_escape(s: &str) -> String {
     }).collect()
 }
 
-fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
+fn make_token(user: &UserForToken, secret: &str, ttl_secs: u64) -> Result<String, String> {
     issue_user_token(
         UserTokenParams {
             sub:          &user.id.to_hex(),
@@ -207,6 +209,7 @@ fn make_token(user: &UserForToken, secret: &str) -> Result<String, String> {
             tier:         user.tier.as_deref().unwrap_or("regular"),
             tv:           user.token_version.unwrap_or(0).max(0) as u32,
             account_type: &user.account_type,
+            ttl_secs:     Some(ttl_secs),
         },
         secret,
     )
@@ -886,6 +889,113 @@ async fn admin_get_config(
     Json(json!({ "selfPromotionGuard": guard_active })).into_response()
 }
 
+// ── Admin settings (admin_settings collection) ────────────────────────────────
+
+#[derive(Deserialize, Serialize)]
+struct AdminSettingDoc {
+    key:              String,
+    value:            i64,
+    section:          String,
+    label:            String,
+    description:      String,
+    #[serde(rename = "restartRequired")]
+    restart_required: bool,
+}
+
+/// Read one admin setting value from the collection (returns default on any error).
+async fn read_setting(db: &Database, key: &str, default: i64) -> i64 {
+    db.collection::<Document>("admin_settings")
+        .find_one(doc! { "key": key })
+        .await
+        .ok()
+        .flatten()
+        .and_then(|d| d.get_i64("value").ok())
+        .unwrap_or(default)
+}
+
+/// Read all admin settings and return them as a flat JSON object `{ key: value }`.
+async fn load_all_settings_flat(db: &Database) -> serde_json::Value {
+    let cursor = db.collection::<AdminSettingDoc>("admin_settings").find(doc! {}).await;
+    let mut map = serde_json::Map::new();
+    if let Ok(cursor) = cursor {
+        if let Ok(docs) = cursor.try_collect::<Vec<_>>().await {
+            for d in docs {
+                map.insert(d.key, serde_json::Value::Number(serde_json::Number::from(d.value)));
+            }
+        }
+    }
+    serde_json::Value::Object(map)
+}
+
+/// GET /admin/settings — returns all admin settings (admin auth).
+async fn admin_get_settings(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+    let cursor = state.db.collection::<AdminSettingDoc>("admin_settings")
+        .find(doc! {})
+        .await;
+    match cursor {
+        Ok(c) => match c.try_collect::<Vec<_>>().await {
+            Ok(docs) => Json(json!({ "settings": docs })).into_response(),
+            Err(e) => { eprintln!("[admin/settings GET] collect: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+        },
+        Err(e) => { eprintln!("[admin/settings GET] find: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    }
+}
+
+#[derive(Deserialize)]
+struct SettingValueBody {
+    value: i64,
+}
+
+/// PUT /admin/settings/:key — update one admin setting (admin auth).
+async fn admin_put_setting(
+    _svc: ServiceToken,
+    AuthToken(claims): AuthToken,
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+    Json(body): Json<SettingValueBody>,
+) -> impl IntoResponse {
+    if claims.role != "admin" {
+        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
+    }
+    if body.value < 0 {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "value must be non-negative." }))).into_response();
+    }
+    // Only allow updating keys that exist in the collection (reject unknown keys).
+    let col = state.db.collection::<Document>("admin_settings");
+    let exists = col.find_one(doc! { "key": &key }).await.ok().flatten().is_some();
+    if !exists {
+        return (StatusCode::NOT_FOUND, Json(json!({ "error": "Unknown setting key." }))).into_response();
+    }
+    match col.update_one(
+        doc! { "key": &key },
+        doc! { "$set": { "value": body.value } },
+    ).await {
+        Ok(_) => {
+            // Refresh the in-process JWT TTL cache if the relevant key was changed.
+            if key == "jwt_user_ttl_secs" {
+                *state.user_jwt_ttl_secs.write().unwrap() = body.value as u64;
+            }
+            Json(json!({ "ok": true })).into_response()
+        }
+        Err(e) => { eprintln!("[admin/settings PUT] {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
+    }
+}
+
+/// GET /internal/settings — returns all admin settings as flat JSON (service token auth).
+async fn internal_get_settings(
+    _svc: ServiceToken,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    Json(load_all_settings_flat(&state.db).await).into_response()
+}
+
 // ── PATCH /admin/users/:id/tier ───────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -1048,7 +1158,8 @@ async fn admin_patch_user(
 
     // When admin patches their own account issue a fresh JWT so their session isn't immediately invalidated.
     if claims.sub == id {
-        if let Ok(token) = make_token(&result, &state.jwt_secret) {
+        let ttl = *state.user_jwt_ttl_secs.read().unwrap();
+        if let Ok(token) = make_token(&result, &state.jwt_secret, ttl) {
             return Json(json!({ "ok": true, "tokenVersion": tv, "token": token })).into_response();
         }
     }
@@ -1466,7 +1577,8 @@ async fn users_me_password_finish(
         Err(e)      => { eprintln!("[users/me/password/finish] re-fetch: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
-    match make_token(&updated, &state.jwt_secret) {
+    let ttl = *state.user_jwt_ttl_secs.read().unwrap();
+    match make_token(&updated, &state.jwt_secret, ttl) {
         Ok(token) => Json(json!({ "ok": true, "token": token })).into_response(),
         Err(e)    => { eprintln!("[users/me/password/finish] token: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response() }
     }
@@ -1498,12 +1610,31 @@ async fn main() {
             .expect("OPAQUE_SERVER_SETUP: invalid ServerSetup bytes"),
     );
 
+    // Load initial JWT TTL from admin_settings (falls back to 86400 if not yet seeded).
+    let initial_ttl = read_setting(&db, "jwt_user_ttl_secs", 86_400).await as u64;
+    let user_jwt_ttl_secs = Arc::new(RwLock::new(initial_ttl));
+
     let state = AppState {
         db,
-        jwt_secret:     cfg.jwt_secret,
-        service_secret: cfg.service_secret,
+        jwt_secret:         cfg.jwt_secret,
+        service_secret:     cfg.service_secret,
         opaque_setup,
+        user_jwt_ttl_secs,
     };
+
+    // Background task: refresh JWT TTL from admin_settings every 60 s.
+    {
+        let state2 = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await; // skip first tick (already loaded)
+            loop {
+                interval.tick().await;
+                let v = read_setting(&state2.db, "jwt_user_ttl_secs", 86_400).await as u64;
+                *state2.user_jwt_ttl_secs.write().unwrap() = v;
+            }
+        });
+    }
 
     let app = Router::new()
         .route("/health",                    get(health))
@@ -1518,6 +1649,8 @@ async fn main() {
         .route("/users/me/password/start",   post(users_me_password_start))
         .route("/users/me/password/finish",  post(users_me_password_finish))
         .route("/admin/config",              get(admin_get_config))
+        .route("/admin/settings",            get(admin_get_settings))
+        .route("/admin/settings/{key}",      put(admin_put_setting))
         .route("/admin/users",               get(admin_get_users))
         .route("/admin/users/{id}",              patch(admin_patch_user))
         .route("/admin/users/{id}/tier",         patch(admin_patch_tier))
@@ -1525,6 +1658,7 @@ async fn main() {
         .route("/admin/venues/{id}/manager",     patch(admin_patch_venue_manager))
         .route("/manager/venues",            get(get_manager_venues).post(post_manager_venues))
         .route("/manager/venues/{id}",       put(put_manager_venue).delete(delete_manager_venue))
+        .route("/internal/settings",         get(internal_get_settings))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
         .with_state(state);
 

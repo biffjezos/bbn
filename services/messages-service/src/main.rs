@@ -5,7 +5,12 @@
 // Rebuild: venue_manager accepted by RequireRegistered (common).
 // ============================================================
 
-use std::{env, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    env,
+    sync::{Arc, Mutex, RwLock},
+    time::{Duration, Instant},
+};
 
 use axum::{
     extract::{FromRef, Path, State},
@@ -117,6 +122,10 @@ struct AppState {
     fav_service_url:   Url,
     http:              reqwest::Client,
     svc_token_cache:   Arc<ServiceTokenCache>,
+    /// Cached runtime settings (refreshed every 60 s).
+    settings:          Arc<RwLock<MsgSettings>>,
+    /// Per-user send rate buckets (SEC-1.2).
+    user_buckets:      UserBuckets,
 }
 
 impl FromRef<AppState> for JwtSecret {
@@ -167,10 +176,73 @@ struct TierRadiusResp {
     radius_m: f64,
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Dynamic settings (loaded from admin_settings collection) ──────────────────
 
-const MESSAGE_MAX_CHARS: usize = 4096;
-const MESSAGE_TTL_MS:    i64   = 4 * 60 * 60 * 1000;
+#[derive(Clone)]
+struct MsgSettings {
+    /// Per-user send rate limit: max messages per window.
+    user_rate_max:     u32,
+    /// Per-user send rate limit window duration.
+    user_rate_window:  Duration,
+    /// Message TTL in milliseconds.
+    message_ttl_ms:    i64,
+    /// Maximum ciphertext string length per message.
+    message_max_chars: usize,
+}
+
+impl MsgSettings {
+    fn default() -> Self {
+        Self {
+            user_rate_max:     10,
+            user_rate_window:  Duration::from_secs(10),
+            message_ttl_ms:    4 * 60 * 60 * 1000,
+            message_max_chars: 4096,
+        }
+    }
+}
+
+async fn load_msg_settings(db: &Database) -> MsgSettings {
+    let col = db.collection::<Document>("admin_settings");
+    let get = |key: &str, default: i64| {
+        let col = col.clone();
+        let key = key.to_string();
+        async move {
+            col.find_one(doc! { "key": &key })
+                .await
+                .ok()
+                .flatten()
+                .and_then(|d| d.get_i64("value").ok())
+                .unwrap_or(default)
+        }
+    };
+    let rate_max    = get("msg_user_rate_max",          10).await as u32;
+    let rate_window = get("msg_user_rate_window_secs",  10).await as u64;
+    let ttl_ms      = get("message_ttl_ms",  4 * 60 * 60 * 1000).await;
+    let max_chars   = get("message_max_chars",        4096).await as usize;
+    MsgSettings {
+        user_rate_max:     rate_max,
+        user_rate_window:  Duration::from_secs(rate_window),
+        message_ttl_ms:    ttl_ms,
+        message_max_chars: max_chars,
+    }
+}
+
+/// Per-user send rate buckets: userId → (count, window_start).
+type UserBuckets = Arc<Mutex<HashMap<String, (u32, Instant)>>>;
+
+fn check_user_rate(buckets: &UserBuckets, user_id: &str, max: u32, window: Duration) -> bool {
+    let mut b   = buckets.lock().unwrap();
+    let now     = Instant::now();
+    let entry   = b.entry(user_id.to_string()).or_insert((0, now));
+    if now.duration_since(entry.1) >= window {
+        *entry = (0, now);
+    }
+    if entry.0 >= max { return false; }
+    entry.0 += 1;
+    true
+}
+
+// Default values are now in MsgSettings::default() — no separate constants needed.
 
 // ── E2EE validation ───────────────────────────────────────────────────────────
 
@@ -303,13 +375,23 @@ async fn send_message(
     Path(to_id): Path<String>,
     Json(body): Json<SendBody>,
 ) -> impl IntoResponse {
+    // ── Per-user rate limit (SEC-1.2) ──
+    let (rate_max, rate_window) = {
+        let s = state.settings.read().unwrap();
+        (s.user_rate_max, s.user_rate_window)
+    };
+    if !check_user_rate(&state.user_buckets, &claims.sub, rate_max, rate_window) {
+        return (StatusCode::TOO_MANY_REQUESTS, Json(json!({ "error": "Message rate limit exceeded." }))).into_response();
+    }
+
     // ── Validate text ──
+    let max_chars = state.settings.read().unwrap().message_max_chars;
     let text = match body.text {
         Some(ref t) if !t.trim().is_empty() => t.trim().to_string(),
         _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "text required." }))).into_response(),
     };
-    if text.len() > MESSAGE_MAX_CHARS {
-        return (StatusCode::BAD_REQUEST, Json(json!({ "error": format!("Message exceeds {} characters.", MESSAGE_MAX_CHARS) }))).into_response();
+    if text.len() > max_chars {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": format!("Message exceeds {} characters.", max_chars) }))).into_response();
     }
     if !is_valid_ciphertext(&text) {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Message must be a valid E2EE ciphertext envelope." }))).into_response();
@@ -341,8 +423,9 @@ async fn send_message(
 
     // ── Self-message shortcut (Reminder to Yourself) ──
     if from_id == &to_id {
+        let msg_ttl_ms = state.settings.read().unwrap().message_ttl_ms;
         let now_dt  = now_bson();
-        let expires = BsonDateTime::from_millis(now_ms() + MESSAGE_TTL_MS);
+        let expires = BsonDateTime::from_millis(now_ms() + msg_ttl_ms);
         return match state.db.collection::<Document>("messages")
             .insert_one(doc! {
                 "fromUserId": from_id,
@@ -515,7 +598,7 @@ async fn send_message(
 
     // ── Insert message ──
     let now_dt   = now_bson();
-    let expires  = BsonDateTime::from_millis(now_ms() + MESSAGE_TTL_MS);
+    let expires  = BsonDateTime::from_millis(now_ms() + state.settings.read().unwrap().message_ttl_ms);
 
     let result = match state.db.collection::<Document>("messages")
         .insert_one(doc! {
@@ -591,6 +674,10 @@ async fn main() {
         .database(&cfg.db_name);
     println!("[messages] DB connected.");
 
+    let initial_settings = load_msg_settings(&db).await;
+    let settings         = Arc::new(RwLock::new(initial_settings));
+    let user_buckets     = Arc::new(Mutex::new(HashMap::new()));
+
     let state = AppState {
         db,
         jwt_secret:        cfg.jwt_secret,
@@ -600,7 +687,23 @@ async fn main() {
         fav_service_url:   cfg.fav_service_url,
         http:              reqwest::Client::new(),
         svc_token_cache:   Arc::new(ServiceTokenCache::new()),
+        settings,
+        user_buckets,
     };
+
+    // Background task: refresh message settings from admin_settings every 60 s.
+    {
+        let state2 = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            interval.tick().await; // skip first tick (already loaded)
+            loop {
+                interval.tick().await;
+                let s = load_msg_settings(&state2.db).await;
+                *state2.settings.write().unwrap() = s;
+            }
+        });
+    }
 
     let app = Router::new()
         .route("/health",             get(health))
