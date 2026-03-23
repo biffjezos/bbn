@@ -360,52 +360,6 @@ async fn auth_register_finish(
     let db_email_hash = email_db_hash(&body.email_hash, &state.email_pepper);
     let opaque_binary = Binary { subtype: BinarySubtype::Generic, bytes: record_bytes };
 
-    // ── Re-registration path (T-25) ───────────────────────────────────────────
-    // When no profile data is provided, the client is re-establishing an OPAQUE
-    // record for an existing account (account migrated from pre-OPAQUE auth).
-    if body.nickname.is_none() {
-        let user = match state.db
-            .collection::<UserForLogin>("users")
-            .find_one_and_update(
-                doc! { "emailHash": &db_email_hash },
-                doc! { "$set": { "opaqueRecord": opaque_binary }, "$inc": { "tokenVersion": 1 } },
-            )
-            .return_document(mongodb::options::ReturnDocument::After)
-            .await
-        {
-            Ok(Some(u)) => u,
-            Ok(None)    => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Account not found for re-registration." }))).into_response(),
-            Err(e)      => {
-                eprintln!("[auth/register/finish] re-reg update: {e}");
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response();
-            }
-        };
-        let tv = user.token_version.unwrap_or(0).max(0) as u32;
-        let token = match issue_user_token(UserTokenParams {
-            sub:          &user.id.to_hex(),
-            nickname:     &user.nickname,
-            sex:          user.sex.as_deref().unwrap_or(""),
-            age:          user.age.map(|a| a.max(0) as u32),
-            role:         match user.role.as_deref() { Some("admin") => "admin", Some("venue_manager") => "venue_manager", _ => "user" },
-            tier:         user.tier.as_deref().unwrap_or("regular"),
-            tv,
-            account_type: &user.account_type,
-        }, &state.jwt_secret) {
-            Ok(t)  => t,
-            Err(e) => {
-                eprintln!("[auth/register/finish] re-reg jwt: {e}");
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response();
-            }
-        };
-        return Json(json!({
-            "token":    token,
-            "nickname": user.nickname,
-            "sex":      user.sex,
-            "tier":     user.tier.as_deref().unwrap_or("regular"),
-        })).into_response();
-    }
-
-    // ── Normal registration path ───────────────────────────────────────────────
     let (Some(nickname_raw), Some(age_val), Some(sex)) = (body.nickname, body.age, body.sex) else {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "nickname, age, sex required." }))).into_response();
     };
@@ -528,7 +482,7 @@ struct UserForLogin {
     #[serde(rename = "tokenVersion")]
     token_version:  Option<i32>,
     #[serde(rename = "opaqueRecord")]
-    opaque_record:  Option<Binary>,
+    opaque_record:  Binary,
 }
 
 async fn auth_login_start(
@@ -559,18 +513,9 @@ async fn auth_login_start(
         .await
         .unwrap_or(None);
 
-    // If the user exists but has no opaqueRecord, prompt the client to re-register.
-    // This handles accounts created before OPAQUE was deployed (T-25).
-    if let Some(ref u) = user_opt {
-        if u.opaque_record.is_none() {
-            return (StatusCode::ACCEPTED, Json(json!({ "action": "reregister" }))).into_response();
-        }
-    }
-
     let password_file = user_opt
         .as_ref()
-        .and_then(|u| u.opaque_record.as_ref())
-        .and_then(|r| ServerRegistration::<DefaultCs>::deserialize(&r.bytes).ok());
+        .and_then(|u| ServerRegistration::<DefaultCs>::deserialize(&u.opaque_record.bytes).ok());
 
     let mut rng = rand::rngs::OsRng;
     let result = match ServerLogin::<DefaultCs>::start(

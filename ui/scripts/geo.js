@@ -288,8 +288,10 @@
 
   // Remove location immediately when the tab is closed (privacy — prevents ghost
   // "online" status and stops any stale session token from appearing active).
+  // Venue accounts are excluded: their location is fixed and must stay in the DB.
   window.addEventListener('pagehide', function (event) {
     if (event.persisted) return; // Page might be kept in bfcache — not truly closing.
+    if (isVenueAccount()) return;
     var token = window.Auth && window.Auth.getToken && window.Auth.getToken();
     if (!token) return;
     try {
