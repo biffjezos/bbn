@@ -99,6 +99,43 @@ Axum's default body limit is 2 MB. There is no explicit cap. A client can send a
 
 ---
 
+### SEC-1.7 CWE-918 SSRF — JWT sub interpolated raw into internal service URLs
+
+**File:** `services/messages-service/src/main.rs` (previously lines 341, 372)
+
+**Flagged by:** GitHub CodeQL (commit `037735f2`)
+
+`claims.sub` (JWT token subject, set by the user) was validated with `safe_object_id()` but the original raw string — not the validated output — was then interpolated directly into internal HTTP URLs (`fav_service_url` and `loc_service_url` path segments). CodeQL's taint analysis correctly identified that the raw string still flowed into the URL despite the guard, as the sanitized ObjectId was discarded.
+
+**Fix applied (2026-03-23):** Changed the validation block to capture the parsed `ObjectId`, then use `.to_hex()` at every URL interpolation point. The URL components now derive from a structured Rust type rather than the raw JWT string.
+
+**Priority:** MEDIUM — internal services only, but defence-in-depth requires this to be clean.
+
+---
+
+### SEC-1.8 Panic on NaN in location sort (`partial_cmp().unwrap()`)
+
+**File:** `services/location-service/src/store.rs` (previously lines 280, 293, 311, 328)
+
+Four `sort_unstable_by` calls used `.partial_cmp().unwrap()` on `f64` distance values. `partial_cmp` returns `None` when either operand is `NaN`, causing an unwrap panic. A malformed location write with `NaN` coordinates would crash the location-service sort path.
+
+**Fix applied (2026-03-23):** Replaced all four with `.total_cmp()`, which defines a total order on all `f64` values including `NaN` (NaN sorts last).
+
+---
+
+### SEC-1.9 Panic on pre-epoch system clock (`SystemTime::unwrap()`)
+
+**Files:**
+- `services/common/src/auth.rs` — `now_unix()`
+- `services/messages-service/src/main.rs` — `now_ms()`
+- `services/favourites-service/src/main.rs` — range-sync cutoff
+
+`duration_since(UNIX_EPOCH)` returns `Err` if the system clock is set before 1970-01-01. All three call sites used `.unwrap()`, crashing the service in any containerised environment with a reset or misconfigured clock.
+
+**Fix applied (2026-03-23):** Replaced `.unwrap()` with `.unwrap_or_default()` at all three sites. A clock-before-epoch condition now returns 0 s / 0 ms instead of panicking.
+
+---
+
 ## Summary Table
 
 | Status | ID | Severity | Finding |
@@ -109,5 +146,8 @@ Axum's default body limit is 2 MB. There is no explicit cap. A client can send a
 | 🔲 | SEC-1.4 | MEDIUM | User JWT TTL hardcoded at 7 days — should default to 24 h, be configurable |
 | 🔲 | SEC-1.5 | LOW | No request body size cap in gateway |
 | 🔲 | SEC-1.6 | LOW | `msg_send` shares the general API rate bucket instead of a tighter dedicated limiter |
+| ✅ | SEC-1.7 | MEDIUM | CWE-918 SSRF — JWT sub raw string in internal URLs — fixed 2026-03-23 |
+| ✅ | SEC-1.8 | MEDIUM | NaN panic in location sort — fixed 2026-03-23 |
+| ✅ | SEC-1.9 | LOW | Pre-epoch clock panic in now_unix/now_ms — fixed 2026-03-23 |
 
 Resolved items → AUDIT_DONE.md
