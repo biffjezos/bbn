@@ -37,6 +37,7 @@ Structural fixes already applied: pre-commit ticket + audit update steps, fricti
 
 ## Log
 
+- 2026-03-23 — REFLECTION: [Under-reading + Scope creep] Implemented T-25 re-registration for pre-T-23 accounts despite the owner having already established that there are NO users before T-23 (the DB was wiped as part of T-23 deployment). Wasted significant tokens building unnecessary migration logic. Rule: before implementing any migration or compatibility shim, explicitly verify whether legacy data exists. If T-23 deployed = DB wiped = no legacy accounts — stop there.
 - 2026-03-23 — CHANGE: Added "Update audit files" step to "Before Each Commit / Push" checklist and explicit stub/non-speculative-read rules to the AUDIT_DONE.md section — audit files now follow the same move-and-stub workflow as ticket files.
 - 2026-03-23 — CHANGE: Added "Update tickets" step to "Before Each Commit / Push" checklist — requires moving completed phases/tickets to TICKETS_DONE.md and updating status lines before every commit, not only at wrap-up.
 - 2026-03-19 — CHANGE: Added "Friction Awareness" section to CLAUDE.md — instructs future sessions to consult the friction label taxonomy as a pre-action check, not just a retrospective log.
