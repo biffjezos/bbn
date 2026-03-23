@@ -378,10 +378,17 @@ async fn auth_register_finish(
     // ── Insert user ───────────────────────────────────────────────────────────
     let db_email_hash = email_db_hash(&body.email_hash, &state.email_pepper);
 
+    // Per-user email salt — stored now, consumed by profile-data encryption
+    // (items 4+5). Prevents bulk precomputation attacks even if EMAIL_PEPPER leaks:
+    // each user's email must be attacked independently.
+    let email_salt_bytes: [u8; 16] = rand::thread_rng().gen();
+    let email_salt_b64 = BASE64_STANDARD.encode(email_salt_bytes);
+
     let insert_result = state.db
         .collection::<mongodb::bson::Document>("users")
         .insert_one(doc! {
             "emailHash":     &db_email_hash,
+            "emailSalt":     &email_salt_b64,
             "nickname":      &nickname,
             "opaqueRecord":  Binary { subtype: BinarySubtype::Generic, bytes: record_bytes },
             "age":           age as i32,

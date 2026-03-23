@@ -99,5 +99,7 @@ When a finding is resolved: update the relevant concern file's summary, move the
 | ✅ | SEC-1.7 | [Security](AUDIT_SECURITY.md) | MEDIUM | CWE-918 SSRF — JWT sub raw string interpolated into internal URLs — fixed 2026-03-23 |
 | ✅ | SEC-1.8 | [Security](AUDIT_SECURITY.md) | MEDIUM | NaN panic in location sort (`partial_cmp().unwrap()`) — fixed 2026-03-23 |
 | ✅ | SEC-1.9 | [Security](AUDIT_SECURITY.md) | LOW | Pre-epoch clock panic in `now_unix`/`now_ms` — fixed 2026-03-23 |
+| ✅ | SEC-1.10 | [Security](AUDIT_SECURITY.md) | HIGH | Email pre-hash was plain SHA-256 — replaced with PBKDF2-SHA256 (100k iters) 2026-03-23, pending deploy |
+| ✅ | SEC-1.11 | [Security](AUDIT_SECURITY.md) | MEDIUM | No per-user email salt — `emailSalt` added to user doc at registration 2026-03-23, pending deploy |
 | ⏸️ | PERF-4.1 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Send-rate bucket in-process — not safe for multi-instance gateway (deferred) |
 | 🔲 | PERF-4.2 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Notification poll scales linearly with active users |

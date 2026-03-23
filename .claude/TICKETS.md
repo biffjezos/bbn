@@ -20,6 +20,26 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ---
 
+## T-24 — Profile Data Encryption (SEC items 4+5)
+
+**Status:** Planned. Prerequisites: T-23 deployed (OPAQUE live), SEC-1.10/1.11 deployed (PBKDF2 + emailSalt in DB).
+
+**Context:** After the OPAQUE + PBKDF2 deploy, each user document will have an `emailSalt`. This ticket uses that salt to encrypt all personal profile fields (nickname, age, sex) so they are stored only in ciphertext and only decrypted by authorised clients.
+
+**Architecture sketch:**
+1. Client derives `profileKey = PBKDF2-SHA256(email, emailSalt, 100_000)` — same KDF as the email hash, different salt.
+2. Registration: client encrypts `{ nickname, age, sex }` with `profileKey` (AES-GCM) before sending to the server.
+3. Server stores ciphertext only — never sees plaintext profile fields.
+4. Login: server returns `emailSalt`; client decrypts profile with `profileKey`.
+5. Nearby/search: clients receive ciphertext blobs + per-user public keys; decrypt only what they're authorised to see (users in range, favourites).
+6. JWT claims: reduce to minimum (sub, tier, role, tv, accountType) — remove nickname/age/sex from token.
+
+**Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
+
+**Complexity:** HIGH — touches auth-service, users-service, location-service, frontend, JWT claims, and all profile read paths.
+
+---
+
 ## T-22 — Security Hardening & Capacity Tuning
 
 **Status:** Planned. Self-contained — no prerequisites. Plan: `docs/superpowers/plans/2026-03-23-security-hardening-capacity.md`
