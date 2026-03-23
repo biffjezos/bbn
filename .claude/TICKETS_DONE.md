@@ -6,6 +6,14 @@ Reference this file for historical context, decisions, and implementation detail
 
 ---
 
+## T-10 — Restore migration-service
+
+**Status:** ✅ Closed (2026-03-23) — ticket was invalid.
+
+The ticket proposed restoring `services/migration-service.js` (Node.js) from git history. The premise was wrong: migration-service was already ported to Rust as part of T-04c. The Rust binary lives at `services/migration-service/src/main.rs` and was running. No restoration was needed. Closed per owner instruction.
+
+---
+
 ## T-20 — Sharded Location Store: Phases 1–4 (2026-03-23)
 
 Phase 5 (auto-adjustable shard size) remains deferred in TICKETS.md.
