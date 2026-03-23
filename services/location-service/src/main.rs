@@ -4,6 +4,8 @@
 // Identical HTTP contract — gateway needs no changes.
 // ============================================================
 
+mod db_store;
+mod location_store;
 mod store;
 
 use std::{
@@ -12,6 +14,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use location_store::Store;
 
 use axum::{
     extract::{FromRef, Path, Query, State},
@@ -33,6 +36,8 @@ use mongodb::{
 use serde::Deserialize;
 use serde_json::json;
 use store::{LocationEntry, MemoryStore, UpsertResult};
+#[allow(unused_imports)]
+use db_store::DbStore;
 use tokio::sync::RwLock;
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -51,6 +56,7 @@ struct Config {
     update_interval:    Duration,
     update_distance_m:  f64,
     sweep_interval:     Duration,
+    location_store:     String,   // "memory" | "db"
 }
 
 impl Config {
@@ -86,6 +92,7 @@ impl Config {
             sweep_interval:    Duration::from_secs(
                                    env::var("LOCATION_SWEEP_INTERVAL_SECS")
                                        .ok().and_then(|v| v.parse().ok()).unwrap_or(300)),
+            location_store:    env::var("LOCATION_STORE").unwrap_or_else(|_| "memory".to_string()),
         })
     }
 }
@@ -117,7 +124,7 @@ struct NearbyCache {
 #[derive(Clone)]
 struct AppState {
     db:                  Database,
-    store:               Arc<MemoryStore>,
+    store:               Arc<Store>,
     nearby_limit:        usize,
     jwt_secret:          String,
     service_secret:      String,
@@ -606,16 +613,33 @@ async fn main() {
         .database(&cfg.db_name);
     println!("[location] DB connected.");
 
-    let store = MemoryStore::new(
-        cfg.shard_m,
-        cfg.ttl,
-        cfg.update_interval,
-        cfg.update_distance_m,
-    );
+    // Select backend based on LOCATION_STORE env var.
+    let store: Arc<Store> = match cfg.location_store.as_str() {
+        "db" => {
+            let col = db.collection::<mongodb::bson::Document>("locations");
+            println!("[location] Store backend: db (MongoDB)");
+            Arc::new(Store::Db(DbStore::new(
+                col,
+                cfg.shard_m,
+                cfg.ttl,
+                cfg.update_interval,
+                cfg.update_distance_m,
+            )))
+        }
+        _ => {
+            println!("[location] Store backend: memory");
+            Arc::new(Store::Memory(MemoryStore::new(
+                cfg.shard_m,
+                cfg.ttl,
+                cfg.update_interval,
+                cfg.update_distance_m,
+            )))
+        }
+    };
 
     // Background sweep task.
     {
-        let store_sweep = store.clone();
+        let store_sweep = Arc::clone(&store);
         let interval = cfg.sweep_interval;
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(interval);
