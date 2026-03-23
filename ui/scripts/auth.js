@@ -32,15 +32,15 @@ const Auth = (() => {
   }
 
   function saveToStorage() {
-    if (_token)    localStorage.setItem(STORAGE_TOKEN_KEY, _token);
-    if (_nickname) localStorage.setItem(STORAGE_NICK_KEY,  _nickname);
-    if (_sex)      localStorage.setItem(STORAGE_SEX_KEY,   _sex);
+    if (_token)    sessionStorage.setItem(STORAGE_TOKEN_KEY, _token);
+    if (_nickname) sessionStorage.setItem(STORAGE_NICK_KEY,  _nickname);
+    if (_sex)      sessionStorage.setItem(STORAGE_SEX_KEY,   _sex);
   }
 
   function clearUserStorage() {
-    localStorage.removeItem(STORAGE_TOKEN_KEY);
-    localStorage.removeItem(STORAGE_NICK_KEY);
-    localStorage.removeItem(STORAGE_SEX_KEY);
+    sessionStorage.removeItem(STORAGE_TOKEN_KEY);
+    sessionStorage.removeItem(STORAGE_NICK_KEY);
+    sessionStorage.removeItem(STORAGE_SEX_KEY);
     localStorage.removeItem('bbm_meet');
     // Keep guest keys — guest session is independent of user account
   }
@@ -92,11 +92,11 @@ const Auth = (() => {
   return {
 
     async init() {
-      const stored = localStorage.getItem(STORAGE_TOKEN_KEY);
+      const stored = sessionStorage.getItem(STORAGE_TOKEN_KEY);
       if (stored && !isTokenExpired(stored)) {
         _token    = stored;
-        _nickname = localStorage.getItem(STORAGE_NICK_KEY);
-        _sex      = localStorage.getItem(STORAGE_SEX_KEY);
+        _nickname = sessionStorage.getItem(STORAGE_NICK_KEY);
+        _sex      = sessionStorage.getItem(STORAGE_SEX_KEY);
         _isUser   = true;
         Auth.onLogin?.({ nickname: _nickname, sex: _sex });
         // Keys can't be unlocked without password — show lock screen if needed
@@ -200,14 +200,14 @@ const Auth = (() => {
     },
 
     updateProfile(fields) {
-      if (fields.sex      !== undefined) { _sex      = fields.sex;      localStorage.setItem(STORAGE_SEX_KEY,  _sex);      }
-      if (fields.nickname !== undefined) { _nickname = fields.nickname; localStorage.setItem(STORAGE_NICK_KEY, _nickname); }
+      if (fields.sex      !== undefined) { _sex      = fields.sex;      sessionStorage.setItem(STORAGE_SEX_KEY,  _sex);      }
+      if (fields.nickname !== undefined) { _nickname = fields.nickname; sessionStorage.setItem(STORAGE_NICK_KEY, _nickname); }
     },
 
     refreshToken(token) {
       if (!token) return;
       _token = token;
-      localStorage.setItem(STORAGE_TOKEN_KEY, token);
+      sessionStorage.setItem(STORAGE_TOKEN_KEY, token);
     },
 
     logout() {
