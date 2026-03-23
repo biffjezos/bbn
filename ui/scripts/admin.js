@@ -22,6 +22,19 @@ function getAdminSub() {
   } catch (e) { return null; }
 }
 
+// ── Server config cache ───────────────────────────────────────
+
+var _selfPromotionGuard = true; // safe default until loaded
+
+async function _loadAdminConfig() {
+  try {
+    var data = await window.Api.adminGetConfig();
+    _selfPromotionGuard = !!data.selfPromotionGuard;
+  } catch (e) {
+    _selfPromotionGuard = true; // fail safe
+  }
+}
+
 // ── Tier cache (for user card dropdown) ──────────────────────
 
 var _cachedTiers = [];
@@ -95,6 +108,7 @@ async function initAdmin() {
     });
   });
 
+  await _loadAdminConfig();
   renderUsersTab();
 }
 
@@ -186,7 +200,7 @@ function renderUserCard(u) {
       : '';
 
   var isVenue = u.accountType === 'venue';
-  var isSelf  = u.userId === getAdminSub();
+  var isSelf  = _selfPromotionGuard && u.userId === getAdminSub();
   var selfNote = isSelf
     ? '<div class="small mt-2" style="color:var(--bbm-muted,#888)">'
       + '<i class="bi bi-lock me-1"></i>You cannot modify your own tier or role.</div>'

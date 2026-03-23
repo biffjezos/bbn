@@ -223,7 +223,8 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
     }
 
     let fallback: f64 = match tier {
-        "premium" | "regular" => 1_000.0,
+        "premium" => 23_000.0,
+        "regular" => 1_000.0,
         _ => 500.0,
     };
 
