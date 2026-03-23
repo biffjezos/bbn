@@ -34,6 +34,18 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 5. Nearby/search: clients receive ciphertext blobs + per-user public keys; decrypt only what they're authorised to see (users in range, favourites).
 6. JWT claims: strip `nickname`, `age`, `sex`. Add a `prof` claim containing the AES-GCM ciphertext of `{ nickname, age, sex }` (base64url-encoded). The JWT signature covers the ciphertext, preserving tamper-evidence. Only the owner's client can decrypt it using `profileKey`. Token size increase: ~110–140 bytes — negligible. Profile update requires re-issuing the JWT.
 
+**Implementation notes (validated 2026-03-23):**
+
+- **emailSalt chicken-and-egg.** `profileKey` requires `emailSalt`, but the current server generates `emailSalt` inside `register/finish` — after the client needs it to encrypt the profile. Two clean options: (a) **client generates `emailSalt`** (16 random bytes) and sends it in the `register/finish` body alongside `profileCiphertext` — server just stores it; (b) server returns a fresh `emailSalt` in the `register/start` response and the client sends it back in `register/finish`. Option (a) is simpler. Decide before implementation.
+
+- **`emailSalt` must be returned at login.** Current `login/finish` response does not include `emailSalt`. Without it the client cannot derive `profileKey` and therefore cannot decrypt the `prof` JWT claim. Add `emailSalt` to the `login/finish` response body.
+
+- **`register/finish` response must also return `emailSalt`.** So the client has it immediately after registration (for the first JWT's `prof` claim to be usable without a separate login round-trip).
+
+- **Profile updates must return a fresh JWT.** `PUT /users/me` accepts changes to `nickname`, `age`, `sex`. After update the server must re-encrypt the new values into a new `profileCiphertext` (supplied by the client), update the `prof` claim, and return a new JWT. The server cannot encrypt on the client's behalf — the client sends both the plaintext updates (for the location store) and the new `profileCiphertext`.
+
+- **Peer visibility is a separate phase.** The `prof` JWT claim covers the owner's own profile only. How peers (nearby, search) decrypt another user's profile is not solved here — that requires the asymmetric keypair (`publicKey`/`encryptedPrivateKey`) already in the schema and is out of scope for this ticket's first phase.
+
 **Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
 
 **Complexity:** HIGH — touches auth-service, users-service, location-service, frontend, JWT claims, and all profile read paths.
@@ -65,6 +77,14 @@ A user's `opaqueRecord` is nullable. If it is missing or null, the server treats
 **What the server must handle:**
 - `login/start` returns 202 + `{ action: "reregister" }` when `opaqueRecord` is null/missing.
 - `register/finish` must be callable on an existing (partial) user account without wiping any other fields.
+
+**Implementation notes (validated 2026-03-23):**
+
+- **`register/finish` is INSERT-only — hard blocker.** The current handler does `insert_one` with `emailHash` as the lookup key. After rotation, the user document already exists with that `emailHash` — the insert will fail with a duplicate key error. The re-registration path needs a dedicated endpoint (e.g. `POST /auth/reregister/finish`) or a modified `register/finish` that performs an `$set` on `opaqueRecord` for an existing document rather than inserting a new one. It must touch only `opaqueRecord` — no other fields.
+
+- **`login/start` hard-errors on null `opaqueRecord`.** The current handler reads `opaqueRecord` and passes it to `ServerLogin::start()` immediately. A null value will cause an unwrap/error. The handler must check for null before entering the OPAQUE ceremony and return `202 { action: "reregister" }` instead.
+
+- **No email or nickname re-entry needed.** The re-registration ceremony only proves knowledge of the password — the user's profile data (nickname, age, sex) and all other fields remain untouched in the DB. Only `opaqueRecord` is updated.
 
 **DB operation for rotation (owner action, not code):**
 ```
