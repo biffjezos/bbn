@@ -166,7 +166,7 @@ Append an entry during every wrap-up. Two entry types:
 - **CHANGE:** a modification to CLAUDE.md or persistent file structure — what changed and why.
 - **REFLECTION:** a mistake or friction from the session — what went wrong and what rule was added or changed to prevent recurrence.
 
-Format: `YYYY-MM-DD — [CHANGE|REFLECTION]: <description>`.
+Format: `YYYY-MM-DD — [CHANGE|REFLECTION]: <description>`. Newest entries go at the top of the Log section.
 Never edit or remove existing entries.
 
 ---
