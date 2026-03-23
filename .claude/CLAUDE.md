@@ -104,7 +104,7 @@ without asking for permission:
    `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
    session.
 3. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
-   compact them into the section `Reflection`. The essentials must remain in the Summary
+   compact them into the `Reflection` section summary and **remove them from the Log**. The Log retains only `CHANGE` entries after compaction.
 5. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md, remove
    the oldest entries (by date) until the total counts 15.
 7. Commit all outstanding changes to the session branch, including all updated files.
