@@ -32,11 +32,49 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 3. Server stores ciphertext only — never sees plaintext profile fields.
 4. Login: server returns `emailSalt`; client decrypts profile with `profileKey`.
 5. Nearby/search: clients receive ciphertext blobs + per-user public keys; decrypt only what they're authorised to see (users in range, favourites).
-6. JWT claims: reduce to minimum (sub, tier, role, tv, accountType) — remove nickname/age/sex from token.
+6. JWT claims: strip `nickname`, `age`, `sex`. Add a `prof` claim containing the AES-GCM ciphertext of `{ nickname, age, sex }` (base64url-encoded). The JWT signature covers the ciphertext, preserving tamper-evidence. Only the owner's client can decrypt it using `profileKey`. Token size increase: ~110–140 bytes — negligible. Profile update requires re-issuing the JWT.
 
 **Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
 
 **Complexity:** HIGH — touches auth-service, users-service, location-service, frontend, JWT claims, and all profile read paths.
+
+---
+
+## T-25 — OPAQUE Server Setup Rotation
+
+**Status:** Planned. Prerequisite: T-23 deployed (OPAQUE live).
+
+**Context:** `OPAQUE_SERVER_SETUP` contains the server's OPRF private key. If it leaks, all `opaqueRecord` blobs are compromised. Rotation must be possible without wiping user accounts. No backward compatibility, no multi-setup versioning.
+
+**Design:**
+
+A user's `opaqueRecord` is nullable. If it is missing or null, the server treats the account as "pending re-registration." The rotation flow:
+
+1. Admin generates a new `OPAQUE_SERVER_SETUP` value (auth-service prints one on startup when the env var is absent — same as initial setup).
+2. Admin sets the new value in Railway and redeploys auth-service.
+3. All existing `opaqueRecord` fields are cleared in one DB operation: `db.users.updateMany({}, { $unset: { opaqueRecord: '' } })`.
+4. Users log in as normal. Auth-service detects missing `opaqueRecord` and returns HTTP 202 with `{ action: "reregister" }` instead of starting the login ceremony.
+5. Client receives the signal, keeps the password in memory (user just typed it), silently runs the full OPAQUE registration ceremony (register/start → register/finish).
+6. New `opaqueRecord` written. Auth-service immediately proceeds to the login ceremony and issues the JWT.
+7. User experience: a brief extra round-trip. No extra password prompt.
+
+**What the client must handle:**
+- On `login/start` response with `action: "reregister"`: run register/start + register/finish with the current password, then retry login/start.
+- This must happen within the same login flow before the password is zeroed from memory.
+
+**What the server must handle:**
+- `login/start` returns 202 + `{ action: "reregister" }` when `opaqueRecord` is null/missing.
+- `register/finish` must be callable on an existing (partial) user account without wiping any other fields.
+
+**DB operation for rotation (owner action, not code):**
+```
+db.users.updateMany({}, { $unset: { opaqueRecord: "" } })
+```
+Run in Railway MongoDB shell after deploying the new auth-service with the new `OPAQUE_SERVER_SETUP`.
+
+**No versioning, no migration logic, no coexistence of two setups.**
+
+**Relates to:** SEC-1.1, T-23.
 
 ---
 
