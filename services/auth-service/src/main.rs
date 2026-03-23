@@ -214,9 +214,9 @@ async fn bootstrap_admin(db: &Database, user_id_str: &str) {
         .await
     {
         Ok(r) if r.matched_count == 1 => println!(
-            "[auth] Bootstrap: {user_id_str} promoted to admin. User must re-login. Remove ADMIN_BOOTSTRAP_USER_ID."
+            "[auth] Bootstrap: admin promotion succeeded. User must re-login. Remove ADMIN_BOOTSTRAP_USER_ID."
         ),
-        Ok(_)  => eprintln!("[auth] Bootstrap: user {user_id_str} not found."),
+        Ok(_)  => eprintln!("[auth] Bootstrap: target user for admin promotion not found. Check ADMIN_BOOTSTRAP_USER_ID."),
         Err(e) => eprintln!("[auth] Bootstrap failed: {e}"),
     }
 }
