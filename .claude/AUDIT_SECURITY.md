@@ -7,41 +7,7 @@
 
 ## Open Items
 
-### SEC-1.1 Plain password and email in POST request
-
-***Note:*** added by project owner (12 March 2026)
-
-```json
-[API] → POST https://boom.up.railway.app/api/auth/login
-{
-    email: '{plain email address}',
-    password: '{plain password}',
-    guestId: '{guest id}'
-}
-```
-
-Found in `/ui/scripts/api.js`:
-
-```js
-login({ email, password, guestId }) {
-    return apiFetch('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, guestId }),
-    });
-  },
-```
-
-The eMail address and password should be hashed right after they are entered in the text field (account creation, login modal). On account creation the eMail should be hashed like the password, sent and stored in the db. No unencrypted/unhashed communication between client and server.
-
-Target solution: OPAQUE / PAKE. `opaque-ke` (Rust) is production-ready; no equivalent exists for JS. Implementing OPAQUE before the auth-service Rust port (T-04b) would require a full re-implementation once the port lands — T-04b is now complete but OPAQUE was explicitly deferred during the port.
-
-**Sequencing decision (2026-03-16):** Implement OPAQUE in `auth-service` (Rust). Unblocks this ticket and T-05b (encrypted block note). Also resolve items in AUDIT.md 6.1/6.3 before contemplating this ticket.
-
-**Implementation plan approved (2026-03-23):** See T-23 in TICKETS.md. WASM approach confirmed. No migration — users collection wiped. Two new required env vars: `EMAIL_PEPPER`, `OPAQUE_SERVER_SETUP`.
-
-**Implemented 2026-03-23:** T-23 complete. Code merged to branch `claude/review-next-tasks-dPbAT`. Pending: production env vars, users collection wipe, migration run. See TICKETS_DONE.md for details.
-
-**Priority:** HIGH → **RESOLVED** (pending deployment).
+SEC-1.1 ✅ fully resolved 2026-03-24 — details in AUDIT_DONE.md
 
 ---
 

@@ -5,6 +5,23 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ---
 
+## From AUDIT_SECURITY.md (2026-03-24)
+
+### DONE — SEC-1.1 Plain password and email in POST request
+
+**Original severity:** HIGH
+**Resolved:** 2026-03-24 (T-23 fully deployed)
+
+OPAQUE two-round auth implemented in auth-service (Rust, `opaque-ke`). WASM client (`opaque-client.js`) loaded as ES module; `window.OpaqueClient` exposes `hashEmail`, `registerStart/Finish`, `loginStart/Finish`. Email hashed with PBKDF2-SHA256 (100k iters, fixed domain salt `boomboom-email-v2`) before leaving the browser. No plaintext email or password ever transmitted.
+
+Login and register modals route through `Auth.login()` / `Auth.register()` → `Api.login()` / `Api.register()` — both OPAQUE flows.
+
+Password change in `profile.js` was still using the old `Api.updateMe({ currentPassword, password })` plaintext route. Fixed 2026-03-24: replaced with `Api.changePassword({ password })` OPAQUE flow + separate `Api.saveKeys()` for the key blob re-encryption.
+
+Backend deployment confirmed by owner: users collection wiped, `EMAIL_PEPPER` set, `OPAQUE_SERVER_SETUP` set, migration `008_opaque_emailhash` run.
+
+---
+
 ## From AUDIT_SECURITY.md (2026-03-23)
 
 ### DONE — SEC-1.2 Gateway send-rate bypassable at messages-service HTTP endpoint

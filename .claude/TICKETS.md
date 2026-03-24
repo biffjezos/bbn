@@ -9,14 +9,10 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ## T-23 — OPAQUE Authentication + Email Privacy (SEC-1.1)
 
-✅ Implemented 2026-03-23. Details in `TICKETS_DONE.md`.
+✅ Fully deployed 2026-03-24. Details in `TICKETS_DONE.md`.
 
-**Still needed before going live:**
-- Wipe `users` collection in production DB
-- Set `EMAIL_PEPPER` (32-byte hex) in Railway for auth-service and users-service
-- Set `OPAQUE_SERVER_SETUP` in Railway (auth-service generates value on first run without it; copy from logs)
-- Run migration-service to apply migration `008_opaque_emailhash`
-- Update UI modals (login/register/settings forms) to call new `Api.login()` / `Api.register()` / `Api.changePassword()` — these are now wired through the OPAQUE WASM client
+Backend confirmed live by owner: users wiped, EMAIL_PEPPER set, OPAQUE_SERVER_SETUP set, migration 008 applied.
+UI modals verified 2026-03-24: login and register modals use OPAQUE two-round flow via Api.login()/Api.register(); password change in profile.js fixed to use Api.changePassword() (was incorrectly sending plaintext password via Api.updateMe).
 
 ---
 
