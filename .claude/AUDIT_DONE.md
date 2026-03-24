@@ -7,6 +7,13 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ## From AUDIT_INFRASTRUCTURE.md (2026-03-24)
 
+### DONE — INFRA-1.2 Sessions TTL index stale (createdAt_1, old 2h value)
+
+**Original severity:** LOW
+**Resolved:** 2026-03-24 — migration 010 dropped the stale `sessions.createdAt_1` index (expireAfterSeconds: 7200). Gateway recreated it with the correct value (1200 s = 20 min) on next boot. Owner confirmed migration ran successfully.
+
+---
+
 ### DONE — INFRA-1.1 migration-service not running (Railway disk too small)
 
 **Original severity:** HIGH

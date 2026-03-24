@@ -43,7 +43,7 @@ struct Config {
     jwt_secret:        String,
     service_secret:    String,
     loc_service_url:   Url,
-    tiers_service_url: Url,
+    authority_service_url: Url,
     fav_service_url:   Url,
 }
 
@@ -75,7 +75,7 @@ impl Config {
         let required = [
             "JWT_SECRET", "SERVICE_SECRET", "MONGO_URI",
             "LOC_SERVICE_URL",   "LOC_SERVICE_ALLOWED_HOST",
-            "TIERS_SERVICE_URL", "TIERS_SERVICE_ALLOWED_HOST",
+            "AUTHORITY_SERVICE_URL", "AUTHORITY_SERVICE_ALLOWED_HOST",
             "FAV_SERVICE_URL",   "FAV_SERVICE_ALLOWED_HOST",
         ];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
@@ -96,10 +96,10 @@ impl Config {
                 "LOC_SERVICE_URL",
                 &env::var("LOC_SERVICE_ALLOWED_HOST").unwrap(),
             )?,
-            tiers_service_url: parse_service_url(
-                &env::var("TIERS_SERVICE_URL").unwrap(),
-                "TIERS_SERVICE_URL",
-                &env::var("TIERS_SERVICE_ALLOWED_HOST").unwrap(),
+            authority_service_url: parse_service_url(
+                &env::var("AUTHORITY_SERVICE_URL").unwrap(),
+                "AUTHORITY_SERVICE_URL",
+                &env::var("AUTHORITY_SERVICE_ALLOWED_HOST").unwrap(),
             )?,
             fav_service_url:   parse_service_url(
                 &env::var("FAV_SERVICE_URL").unwrap(),
@@ -118,7 +118,7 @@ struct AppState {
     jwt_secret:        String,
     service_secret:    String,
     loc_service_url:   Url,
-    tiers_service_url: Url,
+    authority_service_url: Url,
     fav_service_url:   Url,
     http:              reqwest::Client,
     svc_token_cache:   Arc<ServiceTokenCache>,
@@ -551,8 +551,8 @@ async fn send_message(
             return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid tier value." }))).into_response();
         }
 
-        let mut tiers_sender_url    = state.tiers_service_url.clone();
-        let mut tiers_recipient_url = state.tiers_service_url.clone();
+        let mut tiers_sender_url    = state.authority_service_url.clone();
+        let mut tiers_recipient_url = state.authority_service_url.clone();
         tiers_sender_url.set_path(&format!("/tiers/radius/message/{}", sender_tier));
         tiers_recipient_url.set_path(&format!("/tiers/radius/message/{}", recipient_tier));
 
@@ -683,7 +683,7 @@ async fn main() {
         jwt_secret:        cfg.jwt_secret,
         service_secret:    cfg.service_secret,
         loc_service_url:   cfg.loc_service_url,
-        tiers_service_url: cfg.tiers_service_url,
+        authority_service_url: cfg.authority_service_url,
         fav_service_url:   cfg.fav_service_url,
         http:              reqwest::Client::new(),
         svc_token_cache:   Arc::new(ServiceTokenCache::new()),

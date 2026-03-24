@@ -4,13 +4,13 @@
 // Required env vars:
 //   JWT_SECRET              — HS256 signing key (for WS token decode)
 //   SERVICE_SECRET          — inter-service token key
-//   AUTHORITY_SERVICE_URL   — authority-service (auth + tiers + /authority/verify)
-//   USER_SERVICE_URL
-//   LOC_SERVICE_URL
-//   MSG_SERVICE_URL
-//   FAV_SERVICE_URL
-//   BLOCKS_SERVICE_URL
-//   MIGRATION_SERVICE_URL
+//   AUTHORITY_SERVICE_URL + AUTHORITY_SERVICE_ALLOWED_HOST
+//   USER_SERVICE_URL      + USER_SERVICE_ALLOWED_HOST
+//   LOC_SERVICE_URL       + LOC_SERVICE_ALLOWED_HOST
+//   MSG_SERVICE_URL       + MSG_SERVICE_ALLOWED_HOST
+//   FAV_SERVICE_URL       + FAV_SERVICE_ALLOWED_HOST
+//   BLOCKS_SERVICE_URL    + BLOCKS_SERVICE_ALLOWED_HOST
+//   MIGRATION_SERVICE_URL + MIGRATION_SERVICE_ALLOWED_HOST
 // ============================================================
 
 mod guards;
@@ -35,10 +35,28 @@ use axum::{
 };
 use common::service_token::ServiceTokenCache;
 use rate::{live_lim, HealthCache, LiveLimiter, SendBuckets};
+use reqwest::Url;
 use serde_json::json;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 pub const ALLOWED_ORIGINS: &[&str] = &["https://biffjezos.github.io"];
+
+fn parse_service_url(raw: &str, name: &str, allowed_host: &str) -> Result<String, String> {
+    let url = Url::parse(raw)
+        .map_err(|e| format!("FATAL: {name} is not a valid URL: {e}"))?;
+    match url.scheme() {
+        "http" | "https" => {}
+        s => return Err(format!("FATAL: {name} scheme must be http or https, got '{s}'")),
+    }
+    let host = url.host_str().unwrap_or("");
+    if host != allowed_host {
+        return Err(format!(
+            "FATAL: {name} host '{host}' does not match allowed host '{allowed_host}' \
+             (set via {name}_ALLOWED_HOST)"
+        ));
+    }
+    Ok(raw.trim_end_matches('/').to_string())
+}
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -58,9 +76,14 @@ struct Config {
 impl Config {
     fn from_env() -> Result<Self, String> {
         let required = [
-            "AUTHORITY_SERVICE_URL", "USER_SERVICE_URL", "LOC_SERVICE_URL",
-            "MSG_SERVICE_URL", "FAV_SERVICE_URL", "BLOCKS_SERVICE_URL",
-            "MIGRATION_SERVICE_URL", "JWT_SECRET", "SERVICE_SECRET",
+            "AUTHORITY_SERVICE_URL", "AUTHORITY_SERVICE_ALLOWED_HOST",
+            "USER_SERVICE_URL",      "USER_SERVICE_ALLOWED_HOST",
+            "LOC_SERVICE_URL",       "LOC_SERVICE_ALLOWED_HOST",
+            "MSG_SERVICE_URL",       "MSG_SERVICE_ALLOWED_HOST",
+            "FAV_SERVICE_URL",       "FAV_SERVICE_ALLOWED_HOST",
+            "BLOCKS_SERVICE_URL",    "BLOCKS_SERVICE_ALLOWED_HOST",
+            "MIGRATION_SERVICE_URL", "MIGRATION_SERVICE_ALLOWED_HOST",
+            "JWT_SECRET", "SERVICE_SECRET",
         ];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
@@ -70,13 +93,13 @@ impl Config {
             port:          env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3000),
             jwt_secret:    env::var("JWT_SECRET").unwrap(),
             service_secret:env::var("SERVICE_SECRET").unwrap(),
-            authority_url: env::var("AUTHORITY_SERVICE_URL").unwrap(),
-            user_url:      env::var("USER_SERVICE_URL").unwrap(),
-            loc_url:       env::var("LOC_SERVICE_URL").unwrap(),
-            msg_url:       env::var("MSG_SERVICE_URL").unwrap(),
-            fav_url:       env::var("FAV_SERVICE_URL").unwrap(),
-            blocks_url:    env::var("BLOCKS_SERVICE_URL").unwrap(),
-            migration_url: env::var("MIGRATION_SERVICE_URL").unwrap(),
+            authority_url: parse_service_url(&env::var("AUTHORITY_SERVICE_URL").unwrap(), "AUTHORITY_SERVICE_URL", &env::var("AUTHORITY_SERVICE_ALLOWED_HOST").unwrap())?,
+            user_url:      parse_service_url(&env::var("USER_SERVICE_URL").unwrap(),      "USER_SERVICE_URL",      &env::var("USER_SERVICE_ALLOWED_HOST").unwrap())?,
+            loc_url:       parse_service_url(&env::var("LOC_SERVICE_URL").unwrap(),       "LOC_SERVICE_URL",       &env::var("LOC_SERVICE_ALLOWED_HOST").unwrap())?,
+            msg_url:       parse_service_url(&env::var("MSG_SERVICE_URL").unwrap(),       "MSG_SERVICE_URL",       &env::var("MSG_SERVICE_ALLOWED_HOST").unwrap())?,
+            fav_url:       parse_service_url(&env::var("FAV_SERVICE_URL").unwrap(),       "FAV_SERVICE_URL",       &env::var("FAV_SERVICE_ALLOWED_HOST").unwrap())?,
+            blocks_url:    parse_service_url(&env::var("BLOCKS_SERVICE_URL").unwrap(),    "BLOCKS_SERVICE_URL",    &env::var("BLOCKS_SERVICE_ALLOWED_HOST").unwrap())?,
+            migration_url: parse_service_url(&env::var("MIGRATION_SERVICE_URL").unwrap(), "MIGRATION_SERVICE_URL", &env::var("MIGRATION_SERVICE_ALLOWED_HOST").unwrap())?,
         })
     }
 }

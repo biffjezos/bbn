@@ -8,58 +8,57 @@
 
 **Branch:** `claude/verify-t08-phase2-deployment-z6h0n`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-24 (wrap-up)
 
 ---
 
 ## In Progress
 
-Committing T-08 Phase 3 implementation (all 5 services compile clean).
+Nothing. Session wrapped (hotfix committed post-wrap-up).
 
 ---
 
 ## Completed This Session
 
 - T-08 Phase 2 confirmed deployed and working by owner
-- `tickets/T-08.md` updated: phase 3/3 active; `tickets/done/T-08-phase2.md` created
-- `TICKETS.md` index updated
-- INFRA-1.0 and INFRA-1.1 resolved — Railway plan upgraded (1 TB storage)
-- `meta_*` collection naming convention agreed and implemented:
-  - `tiers` → `meta_tiers` (authority-service references updated)
-  - `admin_settings` → `meta_settings` (authority-service, users-service, messages-service updated)
-  - `meta_features` — new collection for feature-tier gate definitions
-- T-08 Phase 3 fully implemented (subagent):
-  - **migration 010** — renames `tiers`→`meta_tiers`, `admin_settings`→`meta_settings`, drops stale sessions TTL index (INFRA-1.2 fix), creates `meta_features` + seeds 6 default features
-  - **authority-service/tiers.rs** — `FeatureDoc` struct, `FeaturesCache` + `load_features()` (60s TTL, DB-backed), `can()` + `features_for_tier()` take map arg, all `"tiers"` → `"meta_tiers"`, admin CRUD for features
-  - **authority-service/main.rs** — `features_cache` in AppState, `"meta_settings"` collection
-  - **authority-service/verify.rs** — loads features from cache before feature check and response
-  - **users-service/main.rs** — `"meta_settings"` collection (4 occurrences)
-  - **messages-service/main.rs** — `"meta_settings"` collection (1 occurrence)
-  - **gateway/handlers.rs** — 4 admin features proxy handlers
-  - **gateway/main.rs** — `/api/admin/features` and `/api/admin/features/{name}` routes
-  - All 5 Rust services compile clean (warnings only)
+- INFRA-1.0 + INFRA-1.1 resolved — Railway plan upgraded (1 TB storage)
+- `meta_*` collection naming convention agreed and implemented
+- T-08 Phase 3 fully implemented and deployed:
+  - migration 010 ran successfully — `meta_tiers`, `meta_settings`, `meta_features` live
+  - authority-service: DB-backed features with 60s TTL cache + admin CRUD
+  - users-service, messages-service: `meta_settings` references
+  - gateway: admin features routes proxied
+  - admin UI: Features tab live and showing features
+- INFRA-1.2 resolved — sessions TTL index corrected to 20 min via migration 010
+- Hotfix: `TIERS_SERVICE_URL` → `AUTHORITY_SERVICE_URL` (+ `ALLOWED_HOST`) in location-service, favourites-service, messages-service — they still referenced the retired tiers-service
+- Added `parse_service_url` SSRF guard to location-service, favourites-service, and gateway — all service-to-service URLs in all services now validated against `*_ALLOWED_HOST` at startup
+- T-08 fully closed (all 3 phases done, moved to `tickets/done/`)
+- All audit infrastructure items now resolved
 
 ---
 
 ## Key Decisions Made
 
-- **`meta_*` collection naming** — all app-config MongoDB collections prefixed with `meta_`. User data collections have no prefix. Makes ownership immediately obvious.
-- **INFRA-1.2 fix included in migration 010** — drops stale `sessions.createdAt_1` TTL index; gateway recreates with correct TTL on next boot. INFRA-1.2 is code-complete but pending deployment.
+- **`meta_*` collection naming** — all app-config MongoDB collections prefixed with `meta_`.
+- **Owner note on Features tab** — "message radius" as a min-tier feature doesn't make complete sense semantically; will be reviewed in a future session. No code change needed yet.
 
 ---
 
 ## Blockers / Parked Items
 
-- Migration 010 must run on Railway before the new collection names take effect. Migration runs automatically on gateway boot — redeploy all services after merging this PR.
+None.
 
 ---
 
 ## Handoff Notes
 
+### State of the codebase
+- Branch `claude/verify-t08-phase2-deployment-z6h0n` is ready — open a PR targeting `dev`.
+- All Railway services are running with migration 010 applied.
+- Admin Features tab is live but the owner noted some feature labels/semantics (e.g. "message radius" as min-tier) may need review.
+
 ### What to do next
 
-1. **Merge PR → dev** and **redeploy all services** on Railway (gateway boot triggers migration 010 automatically).
-2. Verify admin Features tab works at `/admin`.
-3. Verify Settings tab still works (now reads `meta_settings`).
-4. After deployment confirmed: close INFRA-1.2 (sessions TTL index recreated correctly).
-5. Next ticket: **T-16** or **T-09**.
+1. Open PR from `claude/verify-t08-phase2-deployment-z6h0n` → `dev`.
+2. Review the Features tab feature list: decide if "message radius" should be a min-tier gating feature or something else, and clean up labels/descriptions in `meta_features` if needed.
+3. Pick next ticket: **T-16 Phase 2** (runtime-configurable settings UI) or **T-09** (Role CRUD with Permissions UI).
