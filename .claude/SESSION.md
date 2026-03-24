@@ -8,13 +8,13 @@
 
 **Branch:** `claude/review-next-tasks-uK0sn`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24 hotfix
+**Last updated:** 2026-03-24 wrap-up
 
 ---
 
 ## In Progress
 
-Hotfix: added `authority-service` workspace stub to all 9 existing Dockerfiles so Railway builds don't fail when resolving the Cargo workspace.
+Nothing — session wrapped.
 
 ---
 
@@ -31,6 +31,7 @@ Hotfix: added `authority-service` workspace stub to all 9 existing Dockerfiles s
 - `messages-service`, `favourites-service`, `blocks-service` — `RequireRegistered` → `RegisteredByGateway`
 - `location-service` — `AuthToken` → `AuthedByGateway + ProfileFromToken`; `get_nearby` uses `identity.radii.nearby_m` directly (eliminates tiers-service round-trip when gateway headers present)
 - All changed crates: `cargo check` clean (warnings only)
+- Hotfix: added `authority-service` workspace stub to all 9 existing Dockerfiles (commit `59cb51a`) — fixes Railway build failures after authority-service was added to workspace
 
 ---
 
@@ -99,7 +100,16 @@ Steps from the T-08 Phase 2 ticket:
 
 ### Next work
 
-- Deploy authority-service (see Railway steps above)
-- Retire auth-service and tiers-service after confirming authority-service is healthy
+- Deploy authority-service (see Railway steps above) and verify all services behave correctly
+- Retire auth-service and tiers-service on Railway after confirming authority-service is healthy
 - T-08 Phase 3: dynamic feature-tier admin UI (see TICKETS.md)
 - T-16 Phase 2: meta collection runtime-configurable settings
+
+### Dockerfile stub pattern (future reference)
+
+Every time a new crate is added to the Cargo workspace (`services/Cargo.toml`), all existing Dockerfiles must gain a stub for it:
+```
+COPY services/<new-service>/Cargo.toml ./<new-service>/Cargo.toml
+RUN mkdir -p ./<new-service>/src && echo 'fn main(){}' > ./<new-service>/src/main.rs
+```
+This session missed it for `authority-service` and required a hotfix. Check all Dockerfiles whenever the workspace member list changes.
