@@ -22,15 +22,3 @@ This file lists only open, active, planned, and deferred tickets — one row eac
 | [T-21](tickets/T-21.md) | deferred | low | Continental location-service routing | — |
 
 ---
-
-## Architectural Decisions
-
-**2026-03-16:** Access control model: Enhanced RBAC + access gates. No full ABAC policy engine. Roles stored as DB documents (T-09 schema). Dual-control access via a shared `access_requests` collection — not a policy engine.
-
----
-
-## Owner's Comments
-
-- Generally agreed on the implementation order. T-05, T-03 approved for implementation, but need clarification. See ticket comments.
-- 2026-03-16: Agreed. Enhanced RBAC + access_requests. No encryption of the optional note for now.
-- 2026-03-24: Ticket structure migrated to individual files in `.claude/tickets/`.
