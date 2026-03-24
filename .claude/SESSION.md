@@ -8,7 +8,7 @@
 
 **Branch:** `claude/test-harness-structure-ejKZg`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24 13:05 UTC (resuming — refreshing mtime before commit)
+**Last updated:** 2026-03-24 13:10 UTC (pre-commit: unified ITEM format changes)
 
 ---
 

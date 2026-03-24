@@ -8,7 +8,7 @@
 ## Open Items
 
 ### UX-3.1 Users enter password twice in the cold login → messages flow
-<!-- AUDIT id:UX-3.1 status:open severity:medium concern:usability -->
+<!-- ITEM id:UX-3.1 status:open priority:medium concern:usability -->
 
 **File:** `ui/scripts/auth.js`, `ui/scripts/crypto-worker.js`
 
