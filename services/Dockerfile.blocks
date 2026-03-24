@@ -22,6 +22,8 @@ COPY services/gateway/Cargo.toml ./gateway/Cargo.toml
 RUN mkdir -p ./gateway/src && echo 'fn main(){}' > ./gateway/src/main.rs
 COPY services/migration-service/Cargo.toml ./migration-service/Cargo.toml
 RUN mkdir -p ./migration-service/src && echo 'fn main(){}' > ./migration-service/src/main.rs
+COPY services/authority-service/Cargo.toml ./authority-service/Cargo.toml
+RUN mkdir -p ./authority-service/src && echo 'fn main(){}' > ./authority-service/src/main.rs
 RUN cargo build --release -p blocks-service
 
 # ── Runtime stage ─────────────────────────────────────────────
