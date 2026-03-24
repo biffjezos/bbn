@@ -22,9 +22,10 @@ wrap-up procedure.
 
 Run this on every session-start signal, in order:
 
-1. Read `.claude/AUDIT.md` (the index and global summary table). Do not read individual concern files speculatively — open them only when you need full context on a specific item. Do not read the rest of the codebase speculatively.
-2. Read `.claude/TICKETS.md` for pending tickets relevant to this session.
-3. Greet the owner, present the last audit summary, and ask what to do.
+1. Read `.claude/SESSION.md` **first** — this is the most recent context and bridges any prior compaction.
+2. Read `.claude/AUDIT.md` (the index and global summary table). Do not read individual concern files speculatively — open them only when you need full context on a specific item. Do not read the rest of the codebase speculatively.
+3. Read `.claude/TICKETS.md` for pending tickets relevant to this session.
+4. Greet the owner, present the last audit summary and SESSION.md "In Progress" state, and ask what to do.
 
 ---
 
@@ -63,12 +64,14 @@ Before writing any code for a ticket:
 
 ## Before Each Commit / Push
 
+- **Update SESSION.md.** Refresh the "In Progress", "Completed This Session", and "Handoff Notes" sections. This must happen before every commit so the file is never stale when the PreCompact hook checks it.
 - **Update tickets.** Reflect the current state of any ticket touched this session:
   move completed phases/tickets to `TICKETS_DONE.md` (leave a stub), update status
   lines, add any newly discovered tickets. Do this before every commit, not only at wrap-up.
 - **Update audit files.** If any audit item was resolved or its status changed during this
   session, move it to `AUDIT_DONE.md` (leave a stub), update the source concern file, and
   keep the global summary table in `AUDIT.md` in sync. Do this before every commit, not only at wrap-up.
+- **Run verify.sh.** After staging and before pushing, run `bash .claude/verify.sh`. Reconcile any ❌ failures — missing stubs, stale SESSION.md — before pushing. Do not push if verify.sh exits 1.
 - **Reflect.** Identify anything that slowed the session down or caused
    friction: unclear rules, missing context, a workflow step that broke, a
    ticket structure that wasn't useful. Be brief and honest. You may ask the
@@ -91,28 +94,52 @@ After every commit and push, always report — even if there is nothing to repor
   in the `users` collection now include a `preferences` sub-object."*).
 ---
 
+## Context Window Awareness
+
+The PreCompact hook will automatically fire before auto-compaction and block until SESSION.md is updated. But do not wait for the hook — be proactive:
+
+- After any large file-loading operation (reading 5+ files, ingesting a full service), note this explicitly.
+- If a session has been running for many exchanges or you have loaded significant context, say so: *"This session is getting deep — I'll update SESSION.md now as a precaution."*
+- Never let SESSION.md go stale for more than one commit cycle.
+
+If the PreCompact hook blocks you (you see the ⚠️ message): immediately update SESSION.md, inform the owner that compaction is about to happen, then proceed. The hook will allow compaction once SESSION.md is fresh.
+
+---
+
 ## Session Wrap-Up Checklist
 
 When the owner signals a wrap-up (see Definitions), run these steps in order
 without asking for permission:
 
-1. Update audit files — add new findings to the correct concern file, move resolved items
+1. Update `.claude/SESSION.md` — write a complete "Handoff Notes" section covering everything the next session needs that isn't in TICKETS.md or AUDIT.md.
+2. Update audit files — add new findings to the correct concern file, move resolved items
    to `AUDIT_DONE.md`, update existing entries, and **keep the global summary table in
    `AUDIT.md` in sync** (update the status cell for any item that changed). File names
    and their concerns are listed in the Persistent Files section below.
-2. Update `.claude/TICKETS.md` — move completed tickets/phases to
+3. Update `.claude/TICKETS.md` — move completed tickets/phases to
    `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
    session.
-3. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
+4. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
    compact them into the `Reflection` section summary and **remove them from the Log**. The Log retains only `CHANGE` entries after compaction.
-5. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md, remove
+5. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md`, remove
    the oldest entries (by date) until the total counts 15.
-7. Commit all outstanding changes to the session branch, including all updated files.
-8. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
+6. Commit all outstanding changes to the session branch, including all updated files.
+7. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
 
 ---
 
 ## Persistent Files
+
+### `.claude/SESSION.md` — Rolling session state *(read first)*
+Contains: current branch, what is in progress, key decisions made this session (not yet in TICKETS.md),
+completed work with commit hashes, and handoff notes for the next session.
+Updated by Claude at session-start and before every commit. The PreCompact hook checks this file's
+freshness — if stale (>5 min), it blocks auto-compaction until updated.
+
+### `.claude/session-audit.log` — Automated action log
+Contains: timestamped TSV entries for every Edit, Write, and Bash tool call this session.
+Written by the PostToolUse hook — not by Claude directly. Read it via `verify.sh` to confirm
+what was actually done. Do not edit this file manually. Append-only.
 
 ### `.claude/AUDIT.md` — Audit index
 Contains: links to all concern files (with descriptions), owner notes / open questions,
