@@ -37,6 +37,7 @@ Structural fixes already applied: pre-commit ticket + audit update steps, fricti
 
 ## Log
 
+- 2026-03-24 — REFLECTION: [Pattern blindness] Added `authority-service` to `services/Cargo.toml` workspace without updating the stub blocks in the 9 existing Dockerfiles. Required a follow-up hotfix commit. Rule: whenever a new crate is added to the Cargo workspace, immediately check all Dockerfiles for stub blocks and add a matching stub for the new crate before committing.
 - 2026-03-24 — CHANGE: Added SessionStart hook (empty matcher = every session start) that outputs SESSION.md content directly into context via sessionstart.sh — makes session state harness-enforced rather than behavioral. Compact matcher now also uses sessionstart.sh instead of a raw echo.
 - 2026-03-24 — CHANGE: Added SessionStart hook with matcher "compact" to .claude/settings.json — fires after every context compaction to remind Claude to re-read SESSION.md before continuing.
 - 2026-03-24 — CHANGE: Added collaboration harness: SESSION.md (rolling session state, read first on session resume), PostToolUse audit hook (session-audit.log), PreCompact hook (blocks auto-compaction until SESSION.md is fresh), verify.sh (post-commit artifact verification), and project-level .claude/settings.json. Updated CLAUDE.md Pre-Session Checklist (SESSION.md first), Before Each Commit (SESSION.md update + verify.sh run), Wrap-Up Checklist (SESSION.md handoff notes), added Context Window Awareness section, and added SESSION.md + session-audit.log to Persistent Files.
