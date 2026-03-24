@@ -202,7 +202,7 @@ impl MsgSettings {
 }
 
 async fn load_msg_settings(db: &Database) -> MsgSettings {
-    let col = db.collection::<Document>("admin_settings");
+    let col = db.collection::<Document>("meta_settings");
     let get = |key: &str, default: i64| {
         let col = col.clone();
         let key = key.to_string();

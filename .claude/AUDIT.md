@@ -1,6 +1,6 @@
 # bOOmbOOm.NOW! — Audit Index
 
-**Last updated:** 2026-03-23
+**Last updated:** 2026-03-24
 **Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
 **Auditor:** Claude (claude-sonnet-4-6)
 
@@ -82,7 +82,7 @@ When a finding is resolved: update the relevant concern file's summary, move the
 |---|---|---|---|---|
 | ✅ | INFRA-1.1 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | HIGH | migration-service not running — resolved 2026-03-24 by Railway plan upgrade (1 TB storage). |
 | ✅ | INFRA-1.0 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | MEDIUM | MongoDB disk space — superseded by INFRA-1.1, resolved same. |
-| 🔲 | INFRA-1.2 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | LOW | Sessions TTL index carries old 2 h value — fix via migration 010 (can now run). |
+| 🔲 | INFRA-1.2 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | LOW | Sessions TTL index carries old 2 h value — migration 010 fix code-complete, pending deployment. |
 | ✅ | MAINT-2.1 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | haversineDistance — resolved, single impl in common/src/geo.rs |
 | ✅ | MAINT-2.2 | [Maintainability](AUDIT_MAINTAINABILITY.md) | MEDIUM | Core utilities — resolved, all in common/src/auth.rs extractors |
 | 🔲 | MAINT-2.3 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | Per-handler role guards still scattered; token verification now centralised |

@@ -45,7 +45,7 @@ use serde_json::json;
 use tokio::sync::RwLock as TokioRwLock;
 
 use auth::{DefaultCs, LoginSessions};
-use tiers::TiersCache;
+use tiers::{FeaturesCache, TiersCache};
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +106,7 @@ pub struct AppState {
     /// Cached user JWT TTL from admin_settings. Refreshed every 60 s.
     pub user_jwt_ttl_secs: Arc<RwLock<u64>>,
     pub tiers_cache:       Arc<TokioRwLock<Option<TiersCache>>>,
+    pub features_cache:    Arc<TokioRwLock<Option<FeaturesCache>>>,
 }
 
 impl FromRef<AppState> for JwtSecret {
@@ -188,7 +189,7 @@ async fn main() {
     tiers::seed_tiers(&db).await;
 
     // Load initial JWT TTL
-    let initial_ttl = db.collection::<mongodb::bson::Document>("admin_settings")
+    let initial_ttl = db.collection::<mongodb::bson::Document>("meta_settings")
         .find_one(doc! { "key": "jwt_user_ttl_secs" }).await.ok().flatten()
         .and_then(|d| d.get_i64("value").ok()).unwrap_or(86_400) as u64;
     let user_jwt_ttl_secs = Arc::new(RwLock::new(initial_ttl));
@@ -202,6 +203,7 @@ async fn main() {
         login_sessions:    Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
         user_jwt_ttl_secs,
         tiers_cache:       Arc::new(TokioRwLock::new(None)),
+        features_cache:    Arc::new(TokioRwLock::new(None)),
     };
 
     // Background: refresh JWT TTL every 60 s
@@ -212,7 +214,7 @@ async fn main() {
             interval.tick().await;
             loop {
                 interval.tick().await;
-                let v = s.db.collection::<mongodb::bson::Document>("admin_settings")
+                let v = s.db.collection::<mongodb::bson::Document>("meta_settings")
                     .find_one(doc! { "key": "jwt_user_ttl_secs" }).await.ok().flatten()
                     .and_then(|d| d.get_i64("value").ok()).unwrap_or(86_400) as u64;
                 *s.user_jwt_ttl_secs.write().unwrap() = v;

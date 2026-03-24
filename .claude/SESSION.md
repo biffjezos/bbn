@@ -14,38 +14,43 @@
 
 ## In Progress
 
-About to start T-08 Phase 3 (dynamic feature-tier admin UI) with the agreed `meta_*` collection naming.
+Committing T-08 Phase 3 implementation (all 5 services compile clean).
 
 ---
 
 ## Completed This Session
 
 - T-08 Phase 2 confirmed deployed and working by owner
-- `tickets/T-08.md` updated: phase 3/3 active, Phase 2 section replaced with done stub
-- `tickets/done/T-08-phase2.md` created
-- `TICKETS.md` index updated (T-08 row: phase 3/3, medium)
-- INFRA-1.1 and INFRA-1.0 resolved — owner upgraded Railway plan (1 TB storage); all migration constraints lifted
-- `AUDIT_INFRASTRUCTURE.md` updated: INFRA-1.0 and INFRA-1.1 moved to done stubs
-- `AUDIT_DONE.md` updated with INFRA-1.0 and INFRA-1.1 entries
-- `AUDIT.md` global summary table updated
+- `tickets/T-08.md` updated: phase 3/3 active; `tickets/done/T-08-phase2.md` created
+- `TICKETS.md` index updated
+- INFRA-1.0 and INFRA-1.1 resolved — Railway plan upgraded (1 TB storage)
+- `meta_*` collection naming convention agreed and implemented:
+  - `tiers` → `meta_tiers` (authority-service references updated)
+  - `admin_settings` → `meta_settings` (authority-service, users-service, messages-service updated)
+  - `meta_features` — new collection for feature-tier gate definitions
+- T-08 Phase 3 fully implemented (subagent):
+  - **migration 010** — renames `tiers`→`meta_tiers`, `admin_settings`→`meta_settings`, drops stale sessions TTL index (INFRA-1.2 fix), creates `meta_features` + seeds 6 default features
+  - **authority-service/tiers.rs** — `FeatureDoc` struct, `FeaturesCache` + `load_features()` (60s TTL, DB-backed), `can()` + `features_for_tier()` take map arg, all `"tiers"` → `"meta_tiers"`, admin CRUD for features
+  - **authority-service/main.rs** — `features_cache` in AppState, `"meta_settings"` collection
+  - **authority-service/verify.rs** — loads features from cache before feature check and response
+  - **users-service/main.rs** — `"meta_settings"` collection (4 occurrences)
+  - **messages-service/main.rs** — `"meta_settings"` collection (1 occurrence)
+  - **gateway/handlers.rs** — 4 admin features proxy handlers
+  - **gateway/main.rs** — `/api/admin/features` and `/api/admin/features/{name}` routes
+  - All 5 Rust services compile clean (warnings only)
 
 ---
 
 ## Key Decisions Made
 
-- **`meta_*` collection naming convention:** all app-config MongoDB collections get a `meta_` prefix
-  - `tiers` → `meta_tiers`
-  - `admin_settings` → `meta_settings`
-  - *(new)* `meta_features` (T-08 Phase 3)
-  - Convention: `meta_*` = app config; all other collections = user data
-- **Migration 010** will: rename `tiers` → `meta_tiers`, rename `admin_settings` → `meta_settings`, create `meta_features`, fix INFRA-1.2 (drop stale `sessions.createdAt_1` index)
-- **Railway plan upgraded** — no more disk/memory constraints; migration-service can now run freely
+- **`meta_*` collection naming** — all app-config MongoDB collections prefixed with `meta_`. User data collections have no prefix. Makes ownership immediately obvious.
+- **INFRA-1.2 fix included in migration 010** — drops stale `sessions.createdAt_1` TTL index; gateway recreates with correct TTL on next boot. INFRA-1.2 is code-complete but pending deployment.
 
 ---
 
 ## Blockers / Parked Items
 
-None.
+- Migration 010 must run on Railway before the new collection names take effect. Migration runs automatically on gateway boot — redeploy all services after merging this PR.
 
 ---
 
@@ -53,15 +58,8 @@ None.
 
 ### What to do next
 
-T-08 Phase 3 — Dynamic feature-tier admin UI:
-
-1. Migration `010_meta_rename_and_features`:
-   - Rename `tiers` → `meta_tiers`
-   - Rename `admin_settings` → `meta_settings`
-   - Drop stale `sessions.createdAt_1` index (INFRA-1.2 fix)
-   - Create `meta_features` collection and seed default features
-2. authority-service: update collection references (`tiers` → `meta_tiers`); add `meta_features` DB-backed feature list with 60s TTL cache + admin CRUD endpoints
-3. users-service + gateway + messages-service: update `admin_settings` → `meta_settings` collection references
-4. Gateway: proxy new admin feature routes
-5. Admin UI: new "Features" tab
-6. T-16 ticket: update to reference `meta_settings` instead of `admin_settings` / `meta`
+1. **Merge PR → dev** and **redeploy all services** on Railway (gateway boot triggers migration 010 automatically).
+2. Verify admin Features tab works at `/admin`.
+3. Verify Settings tab still works (now reads `meta_settings`).
+4. After deployment confirmed: close INFRA-1.2 (sessions TTL index recreated correctly).
+5. Next ticket: **T-16** or **T-09**.

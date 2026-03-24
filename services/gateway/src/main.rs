@@ -271,6 +271,8 @@ async fn main() {
         .route("/api/admin/venues/{id}/manager",     patch(admin_patch_venue_manager))
         .route("/api/admin/tiers",                   get(admin_tiers_list).post(admin_tiers_post))
         .route("/api/admin/tiers/{name}",            put(admin_tiers_put).delete(admin_tiers_delete))
+        .route("/api/admin/features",                get(admin_features_list).post(admin_features_post))
+        .route("/api/admin/features/{name}",         put(admin_features_put).delete(admin_features_delete))
         // Manager
         .route("/api/manager/venues",      get(manager_venues_list).post(manager_venues_post))
         .route("/api/manager/venues/{id}", put(manager_venue_put).delete(manager_venue_delete))

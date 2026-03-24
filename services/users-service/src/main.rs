@@ -904,7 +904,7 @@ struct AdminSettingDoc {
 
 /// Read one admin setting value from the collection (returns default on any error).
 async fn read_setting(db: &Database, key: &str, default: i64) -> i64 {
-    db.collection::<Document>("admin_settings")
+    db.collection::<Document>("meta_settings")
         .find_one(doc! { "key": key })
         .await
         .ok()
@@ -915,7 +915,7 @@ async fn read_setting(db: &Database, key: &str, default: i64) -> i64 {
 
 /// Read all admin settings and return them as a flat JSON object `{ key: value }`.
 async fn load_all_settings_flat(db: &Database) -> serde_json::Value {
-    let cursor = db.collection::<AdminSettingDoc>("admin_settings").find(doc! {}).await;
+    let cursor = db.collection::<AdminSettingDoc>("meta_settings").find(doc! {}).await;
     let mut map = serde_json::Map::new();
     if let Ok(cursor) = cursor {
         if let Ok(docs) = cursor.try_collect::<Vec<_>>().await {
@@ -936,7 +936,7 @@ async fn admin_get_settings(
     if claims.role != "admin" {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
     }
-    let cursor = state.db.collection::<AdminSettingDoc>("admin_settings")
+    let cursor = state.db.collection::<AdminSettingDoc>("meta_settings")
         .find(doc! {})
         .await;
     match cursor {
@@ -968,7 +968,7 @@ async fn admin_put_setting(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "value must be non-negative." }))).into_response();
     }
     // Only allow updating keys that exist in the collection (reject unknown keys).
-    let col = state.db.collection::<Document>("admin_settings");
+    let col = state.db.collection::<Document>("meta_settings");
     let exists = col.find_one(doc! { "key": &key }).await.ok().flatten().is_some();
     if !exists {
         return (StatusCode::NOT_FOUND, Json(json!({ "error": "Unknown setting key." }))).into_response();
