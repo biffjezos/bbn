@@ -6,7 +6,7 @@
 
 ---
 
-**Branch:** `claude/review-next-tasks-uK0sn`
+**Branch:** `claude/refactor-tickets-structure-FrWB7`
 **Session date:** 2026-03-24
 **Last updated:** 2026-03-24 wrap-up
 
@@ -20,96 +20,51 @@ Nothing — session wrapped.
 
 ## Completed This Session
 
-- T-08 Phase 3 added to TICKETS.md (dynamic feature-tier admin UI)
-- `authority-service` crate created: `src/main.rs`, `src/auth.rs` (OPAQUE), `src/tiers.rs` (tier CRUD + features), `src/verify.rs` (`POST /authority/verify`)
-- `services/Cargo.toml` — added `authority-service` to workspace members
-- `services/Dockerfile.authority` created (mirrors Dockerfile.auth pattern)
-- Gateway modularised into 5 modules: `rate.rs`, `proxy.rs`, `guards.rs`, `handlers.rs`, `ws.rs` — `main.rs` trimmed to ~260 lines (Config + AppState + main + router)
-- Gateway env var `AUTH_SERVICE_URL` → `AUTHORITY_SERVICE_URL` (covers auth + tiers + verify)
-- `TIERS_SERVICE_URL` removed from gateway — all tier routes now point to authority-service
-- `common/src/auth.rs` — added `GatewayIdentity`, `AuthedByGateway`, `RegisteredByGateway`, `TokenProfile`, `ProfileFromToken`
-- `messages-service`, `favourites-service`, `blocks-service` — `RequireRegistered` → `RegisteredByGateway`
-- `location-service` — `AuthToken` → `AuthedByGateway + ProfileFromToken`; `get_nearby` uses `identity.radii.nearby_m` directly (eliminates tiers-service round-trip when gateway headers present)
-- All changed crates: `cargo check` clean (warnings only)
-- Hotfix: added `authority-service` workspace stub to all 9 existing Dockerfiles (commit `59cb51a`) — fixes Railway build failures after authority-service was added to workspace
+- Ticket structure migrated from flat TICKETS.md/TICKETS_DONE.md to individual files:
+  - `.claude/tickets/<id>.md` — 14 open/active/planned/deferred tickets
+  - `.claude/tickets/done/<id>.md` — 13 done stubs
+  - `TICKETS.md` rewritten as a one-table index with implementation order and architectural decisions
+- `verify.sh` updated — ticket stub check now looks in `tickets/` directory first (with TICKETS.md fallback)
+- `AUDIT.md` concern file descriptions tightened to one concise line each
+- `CLAUDE.md` updated — Pre-Session Checklist, Before Each Commit, Wrap-Up Checklist, and Persistent Files section all reflect the new ticket structure
+- `CHANGELOG.md` updated with CHANGE entry
 
 ---
 
 ## Key Decisions Made
 
-- **gateway modules**: `main.rs` is now only Config + AppState + main(). All handlers, guards, proxy helpers, rate limiting, and WS logic are in their own modules. Requested by owner.
-- **`proxy()` takes `Option<VerifyResponse>` by value** (not by ref) — avoids async borrow lifetime issues when closures own the identity.
-- **`AUTH_SERVICE_URL` renamed to `AUTHORITY_SERVICE_URL`** — single URL for auth + tiers + verify. Old `TIERS_SERVICE_URL` removed from gateway config. Admin tiers routes now go to authority-service.
-- **`ProfileFromToken`** extractor added to common — decodes nickname/sex/age from JWT without tokenVersion check. Used by location-service's `put_location` because those profile fields aren't in GatewayIdentity.
-- **Backwards-compatible**: `AuthedByGateway` falls back to `AuthToken` (JWT decode + DB check) when X-Auth-Sub is absent. Services continue to work before gateway is updated.
-- **`fetch_favourite_ids` refactored** in location-service to take `(sub: &str, role: &str)` instead of `&UserClaims` — simpler, no type dependency.
+- **Option A for phases:** all phases stay in one ticket file (T-08.md); frontmatter tracks current phase. Avoids file-switching friction.
+- **All 5 concern files kept independent:** INFRA, MAINT, UX, SEC, PERF remain separate. No collapsing.
+- **Audit items stay in concern files** (no per-item individual files). Only tickets got the individual-file treatment.
+- **TICKETS_DONE.md kept** as legacy reference (not deleted) — done stubs in `tickets/done/` are the canonical record going forward.
 
 ---
 
 ## Blockers / Parked Items
 
-- MAINT-2.3 (per-handler role guards scattered in services): partially resolved — gateway now uses `authority_guard` + `role_guard` consistently; services are now using `RegisteredByGateway` which is role-aware.
-- `authority-service` not yet deployed on Railway — see handoff notes below for required actions.
+- T-08 Phase 2 code is done; Railway deployment pending (owner action — see `tickets/T-08.md` for Railway steps).
 
 ---
 
 ## Handoff Notes
 
-### What was built
+### What was done this session
 
-The full T-08 Phase 2 code is done:
+Full ticket structure refactor:
+- Every open ticket from TICKETS.md is now a standalone `tickets/T-XX.md` file with YAML frontmatter.
+- Every done ticket has a stub in `tickets/done/T-XX.md`.
+- TICKETS.md is now a clean index (one row per ticket, plus implementation order and architectural decisions).
+- CLAUDE.md describes the new structure fully; session-start reads only the index.
+- verify.sh checks `tickets/T-XX.md` and `tickets/done/T-XX.md` before falling back to TICKETS.md grep.
 
-1. **`authority-service`** — new crate that merges auth-service + tiers-service. Exposes all auth routes, all tier routes, and the new `POST /authority/verify`. Build with `Dockerfile.authority`.
+### What to do next
 
-2. **Gateway modularised** — `main.rs` is now ~260 lines. Five new module files. All compile clean.
+1. Verify the PR is merged and Railway build is green for all services.
+2. Deploy authority-service on Railway (steps in `tickets/T-08.md`, Phase 2 section).
+3. Next code session: T-08 Phase 3 (dynamic feature-tier admin UI) or T-16 Phase 2.
 
-3. **Gateway env var change** — `AUTH_SERVICE_URL` is gone. Gateway now reads `AUTHORITY_SERVICE_URL` (required). `TIERS_SERVICE_URL` is also gone from gateway config. The old tiers-service can remain running on Railway — gateway just won't call it anymore.
+### Notes for next session
 
-4. **Downstream services** updated: messages, favourites, blocks, location all use `AuthedByGateway`/`RegisteredByGateway`. They are fully backwards-compatible (fall back to AuthToken when X-Auth-Sub header absent).
-
-### Railway deployment steps (owner must do manually)
-
-**Before deploying authority-service:**
-1. Create a new Railway service named `authority-service`.
-2. Set build command: `docker build -f services/Dockerfile.authority -t authority-service .` (or configure Railway to use `Dockerfile.authority`).
-3. Set env vars (copy from existing `auth-service` Railway service — they are the same):
-   - `MONGO_URI`
-   - `JWT_SECRET`
-   - `SERVICE_SECRET`
-   - `EMAIL_PEPPER`
-   - `OPAQUE_SERVER_SETUP`
-   - `DB_NAME` (optional, defaults to `boomboom`)
-
-**After authority-service is running:**
-4. In the **gateway** Railway service, set:
-   - `AUTHORITY_SERVICE_URL` = internal URL of the new authority-service
-   - Remove `AUTH_SERVICE_URL` (no longer needed)
-   - Remove `TIERS_SERVICE_URL` (no longer needed)
-5. Redeploy gateway.
-
-**Auth-service** can remain running until confirmed stable; then retire it.
-
-### Phase 2 step status
-
-Steps from the T-08 Phase 2 ticket:
-1. ✅ Merge auth-service + tiers-service → authority-service (code done, not yet deployed)
-2. ✅ `POST /authority/verify` endpoint (done)
-3. ✅ Gateway updated — calls authority/verify, injects X-Auth-* headers (code done, not yet deployed)
-4. ✅ Downstream services updated to read X-Auth-* (done, backwards-compatible)
-5. ⬜ Retire tiers-service on Railway (pending deployment of authority-service)
-
-### Next work
-
-- Deploy authority-service (see Railway steps above) and verify all services behave correctly
-- Retire auth-service and tiers-service on Railway after confirming authority-service is healthy
-- T-08 Phase 3: dynamic feature-tier admin UI (see TICKETS.md)
-- T-16 Phase 2: meta collection runtime-configurable settings
-
-### Dockerfile stub pattern (future reference)
-
-Every time a new crate is added to the Cargo workspace (`services/Cargo.toml`), all existing Dockerfiles must gain a stub for it:
-```
-COPY services/<new-service>/Cargo.toml ./<new-service>/Cargo.toml
-RUN mkdir -p ./<new-service>/src && echo 'fn main(){}' > ./<new-service>/src/main.rs
-```
-This session missed it for `authority-service` and required a hotfix. Check all Dockerfiles whenever the workspace member list changes.
+- When opening a ticket, check its frontmatter first — `status` and `phase` are ground truth.
+- TICKETS_DONE.md still exists as legacy archive; ignore it for new work.
+- PostToolUse hook and verify.sh both work with the new structure.

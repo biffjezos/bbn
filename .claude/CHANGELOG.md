@@ -37,6 +37,7 @@ Structural fixes already applied: pre-commit ticket + audit update steps, fricti
 
 ## Log
 
+- 2026-03-24 — CHANGE: Migrated ticket structure from flat TICKETS.md/TICKETS_DONE.md to individual files in `.claude/tickets/<id>.md` and `.claude/tickets/done/<id>.md`. TICKETS.md is now an index. CLAUDE.md Pre-Session Checklist, Before Each Commit, Wrap-Up Checklist, and Persistent Files section updated accordingly. verify.sh updated to check the new directory structure. AUDIT.md concern file descriptions tightened to one line each.
 - 2026-03-24 — REFLECTION: [Pattern blindness] Added `authority-service` to `services/Cargo.toml` workspace without updating the stub blocks in the 9 existing Dockerfiles. Required a follow-up hotfix commit. Rule: whenever a new crate is added to the Cargo workspace, immediately check all Dockerfiles for stub blocks and add a matching stub for the new crate before committing.
 - 2026-03-24 — CHANGE: Added SessionStart hook (empty matcher = every session start) that outputs SESSION.md content directly into context via sessionstart.sh — makes session state harness-enforced rather than behavioral. Compact matcher now also uses sessionstart.sh instead of a raw echo.
 - 2026-03-24 — CHANGE: Added SessionStart hook with matcher "compact" to .claude/settings.json — fires after every context compaction to remind Claude to re-read SESSION.md before continuing.
