@@ -8,13 +8,13 @@
 
 **Branch:** `claude/review-open-tasks-Vf3ZM`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-24 (wrap-up)
 
 ---
 
 ## In Progress
 
-T-19 — Rate-limit notification banner (implementing).
+Nothing. Session wrapped.
 
 ---
 
