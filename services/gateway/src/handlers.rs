@@ -273,6 +273,10 @@ pub async fn admin_get_config(State(s): State<AppState>, headers: HeaderMap) -> 
     if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     admin_guard_then(&s, &headers, |id| proxy(&s, Method::GET, format!("{}/admin/config", s.user_url), auth_hdr(&headers), None, Some(id))).await
 }
+pub async fn admin_loc_config(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    admin_guard_then(&s, &headers, |id| proxy(&s, Method::GET, format!("{}/admin/config", s.loc_url), auth_hdr(&headers), None, Some(id))).await
+}
 pub async fn admin_patch_user(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(uid): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
     if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     admin_guard_then(&s, &headers, |id| proxy(&s, Method::PATCH, format!("{}/admin/users/{}", s.user_url, uid), auth_hdr(&headers), Some(body), Some(id))).await

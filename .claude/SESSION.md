@@ -6,7 +6,7 @@
 
 ---
 
-**Branch:** `claude/review-open-tasks-Vf3ZM`
+**Branch:** `claude/find-smallest-ticket-POL5G`
 **Session date:** 2026-03-24
 **Last updated:** 2026-03-24 (wrap-up)
 
@@ -20,15 +20,25 @@ Nothing. Session wrapped.
 
 ## Completed This Session
 
-- T-19 implemented: rate-limit banner wired into `#notifBanner` (below navbar) for login, register, and guest-session 429 errors.
-  - `auth.js`: fires `Auth.onRateLimited?.()` when retried guest init still hits 429
-  - `app.js`: `showRateLimitBanner()` helper + `Auth.onRateLimited` hook + 429 checks in login/register catch blocks
+- T-16 Phase 2 closed out: location-service config surfaced as a read-only "Location"
+  section in the admin Settings tab.
+  - `location-service/src/main.rs`: `LocationAdminConfig` struct + `admin_config` on
+    `AppState` + `GET /admin/config` handler (service-token protected).
+  - `gateway/src/handlers.rs`: `admin_loc_config` proxying to `{loc_url}/admin/config`
+    with admin guard.
+  - `gateway/src/main.rs`: `/api/admin/location-config` route added.
+  - `ui/scripts/api.js`: `adminGetLocationConfig()`.
+  - `ui/scripts/admin.js`: `LOCATION_CONFIG_FIELDS` + parallel fetch + read-only section.
+  - T-16 marked done; stub in `tickets/done/T-16.md`.
 
 ---
 
 ## Key Decisions Made
 
-- Rate-limit banner uses `alert-warning` style with dismiss button. Shows once (deduplicated by class check). Links to `/donate/`.
+- `SHARD_SIZE_M` and location TTLs are NOT made runtime-editable (destructive /
+  requires collMod). Shown as read-only info instead.
+- Location config served from location-service env vars, not DB. Gateway proxies
+  under admin guard.
 
 ---
 
@@ -41,11 +51,13 @@ None.
 ## Handoff Notes
 
 ### State of the codebase
-- Branch `claude/review-open-tasks-Vf3ZM` — T-19 committed and pushed.
-- Previous session branch (`claude/verify-t08-phase2-deployment-z6h0n`) still needs a PR opened → `dev` by the owner.
+- Branch `claude/find-smallest-ticket-POL5G` — T-16 committed and pushed. Owner will merge.
+- Previous session branches still need PRs → `dev`:
+  - `claude/verify-t08-phase2-deployment-z6h0n`
+  - `claude/review-open-tasks-Vf3ZM` (T-19)
 
 ### What to do next
 
-1. Open PR from `claude/verify-t08-phase2-deployment-z6h0n` → `dev` (previous session's work).
-2. Open PR from `claude/review-open-tasks-Vf3ZM` → `dev` (T-19).
-3. Pick next ticket: **T-16 Phase 2** or **T-09**.
+1. Owner merges all open branches → `dev`.
+2. Next ticket: **T-09** (Role CRUD with Permissions UI) — open, medium priority, no
+   blockers now that T-08 is deployed.

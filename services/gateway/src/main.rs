@@ -285,6 +285,7 @@ async fn main() {
         .route("/api/notifications/{id}", delete(notif_delete))
         // Admin
         .route("/api/admin/config",                  get(admin_get_config))
+        .route("/api/admin/location-config",         get(admin_loc_config))
         .route("/api/admin/settings",                get(admin_get_settings))
         .route("/api/admin/settings/{key}",          put(admin_put_setting))
         .route("/api/admin/users",                   get(admin_users))
