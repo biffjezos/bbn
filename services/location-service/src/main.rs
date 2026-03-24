@@ -33,6 +33,7 @@ use mongodb::{
     bson::{doc, Document},
     Client, Database,
 };
+use reqwest::Url;
 use serde::Deserialize;
 use serde_json::json;
 use store::{LocationEntry, MemoryStore, UpsertResult};
@@ -41,6 +42,23 @@ use db_store::DbStore;
 use tokio::sync::RwLock;
 
 // ── Config ────────────────────────────────────────────────────────────────────
+
+fn parse_service_url(raw: &str, name: &str, allowed_host: &str) -> Result<String, String> {
+    let url = Url::parse(raw)
+        .map_err(|e| format!("FATAL: {name} is not a valid URL: {e}"))?;
+    match url.scheme() {
+        "http" | "https" => {}
+        s => return Err(format!("FATAL: {name} scheme must be http or https, got '{s}'")),
+    }
+    let host = url.host_str().unwrap_or("");
+    if host != allowed_host {
+        return Err(format!(
+            "FATAL: {name} host '{host}' does not match allowed host '{allowed_host}' \
+             (set via {name}_ALLOWED_HOST)"
+        ));
+    }
+    Ok(raw.trim_end_matches('/').to_string())
+}
 
 struct Config {
     port:               u16,
@@ -61,7 +79,11 @@ struct Config {
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "FAV_SERVICE_URL", "AUTHORITY_SERVICE_URL"];
+        let required = [
+            "JWT_SECRET", "SERVICE_SECRET", "MONGO_URI",
+            "FAV_SERVICE_URL",       "FAV_SERVICE_ALLOWED_HOST",
+            "AUTHORITY_SERVICE_URL", "AUTHORITY_SERVICE_ALLOWED_HOST",
+        ];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
             return Err(format!(
@@ -75,8 +97,16 @@ impl Config {
             db_name:           env::var("DB_NAME").unwrap_or_else(|_| "boomboom".to_string()),
             jwt_secret:        env::var("JWT_SECRET").unwrap(),
             service_secret:    env::var("SERVICE_SECRET").unwrap(),
-            fav_service_url:   env::var("FAV_SERVICE_URL").unwrap(),
-            authority_service_url: env::var("AUTHORITY_SERVICE_URL").unwrap(),
+            fav_service_url:   parse_service_url(
+                &env::var("FAV_SERVICE_URL").unwrap(),
+                "FAV_SERVICE_URL",
+                &env::var("FAV_SERVICE_ALLOWED_HOST").unwrap(),
+            )?,
+            authority_service_url: parse_service_url(
+                &env::var("AUTHORITY_SERVICE_URL").unwrap(),
+                "AUTHORITY_SERVICE_URL",
+                &env::var("AUTHORITY_SERVICE_ALLOWED_HOST").unwrap(),
+            )?,
             shard_m:           env::var("LOCATION_SHARD_SIZE_M")
                                    .ok().and_then(|v| v.parse().ok()).unwrap_or(2_000.0),
             nearby_limit:      env::var("LOCATION_NEARBY_LIMIT")
