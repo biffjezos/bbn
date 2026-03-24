@@ -5,7 +5,7 @@
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 SESSION_FILE="$REPO_ROOT/.claude/SESSION.md"
 TICKETS_FILE="$REPO_ROOT/.claude/TICKETS.md"
-AUDIT_FILE="$REPO_ROOT/.claude/AUDIT.md"
+CLAUDE_DIR="$REPO_ROOT/.claude"
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 if [[ ! -f "$SESSION_FILE" ]]; then
@@ -64,17 +64,54 @@ if [[ -f "$TICKETS_FILE" ]]; then
   rm -f "$TMPBOARD"
 fi
 
-# ── AUDIT SUMMARY TABLE ───────────────────────────────────────────────────────
-if [[ -f "$AUDIT_FILE" ]]; then
-  TABLE=$(awk '/^## Global Summary Table/{found=1} found{print} found && /^---/{exit}' "$AUDIT_FILE")
+# ── OPEN AUDIT ITEMS BOARD ───────────────────────────────────────────────────
+CONCERN_FILES=(
+  "$CLAUDE_DIR/AUDIT_INFRASTRUCTURE.md"
+  "$CLAUDE_DIR/AUDIT_MAINTAINABILITY.md"
+  "$CLAUDE_DIR/AUDIT_USABILITY.md"
+  "$CLAUDE_DIR/AUDIT_SECURITY.md"
+  "$CLAUDE_DIR/AUDIT_PERFORMANCE.md"
+)
 
-  if [[ -n "$TABLE" ]]; then
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "AUDIT SUMMARY (from .claude/AUDIT.md)"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "$TABLE"
-  fi
+TMPAUDIT=$(mktemp)
+
+for cf in "${CONCERN_FILES[@]}"; do
+  [[ -f "$cf" ]] || continue
+  CURRENT_TITLE=""
+  while IFS= read -r line; do
+    # Track most recent ## or ### heading as candidate title
+    if [[ "$line" =~ ^#{2,3}[[:space:]](.+)$ ]]; then
+      HEADING="${BASH_REMATCH[1]}"
+      # Strip "ID " or "ID ✅ " prefix
+      CURRENT_TITLE=$(echo "$HEADING" | sed -E 's/^[A-Z]+-[0-9]+(\.[0-9]+)?[[:space:]]*(✅[[:space:]]*)?//')
+    fi
+
+    # Match AUDIT metadata comment
+    if [[ "$line" =~ ^\<\!--\ AUDIT\ (.+)\ --\>$ ]]; then
+      META="${BASH_REMATCH[1]}"
+
+      ID=$(echo "$META"       | grep -oP 'id:\K\S+')
+      STATUS=$(echo "$META"   | grep -oP 'status:\K\S+')
+      SEVERITY=$(echo "$META" | grep -oP 'severity:\K\S+')
+
+      # Skip resolved and superseded
+      [[ "$STATUS" == "resolved" || "$STATUS" == "superseded" ]] && continue
+
+      printf "%-12s  %-10s  %-6s  %s\n" \
+        "$ID" "$STATUS" "${SEVERITY:--}" "$CURRENT_TITLE" >> "$TMPAUDIT"
+    fi
+  done < "$cf"
+done
+
+if [[ -s "$TMPAUDIT" ]]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "OPEN AUDIT ITEMS (from concern files)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  printf "%-12s  %-10s  %-6s  %s\n" "ID" "STATUS" "SEV" "TITLE"
+  printf "%-12s  %-10s  %-6s  %s\n" "------------" "----------" "------" "------------------------------------------"
+  cat "$TMPAUDIT"
 fi
+rm -f "$TMPAUDIT"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

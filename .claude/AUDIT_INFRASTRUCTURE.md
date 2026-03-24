@@ -8,6 +8,7 @@
 ## Open Items
 
 ### INFRA-1.1 migration-service not running — root cause: Railway disk too small
+<!-- AUDIT id:INFRA-1.1 status:open severity:high concern:infrastructure -->
 
 **Date:** 2026-03-17 (updated 2026-03-18)
 **Files:** `services/migration-service/src/main.rs` (Rust port),
@@ -38,6 +39,7 @@ The migration-service itself is working correctly (responds, connects to MongoDB
 ---
 
 ### INFRA-1.0 MongoDB disk space — superseded by INFRA-1.1
+<!-- AUDIT id:INFRA-1.0 status:superseded severity:medium concern:infrastructure -->
 
 **Date:** 2026-03-16 (superseded 2026-03-18)
 
@@ -46,6 +48,7 @@ Merged into INFRA-1.1. Root cause confirmed: Railway volume is structurally too 
 ---
 
 ### INFRA-1.2 Sessions TTL index must be dropped and recreated after guest-TTL change
+<!-- AUDIT id:INFRA-1.2 status:open severity:low concern:infrastructure -->
 
 **Date:** 2026-03-18
 **File:** MongoDB `sessions` collection

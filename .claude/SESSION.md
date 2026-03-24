@@ -6,7 +6,7 @@
 
 ---
 
-**Branch:** `claude/resume-harness-integration-V3qk3`
+**Branch:** `claude/test-harness-structure-ejKZg`
 **Session date:** 2026-03-24
 **Last updated:** pre-commit
 
@@ -14,28 +14,27 @@
 
 ## In Progress
 
-Harness integration — TICKETS.md machine-readable format + sessionstart.sh board injection:
-- `.claude/TICKETS.md` — added `<!-- TICKET id:... status:... priority:... phase:... prereqs:... relates:... -->` metadata to all 14 open/active tickets ✅
-- `.claude/hooks/sessionstart.sh` — extended to extract and render open tickets board + AUDIT global summary table at every session start ✅
+Harness testing — adding `<!-- AUDIT ... -->` metadata tags to all audit concern files, parallel to TICKETS.md:
+- All 5 concern files tagged ✅
+- `sessionstart.sh` updated: replaced verbatim AUDIT.md table dump with filtered board from tags (open/deferred only) ✅
 
 ---
 
 ## Completed This Session
 
-- [5c5b30f] harness: SESSION.md, hooks (PreCompact, PostToolUse), verify.sh, settings.json, CLAUDE.md rules (previous session, PR #64 merged)
-- [this commit] harness: machine-readable TICKETS.md metadata + sessionstart board injection
+- [caaa058] harness: machine-readable TICKETS.md metadata + sessionstart board injection (PR #65, merged)
+- [this commit] harness: AUDIT concern files tagged + sessionstart audit board
 
 ---
 
 ## Key Decisions Made
 
-- TICKET metadata format: `<!-- TICKET id:T-XX status:STATUS priority:PRI phase:N/M prereqs:... relates:... -->` — invisible in rendered markdown, greppable, maps to standard Jira/Linear fields
-- Status vocabulary: `open · planned · in-progress · blocked · deferred · not-started · done · closed`
-- Phase field: `N/M` (done/total) or omitted if no phases
-- sessionstart.sh uses a tempfile to collect board rows (avoids bash variable newline-stripping), writes to stdout for hook injection
-- `##` and `###` headings both captured for title — so sub-tickets like T-06b and T-08 Phase 2 display correctly with their phase heading as title
-- AUDIT global summary table injected verbatim (already compact by design)
-- Done/closed tickets excluded from board automatically
+- AUDIT metadata format: `<!-- AUDIT id:INFRA-1.1 status:open severity:high concern:infrastructure -->` — invisible in rendered markdown, greppable
+- Status vocabulary for audit items: `open · deferred · resolved · superseded`
+- Tag placed immediately after the `###` heading (or after the one-liner stub for items without headings)
+- sessionstart.sh now scans all 5 concern files for AUDIT tags and renders a filtered board (resolved/superseded excluded)
+- Title stripped of `ID ✅ ` prefix using sed before display
+- INFRA-1.0 (superseded) correctly excluded from the board
 
 ---
 
@@ -47,8 +46,8 @@ _(none)_
 
 ## Handoff Notes
 
-> For next Claude session: TICKETS.md now has machine-readable metadata on all open tickets.
-> sessionstart.sh injects three sections at every start: SESSION STATE, OPEN TICKETS board, AUDIT SUMMARY.
-> To add a new ticket: write the `## T-XX — Title` heading, then immediately add the `<!-- TICKET ... -->` comment.
-> To close a ticket: change its status to `done` or `closed` in the comment — it disappears from the board automatically.
-> The board reads titles from the nearest `##` or `###` heading above the TICKET comment.
+> Both TICKETS.md and all audit concern files now have machine-readable metadata tags.
+> sessionstart.sh injects three sections: SESSION STATE, OPEN TICKETS board, OPEN AUDIT ITEMS board.
+> To add a new audit item: write the `### PREFIX-N.N Title` heading, then add `<!-- AUDIT id:... status:... severity:... concern:... -->` on the next line.
+> To resolve an audit item: change its status to `resolved` in the tag — it disappears from the board automatically.
+> SEC-1.12 has no tag — that item lives entirely in AUDIT_DONE.md, not in the concern file — not an issue.

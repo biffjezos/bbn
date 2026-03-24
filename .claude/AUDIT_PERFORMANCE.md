@@ -8,6 +8,7 @@
 ## Open Items
 
 ### PERF-4.1 Send-rate bucket is in-process — not safe for multi-instance gateway
+<!-- AUDIT id:PERF-4.1 status:deferred severity:low concern:performance -->
 
 ***Postponed by project owner (12 March 2026):*** Postponed until further notice.
 
@@ -22,6 +23,7 @@ The per-user send-rate bucket is stored in-process. If the gateway scales to mul
 ---
 
 ### PERF-4.2 Notification poll scales linearly with active users
+<!-- AUDIT id:PERF-4.2 status:open severity:low concern:performance -->
 
 **File:** `ui/scripts/app.js` (NotifModule), `services/favourites-service/src/main.rs`
 
