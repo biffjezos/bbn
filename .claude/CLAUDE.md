@@ -184,9 +184,9 @@ Rules for moving:
   not on session start, not speculatively.
 
 ### `.claude/TICKETS.md` — Ticket index *(read at session start)*
-Contains: one-row summary per ticket with link, status, priority, title, and phase.
-Also contains the recommended implementation order and cross-ticket architectural decisions.
-The project owner may add items directly. Do not remove rows unless the owner says to.
+Contains: one-row summary per open/active/planned/deferred ticket with link, status, priority, title, and phase.
+Also contains cross-ticket architectural decisions. Done tickets are not listed here — they live in `tickets/done/`.
+The project owner may add items directly. Do not remove rows unless the ticket moves to done or the owner says to.
 
 ### `.claude/tickets/<id>.md` — Individual ticket files
 Contains: full spec, implementation phases, owner comments, and current status for one ticket.
