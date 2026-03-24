@@ -8,48 +8,58 @@
 ## Open Items
 
 SEC-1.1 ✅ fully resolved 2026-03-24 — details in AUDIT_DONE.md
+<!-- ITEM id:SEC-1.1 status:resolved priority:high concern:security -->
 
 ---
 
 SEC-1.2 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
+<!-- ITEM id:SEC-1.2 status:resolved priority:medium concern:security -->
 
 ---
 
 SEC-1.3 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
+<!-- ITEM id:SEC-1.3 status:resolved priority:medium concern:security -->
 
 ---
 
 SEC-1.4 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
+<!-- ITEM id:SEC-1.4 status:resolved priority:medium concern:security -->
 
 ---
 
 SEC-1.5 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
+<!-- ITEM id:SEC-1.5 status:resolved priority:low concern:security -->
 
 ---
 
 SEC-1.6 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md
+<!-- ITEM id:SEC-1.6 status:resolved priority:low concern:security -->
 
 ---
 
 ### SEC-1.7 ✅ CWE-918 SSRF — JWT sub raw string in internal URLs
+<!-- ITEM id:SEC-1.7 status:resolved priority:medium concern:security -->
 
 Fixed 2026-03-23. Full details in AUDIT_DONE.md.
 
 ---
 
 ### SEC-1.8 ✅ Panic on NaN in location sort (`partial_cmp().unwrap()`)
+<!-- ITEM id:SEC-1.8 status:resolved priority:medium concern:security -->
 
 Fixed 2026-03-23. Full details in AUDIT_DONE.md.
 
 ---
 
 ### SEC-1.9 ✅ Panic on pre-epoch system clock (`SystemTime::unwrap()`)
+<!-- ITEM id:SEC-1.9 status:resolved priority:low concern:security -->
 
 Fixed 2026-03-23. Full details in AUDIT_DONE.md.
 
 ---
 
 ### SEC-1.10 ✅ Email pre-hash uses plain SHA-256 — no work factor
+<!-- ITEM id:SEC-1.10 status:resolved priority:high concern:security -->
 
 **File:** `ui/scripts/opaque-client.js:hashEmail`
 
@@ -70,6 +80,7 @@ making dictionary attacks computationally expensive.
 ---
 
 ### SEC-1.11 ✅ No per-user salt on email hash — pepper leak enables bulk precomputation
+<!-- ITEM id:SEC-1.11 status:resolved priority:medium concern:security -->
 
 **File:** `services/auth-service/src/main.rs:auth_register_finish`
 

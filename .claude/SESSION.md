@@ -6,36 +6,34 @@
 
 ---
 
-**Branch:** `claude/resume-harness-integration-V3qk3`
+**Branch:** `claude/test-harness-structure-ejKZg`
 **Session date:** 2026-03-24
-**Last updated:** pre-commit
+**Last updated:** 2026-03-24 wrap-up
 
 ---
 
 ## In Progress
 
-Harness integration — TICKETS.md machine-readable format + sessionstart.sh board injection:
-- `.claude/TICKETS.md` — added `<!-- TICKET id:... status:... priority:... phase:... prereqs:... relates:... -->` metadata to all 14 open/active tickets ✅
-- `.claude/hooks/sessionstart.sh` — extended to extract and render open tickets board + AUDIT global summary table at every session start ✅
+_(nothing — session wrapped up cleanly)_
 
 ---
 
 ## Completed This Session
 
-- [5c5b30f] harness: SESSION.md, hooks (PreCompact, PostToolUse), verify.sh, settings.json, CLAUDE.md rules (previous session, PR #64 merged)
-- [this commit] harness: machine-readable TICKETS.md metadata + sessionstart board injection
+- [c5ccf82] harness: AUDIT concern files tagged + sessionstart audit board
+- [4d2fd20] harness: SESSION.md mtime refresh (fix for verify.sh stale check)
+- [36c0973] harness: unified ITEM format — audit files, TICKETS.md, sessionstart.sh
 
 ---
 
 ## Key Decisions Made
 
-- TICKET metadata format: `<!-- TICKET id:T-XX status:STATUS priority:PRI phase:N/M prereqs:... relates:... -->` — invisible in rendered markdown, greppable, maps to standard Jira/Linear fields
-- Status vocabulary: `open · planned · in-progress · blocked · deferred · not-started · done · closed`
-- Phase field: `N/M` (done/total) or omitted if no phases
-- sessionstart.sh uses a tempfile to collect board rows (avoids bash variable newline-stripping), writes to stdout for hook injection
-- `##` and `###` headings both captured for title — so sub-tickets like T-06b and T-08 Phase 2 display correctly with their phase heading as title
-- AUDIT global summary table injected verbatim (already compact by design)
-- Done/closed tickets excluded from board automatically
+- Unified tag: `<!-- ITEM id:X status:Y priority:Z concern:W [phase:N/M] [prereqs:...] [relates:...] -->`
+- `T` is a valid prefix — `T-08` follows the same `PREFIX-N` pattern as `INFRA-1.1`, `SEC-1.10`, etc.
+- `severity` renamed to `priority` (same concept, unified vocabulary)
+- `concern` field added to ticket tags: `auth · services · db · infra · ui`
+- Status vocabulary: `open · planned · active · blocked · deferred · done · closed · superseded`
+- `sessionstart.sh` uses a shared `parse_items()` function — tickets skip `done:closed`, audit skips `resolved:superseded`
 
 ---
 
@@ -47,8 +45,29 @@ _(none)_
 
 ## Handoff Notes
 
-> For next Claude session: TICKETS.md now has machine-readable metadata on all open tickets.
-> sessionstart.sh injects three sections at every start: SESSION STATE, OPEN TICKETS board, AUDIT SUMMARY.
-> To add a new ticket: write the `## T-XX — Title` heading, then immediately add the `<!-- TICKET ... -->` comment.
-> To close a ticket: change its status to `done` or `closed` in the comment — it disappears from the board automatically.
-> The board reads titles from the nearest `##` or `###` heading above the TICKET comment.
+### Harness state — fully complete
+
+All harness structure work on this branch is done and pushed:
+
+1. **`<!-- ITEM ... -->` tags** are present on every ticket in `TICKETS.md` and every finding in all five audit concern files.
+2. **Field vocabulary is unified** across tickets and audit: `id`, `status`, `priority`, `concern`, optional `phase`, `prereqs`, `relates`.
+3. **`sessionstart.sh`** uses a single `parse_items()` bash function that generates both the TICKETS board and the AUDIT board from their respective files — no duplication, no divergence.
+4. **verify.sh** passes cleanly. The only check is SESSION.md freshness (mtime < 10 min at push time).
+
+### To add a new item
+
+- Tickets: add a `## T-XX — Title` heading in `TICKETS.md`, then `<!-- ITEM id:T-XX status:open priority:medium concern:X -->` on the next line.
+- Audit: add a `### PREFIX-N.N Title` heading in the relevant concern file, then `<!-- ITEM id:PREFIX-N.N status:open priority:medium concern:X -->`.
+- It will appear automatically on the next session-start board.
+
+### To close/resolve an item
+
+- Tickets: change `status:` to `done` or `closed` → disappears from board. Then move to `TICKETS_DONE.md` with a stub.
+- Audit: change `status:` to `resolved` or `superseded` → disappears from board. Then move to `AUDIT_DONE.md` with a stub.
+
+### Next work
+
+Owner will merge PR for this branch. Next session picks up from the open tickets:
+- **T-08 (active/high)** — Authority Service Phase 2
+- **T-16 (active/medium)** — meta collection runtime-configurable settings Phase 2
+- **T-24 (planned/high)** — Profile Data Encryption

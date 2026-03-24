@@ -8,14 +8,17 @@
 ## Resolved (see AUDIT_DONE.md)
 
 ### MAINT-2.1 `haversine_distance` — resolved, see AUDIT_DONE.md
+<!-- ITEM id:MAINT-2.1 status:resolved priority:low concern:maintainability -->
 
 ### MAINT-2.2 Core utilities duplication — resolved, see AUDIT_DONE.md
+<!-- ITEM id:MAINT-2.2 status:resolved priority:medium concern:maintainability -->
 
 ---
 
 ## Open Items
 
 ### MAINT-2.3 Per-handler role guards still scattered across services
+<!-- ITEM id:MAINT-2.3 status:open priority:low concern:maintainability -->
 
 **Date:** 2026-03-16 (updated 2026-03-19)
 **Files:** `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
@@ -31,6 +34,7 @@
 ---
 
 ### MAINT-2.4 `app.js` mixes six distinct module concerns
+<!-- ITEM id:MAINT-2.4 status:resolved priority:low concern:maintainability -->
 
 **Date updated:** 2026-03-19 (split completed)
 **File:** `ui/scripts/app.js` (formerly ~990 lines; now split)
@@ -51,6 +55,7 @@ The original file contained **6 IIFEs** with distinct responsibilities. Each has
 ---
 
 ### MAINT-2.5 No explicit WebSocket disconnect on message-page navigation
+<!-- ITEM id:MAINT-2.5 status:open priority:low concern:maintainability -->
 
 **File:** `ui/scripts/messages.js`
 
@@ -61,6 +66,7 @@ The `beforeunload` handler sends `{ type: 'view', userId: null }` to clear the t
 ---
 
 ### MAINT-2.6 Per-service Config struct duplication — acceptable, not worth refactoring now
+<!-- ITEM id:MAINT-2.6 status:open priority:low concern:maintainability -->
 
 **Date:** 2026-03-19
 **Files:** `services/*/src/main.rs` (all 9 services)
