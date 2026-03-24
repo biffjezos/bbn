@@ -125,91 +125,60 @@ When B blocks A, B must generate a new `profileKey`, re-encrypt all profile data
 
 ---
 
-## T-25 — OPAQUE Server Setup Rotation
+## T-25 — Per-User OPRF Key Rotation (Auto-Rotation)
 
-**Status:** Planning. Phase 1 (backwards-compat re-registration code) was reverted 2026-03-23 — it must not exist. What remains is the rotation procedure, its operational safety, and reducing the impact of a future leak.
+**Status:** Planned. Prerequisites: T-23 deployed ✅. Requires a separate key service (see infrastructure note).
 
-**Relates to:** SEC-1.1, T-23, T-24 (rotation post-T-24 is more destructive — see caveat below).
+**Relates to:** SEC-1.1, T-23, T-24.
 
 ---
 
 ### The Problem
 
-`OPAQUE_SERVER_SETUP` is the server's OPRF private key. It is the most sensitive secret in the entire system. With it and the `users` collection, an attacker can perform an offline dictionary attack against every user's `opaqueRecord`, effectively cracking all passwords. There is currently no formal rotation runbook, no protection against accidental logging of the value, no admin re-bootstrap mechanism after a wipe, and no user communication path for forced re-registration.
+With a single global `OPAQUE_SERVER_SETUP`, a breach of the key service + DB gives an attacker a consistent snapshot they can attack offline indefinitely. Every `opaqueRecord` in the DB is permanently at risk for as long as the attacker has that snapshot.
 
 ---
 
 ### The Approach
 
-OPAQUE's design does not support incremental key rotation — there is no way to re-key existing `opaqueRecord` blobs without each user providing their password again. Rotation therefore means: new OPRF key + DB wipe + forced re-registration. This is the only correct approach. The goal of this ticket is to make that operation as safe, fast, and least disruptive as possible.
+Move from a single global OPRF key to per-user OPRF keys stored in a separate key service. When a user logs in and their OPAQUE blob is 30 or more days old, the client — which just proved knowledge of the password via the login flow — immediately runs `registerStart → registerFinish` again. The server replaces the old blob with a new one encrypted under a fresh per-user OPRF key and deletes the old key. The user sees nothing; it is two extra round trips on login, once every 30 days.
+
+Accounts untouched for 90 days are auto-deleted. This means the worst-case exposure window for any active account in a split breach is 30 days.
 
 ---
 
-### What Rotation Protects Against
+### What This Protects Against
 
-- **Future exploitation of a leaked OPRF key.** After rotation, new registrations produce blobs under the new key. The old key is worthless for attacking new records.
-- **Containing the blast radius.** If rotation happens quickly after suspected compromise, only records created during the attack window (between first compromise and rotation completion) are vulnerable.
+- **Split breach.** Attacker steals the DB at day 0 and the key service at day 45. Any account whose blob was rotated in those 45 days is already under a new key the attacker doesn't have. Only accounts that went the full 45 days without logging in still have a matching blob + key from the breach. Combined with 90-day auto-deletion, the maximum exposure window for any active account is 30 days.
 
-### What Rotation Does NOT Protect Against
+### What This Does NOT Protect Against
 
-- **Pre-rotation captured traffic.** An attacker who recorded OPAQUE flows before rotation still holds valid challenge/response material. If they had the old `OPAQUE_SERVER_SETUP`, they can run offline dictionary attacks against those captures indefinitely. Rotation is not retroactive.
-- **Users already compromised.** If a password was recovered from a pre-rotation attack, that credential is in the attacker's hands regardless of rotation.
-- **The wipe itself as an attack.** A malicious operator who has Railway access can trigger a wipe without a real compromise. The rotation procedure must be owner-controlled.
-- **Future leaks.** A new `OPAQUE_SERVER_SETUP` is only as secure as the Railway environment that holds it.
+- **Simultaneous breach.** Attacker takes both DB and key service in a single operation and has a consistent snapshot. Rotation after the fact does not touch their copy.
 
 ---
 
-### Caveats and Logic Holes
+### Infrastructure Note
 
-**1. The attack window is the critical variable.**
-The risk of a compromised `OPAQUE_SERVER_SETUP` scales with the time before rotation. A key leaked today but rotated in 10 minutes exposes only accounts registered or logged in during those 10 minutes. A key leaked months ago and discovered today exposes the entire user base. Monitoring for anomalous auth behaviour (impossible login velocities, auth from unusual infrastructure) could shorten the detection window, but no such monitoring currently exists.
-
-**2. `OPAQUE_SERVER_SETUP` must never appear in logs.**
-The auth-service generates a new setup value and logs it to stdout when the env var is absent (useful for first-time setup). Once set, that log line must never reappear. Railway's log drain stores logs for N days — if the setup value ever appears in a log line during normal operation, it is exposed to anyone with Railway access. This must be audited before any production use.
-
-**3. Backups of `OPAQUE_SERVER_SETUP` are equivalent targets.**
-If the owner stores the value in a password manager, notes app, or email, a compromise of that storage is a compromise of the OPRF key. The backup must be treated with the same security posture as the primary.
-
-**4. Admin accounts are wiped too.**
-The `users` collection holds all accounts including admins. After a wipe, there is no admin — the only way back in is through a manual DB insertion or a bootstrap endpoint. Currently there is no bootstrap mechanism. A wipe without a plan locks the owner out of the admin panel permanently until a manual DB fix.
-
-**5. Post-T-24, rotation destroys all encrypted profile data.**
-Once T-24 is live, `encryptedPrivateKey` is wrapped with `exportKey` (derived from `OPAQUE_SERVER_SETUP` + user credentials). A new `OPAQUE_SERVER_SETUP` changes the OPRF output → new `exportKey` → old `encryptedPrivateKey` is unreadable → all profile data is permanently inaccessible. After T-24, a rotation wipes not just credentials but also all encrypted profile content. This must be called out clearly in any user communication. T-25 Phase 3 and 4 should be designed before T-24 is deployed.
-
-**6. No rolling rotation is possible.**
-OPAQUE does not support dual-key periods, grace windows, or transparent re-enrolment. Every account must re-register from scratch. There is no "login with old credentials to get a new record" path — that code was explicitly reverted.
+The per-user OPRF keys must live in genuinely separate infrastructure from the `users` collection — different credentials, different blast radius. If they share the same MongoDB instance or the same Railway project, a single credential compromise gives both, collapsing this back to the simultaneous breach case. This requires a second data store that is not Railway MongoDB.
 
 ---
 
 ### Implementation Phases
 
-**Phase 1 — Rotation runbook (no code; owner documentation)**
-Exact operational steps:
-1. Unset `OPAQUE_SERVER_SETUP` in Railway, redeploy auth-service — it logs a new value to stdout.
-2. Copy the logged value, immediately set it as the new `OPAQUE_SERVER_SETUP`, redeploy again.
-3. Enable maintenance mode flag in `admin_settings` (see Phase 4) to show re-registration message to users.
-4. Open MongoDB shell, wipe `users` collection: `db.users.drop()`.
-5. Run admin bootstrap (see Phase 2) to restore admin account.
-6. Disable maintenance mode.
-Document: what to do if the wipe fails, what to do if the redeploy fails, how to confirm rotation is complete.
+**Phase 1 — Key service**
+- Stand up a separate key store (separate infrastructure from the main DB).
+- Each user document gets a `keyId` reference. The key service maps `keyId → oprf_key`.
+- Auth-service looks up the per-user OPRF key from the key service on every login/registration instead of using the global `OPAQUE_SERVER_SETUP`.
 
-**Phase 2 — Admin bootstrap endpoint**
-- Add `POST /auth/bootstrap-admin` to auth-service.
-- Works only when the `users` collection is empty AND a `BOOTSTRAP_TOKEN` env var is set.
-- Creates a single admin account from payload `{ email, password }` using the OPAQUE registration flow.
-- After use: `BOOTSTRAP_TOKEN` must be unset in Railway immediately.
-- This eliminates the current dependency on manual DB insertion after a wipe.
+**Phase 2 — Auto-rotation on login**
+- On `loginFinish`: auth-service checks the `opaqueRecord` age.
+- If age ≥ 30 days: server signals the client to re-run `registerStart → registerFinish` in the same session.
+- Server replaces `opaqueRecord`, generates a new `keyId`, stores the new key in the key service, deletes the old key.
+- No UX change for the user.
 
-**Phase 3 — Startup log audit**
-- Audit all service startup code for any path that could log `OPAQUE_SERVER_SETUP` or any other sensitive env var value.
-- Auth-service currently logs the setup value intentionally when absent — confirm this path is unreachable when the var is set.
-- Add a startup assertion that validates the var is present and non-empty, without logging any bytes of its value.
-
-**Phase 4 — Maintenance mode / forced re-registration UX**
-- Add a `maintenance_mode` boolean key to `admin_settings`.
-- When true: gateway returns `503` with a specific JSON body `{ code: "MAINTENANCE", message: "..." }` on all non-bootstrap routes.
-- Client UI detects `MAINTENANCE` code and shows a full-screen banner: "We've made a security update — please re-register. Your data is safe." (or equivalent messaging agreed with owner).
-- Admin sets this before the wipe, clears it after bootstrap. Prevents confusing generic login errors during rotation.
+**Phase 3 — 90-day account auto-deletion**
+- Background task (migration-service or auth-service) deletes user documents where `lastLoginAt < now - 90 days`.
+- Deletes corresponding key from key service on account deletion.
 
 ---
 
