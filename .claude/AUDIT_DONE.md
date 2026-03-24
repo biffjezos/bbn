@@ -5,6 +5,22 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ---
 
+## From AUDIT_INFRASTRUCTURE.md (2026-03-24)
+
+### DONE — INFRA-1.1 migration-service not running (Railway disk too small)
+
+**Original severity:** HIGH
+**Resolved:** 2026-03-24 — owner upgraded to new Railway plan (up to 1 TB storage per service). WiredTiger disk constraint eliminated. Migration-service can now run and apply all pending migrations. All TTL indexes, block indexes, and tier seeds can be applied.
+
+---
+
+### DONE — INFRA-1.0 MongoDB disk space
+
+**Original severity:** MEDIUM
+**Resolved:** 2026-03-24 — superseded by INFRA-1.1 and resolved by same Railway plan upgrade.
+
+---
+
 ## From AUDIT_SECURITY.md (2026-03-24)
 
 ### DONE — SEC-1.1 Plain password and email in POST request
