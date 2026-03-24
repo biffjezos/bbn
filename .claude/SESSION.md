@@ -8,39 +8,37 @@
 
 **Branch:** `claude/find-smallest-ticket-POL5G`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-24 (wrap-up)
 
 ---
 
 ## In Progress
 
-Nothing. About to commit T-16 Phase 2 close-out.
+Nothing. Session wrapped.
 
 ---
 
 ## Completed This Session
 
-- T-16 Phase 2 closed out: no editable keys were added. Instead, location-service config is
-  now surfaced as a read-only "Location" section in the admin Settings tab.
-  - `location-service/src/main.rs`: added `LocationAdminConfig` struct, `admin_config` field on
-    `AppState`, populated at startup from env-var config; added `GET /admin/config` handler
-    (service-token protected).
-  - `gateway/src/handlers.rs`: added `admin_loc_config` handler proxying to
-    `{loc_url}/admin/config` with admin guard.
-  - `gateway/src/main.rs`: added route `/api/admin/location-config`.
-  - `ui/scripts/api.js`: added `adminGetLocationConfig()`.
-  - `ui/scripts/admin.js`: added `LOCATION_CONFIG_FIELDS` constant; `renderSettingsTab` now
-    fetches both endpoints in parallel and appends a read-only Location section.
-  - T-16 marked done; stub created in `tickets/done/`.
+- T-16 Phase 2 closed out: location-service config surfaced as a read-only "Location"
+  section in the admin Settings tab.
+  - `location-service/src/main.rs`: `LocationAdminConfig` struct + `admin_config` on
+    `AppState` + `GET /admin/config` handler (service-token protected).
+  - `gateway/src/handlers.rs`: `admin_loc_config` proxying to `{loc_url}/admin/config`
+    with admin guard.
+  - `gateway/src/main.rs`: `/api/admin/location-config` route added.
+  - `ui/scripts/api.js`: `adminGetLocationConfig()`.
+  - `ui/scripts/admin.js`: `LOCATION_CONFIG_FIELDS` + parallel fetch + read-only section.
+  - T-16 marked done; stub in `tickets/done/T-16.md`.
 
 ---
 
 ## Key Decisions Made
 
-- `SHARD_SIZE_M` and location TTLs are NOT editable at runtime (destructive without
-  re-bucketing / collMod). They are shown as read-only info instead.
-- Location config is served from the location-service directly (env vars, not DB). The
-  gateway proxies under admin guard.
+- `SHARD_SIZE_M` and location TTLs are NOT made runtime-editable (destructive /
+  requires collMod). Shown as read-only info instead.
+- Location config served from location-service env vars, not DB. Gateway proxies
+  under admin guard.
 
 ---
 
@@ -53,14 +51,13 @@ None.
 ## Handoff Notes
 
 ### State of the codebase
-- Branch `claude/find-smallest-ticket-POL5G` — T-16 committed and pushed.
-- Previous session branches still need PRs opened → `dev` by the owner:
+- Branch `claude/find-smallest-ticket-POL5G` — T-16 committed and pushed. Owner will merge.
+- Previous session branches still need PRs → `dev`:
   - `claude/verify-t08-phase2-deployment-z6h0n`
   - `claude/review-open-tasks-Vf3ZM` (T-19)
 
 ### What to do next
 
-1. Open PRs from `claude/verify-t08-phase2-deployment-z6h0n` and
-   `claude/review-open-tasks-Vf3ZM` → `dev`.
-2. Open PR from `claude/find-smallest-ticket-POL5G` → `dev` (T-16).
-3. Pick next ticket: **T-09** (Role CRUD with Permissions UI).
+1. Owner merges all open branches → `dev`.
+2. Next ticket: **T-09** (Role CRUD with Permissions UI) — open, medium priority, no
+   blockers now that T-08 is deployed.
