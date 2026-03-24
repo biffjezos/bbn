@@ -363,6 +363,9 @@ const Api = {
   adminGetSettings() {
     return apiFetch('/admin/settings');
   },
+  adminGetLocationConfig() {
+    return apiFetch('/admin/location-config');
+  },
 
   adminUpdateSetting(key, value) {
     return apiFetch(`/admin/settings/${encodeURIComponent(key)}`, {

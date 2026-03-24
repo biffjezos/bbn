@@ -780,12 +780,28 @@ var SETTING_SECTION_ICONS = {
   requests:    'bi-arrow-down-up',
 };
 
+var LOCATION_CONFIG_FIELDS = [
+  { key: 'store_type',           label: 'Store backend',          description: 'Active location store (memory or db). Set via LOCATION_STORE env var.' },
+  { key: 'shard_size_m',         label: 'Shard size (m)',          description: 'Geographic tile size in metres. Changing this requires a full re-bucketing.' },
+  { key: 'ttl_secs',             label: 'Location TTL (s)',        description: 'Seconds before a location entry is considered stale.' },
+  { key: 'update_interval_secs', label: 'Update interval (s)',     description: 'Minimum seconds between accepted location writes per user.' },
+  { key: 'update_distance_m',    label: 'Update distance (m)',     description: 'Minimum movement in metres to trigger a location write.' },
+  { key: 'sweep_interval_secs',  label: 'Sweep interval (s)',      description: 'How often the background sweep removes stale entries.' },
+  { key: 'nearby_limit',         label: 'Nearby limit',            description: 'Maximum users returned per nearby query (0 = unlimited).' },
+];
+
 async function renderSettingsTab() {
   var content = document.getElementById('adminTabContent');
   content.innerHTML = '<p class="text-muted-bb small">Loading…</p>';
   try {
-    var data = await window.Api.adminGetSettings();
-    var settings = data.settings || [];
+    var results = await Promise.allSettled([
+      window.Api.adminGetSettings(),
+      window.Api.adminGetLocationConfig(),
+    ]);
+    var settingsData = results[0].status === 'fulfilled' ? results[0].value : null;
+    var locData      = results[1].status === 'fulfilled' ? results[1].value : null;
+
+    var settings = settingsData ? (settingsData.settings || []) : [];
 
     // Group by section
     var sections = {};
@@ -829,6 +845,27 @@ async function renderSettingsTab() {
       html.push('  </div>');
       html.push('</div>');
     });
+
+    // Read-only Location section
+    html.push('<div class="bbm-section mb-4">');
+    html.push('  <h6 class="mb-3"><i class="bi bi-geo-alt me-2"></i>Location</h6>');
+    if (locData) {
+      html.push('  <div class="row g-3">');
+      LOCATION_CONFIG_FIELDS.forEach(function (field) {
+        var val = locData[field.key];
+        if (val === undefined || val === null) return;
+        html.push('    <div class="col-12 col-sm-6 col-md-4">');
+        html.push('      <div class="form-label small mb-1">' + escHtml(field.label) + '</div>');
+        html.push('      <div class="small text-muted-bb mb-1" style="font-size:0.7rem">' + escHtml(field.description) + '</div>');
+        html.push('      <div class="form-control form-control-sm text-muted-bb" style="background:var(--bbm-input-bg,#1a1a2e);cursor:default">' + escHtml(String(val)) + '</div>');
+        html.push('    </div>');
+      });
+      html.push('  </div>');
+    } else {
+      html.push('  <p class="small text-muted-bb">Location config unavailable.</p>');
+    }
+    html.push('</div>');
+
     html.push('</div>');
     content.innerHTML = html.join('');
 

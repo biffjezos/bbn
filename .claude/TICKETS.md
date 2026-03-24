@@ -15,8 +15,9 @@ This file is the index — one row per ticket, sorted by priority.
 | [T-06](tickets/T-06.md) | deferred | medium | Venue Accounts — Phase 2 (venue messaging) | 2/3 |
 | [T-07b](tickets/T-07b.md) | open | medium | Device Notifications | — |
 | [T-09](tickets/T-09.md) | open | medium | Role CRUD with Permissions UI | — |
-| [T-16](tickets/T-16.md) | active | medium | meta collection: runtime-configurable settings | 1/2 |
+| [T-16](tickets/done/T-16.md) | done | medium | meta collection: runtime-configurable settings | 2/2 |
 | [T-19](tickets/done/T-19.md) | done | medium | Notification banner on the map | — |
+| [T-16](tickets/done/T-16.md) | done | medium | meta collection: runtime-configurable settings | 2/2 |
 | [T-02](tickets/T-02.md) | open | low | Analytics (anal.js / analytics-service) | — |
 | [T-14](tickets/T-14.md) | deferred | low | Manager-tier venue quota | — |
 | [T-15](tickets/T-15.md) | deferred | low | Orphan Venue Reassignment | — |
@@ -29,6 +30,7 @@ This file is the index — one row per ticket, sorted by priority.
 
 | ID | Completed | Title |
 |---|---|---|
+| [T-16](tickets/done/T-16.md) | 2026-03-24 | meta collection: runtime-configurable settings |
 | [T-23](tickets/done/T-23.md) | 2026-03-24 | OPAQUE Authentication + Email Privacy |
 | [T-22](tickets/done/T-22.md) | 2026-03-23 | Security Hardening & Capacity Tuning |
 | [T-20 phases 1–4](tickets/done/T-20-phases1-4.md) | 2026-03-23 | Sharded Location Store (phases 1–4) |

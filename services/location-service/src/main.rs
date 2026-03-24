@@ -34,7 +34,7 @@ use mongodb::{
     Client, Database,
 };
 use reqwest::Url;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use store::{LocationEntry, MemoryStore, UpsertResult};
 #[allow(unused_imports)]
@@ -151,6 +151,18 @@ struct NearbyCache {
 
 // ── App state ─────────────────────────────────────────────────────────────────
 
+/// Read-only location configuration exposed via GET /admin/config.
+#[derive(Clone, Serialize)]
+struct LocationAdminConfig {
+    store_type:           String,
+    ttl_secs:             u64,
+    shard_size_m:         f64,
+    update_interval_secs: u64,
+    update_distance_m:    f64,
+    sweep_interval_secs:  u64,
+    nearby_limit:         usize,
+}
+
 #[derive(Clone)]
 struct AppState {
     db:                  Database,
@@ -165,6 +177,7 @@ struct AppState {
     nearby_cache:        Arc<RwLock<HashMap<String, NearbyCache>>>,
     block_cache:         Arc<RwLock<HashMap<String, BlockCacheEntry>>>,
     tier_radius_cache:   Arc<RwLock<HashMap<String, TierRadiusCacheEntry>>>,
+    admin_config:        LocationAdminConfig,
 }
 
 impl FromRef<AppState> for JwtSecret {
@@ -630,6 +643,15 @@ async fn get_user_location(
     (StatusCode::NOT_FOUND, Json(json!({ "error": "Location not found." }))).into_response()
 }
 
+// ── GET /admin/config — read-only location config (gateway enforces admin role) ─
+
+async fn admin_get_config(
+    _svc: ServiceToken,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    Json(&state.admin_config).into_response()
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -687,6 +709,16 @@ async fn main() {
         });
     }
 
+    let admin_config = LocationAdminConfig {
+        store_type:           cfg.location_store.clone(),
+        ttl_secs:             cfg.ttl.as_secs(),
+        shard_size_m:         cfg.shard_m,
+        update_interval_secs: cfg.update_interval.as_secs(),
+        update_distance_m:    cfg.update_distance_m,
+        sweep_interval_secs:  cfg.sweep_interval.as_secs(),
+        nearby_limit:         cfg.nearby_limit,
+    };
+
     let state = AppState {
         db,
         store,
@@ -700,6 +732,7 @@ async fn main() {
         nearby_cache:        Arc::new(RwLock::new(HashMap::new())),
         block_cache:         Arc::new(RwLock::new(HashMap::new())),
         tier_radius_cache:   Arc::new(RwLock::new(HashMap::new())),
+        admin_config,
     };
 
     let app = Router::new()
@@ -709,6 +742,7 @@ async fn main() {
         .route("/location/nearby",          get(get_nearby))
         .route("/location/online-batch",    post(post_online_batch))
         .route("/location/user/{user_id}",  get(get_user_location))
+        .route("/admin/config",             get(admin_get_config))
         .fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({ "error": "Not found." }))) })
         .with_state(state);
 
