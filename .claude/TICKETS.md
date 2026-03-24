@@ -17,6 +17,7 @@ UI modals verified 2026-03-24: login and register modals use OPAQUE two-round fl
 ---
 
 ## T-24 — Profile Data Encryption
+<!-- TICKET id:T-24 status:planned priority:high phase:0/4 prereqs:T-23,SEC-1.10,SEC-1.11 relates:T-05b -->
 
 **Status:** Planned. Prerequisites: T-23 deployed ✅ (OPAQUE live, `exportKey` available), SEC-1.10/1.11 deployed ✅ (PBKDF2 + `emailSalt` in DB).
 
@@ -126,6 +127,7 @@ When B blocks A, B must generate a new `profileKey`, re-encrypt all profile data
 ---
 
 ## T-25 — Per-User OPRF Key Rotation (Auto-Rotation)
+<!-- TICKET id:T-25 status:planned priority:medium phase:0/3 prereqs:T-23 -->
 
 **Status:** Planned. Prerequisites: T-23 deployed ✅. Requires a separate key service (see infrastructure note).
 
@@ -189,6 +191,7 @@ The per-user OPRF keys must live in genuinely separate infrastructure from the `
 ---
 
 ## T-20 — Sharded Location Store (performance at scale)
+<!-- TICKET id:T-20 status:deferred priority:low phase:4/5 -->
 
 **Status:** Phases 1–4 ✅ complete (2026-03-23). Phase 5 deferred. Details in TICKETS_DONE.md.
 
@@ -199,6 +202,7 @@ Track here, implement later. Idea: a background task monitors shard population s
 ---
 
 ## T-21 — Continental location-service routing
+<!-- TICKET id:T-21 status:deferred priority:low prereqs:T-20 -->
 
 **Status:** Deferred. Prerequisite: T-20 complete and deployed.
 
@@ -258,6 +262,7 @@ requires no new infrastructure.
 ---
 
 ## T-02 — Analytics (`anal.js` / analytics-service)
+<!-- TICKET id:T-02 status:not-started priority:low -->
 
 **Status:** Not started.
 
@@ -284,6 +289,7 @@ requires no new infrastructure.
 ---
 
 ## T-05b — Encrypted note field in blocks
+<!-- TICKET id:T-05b status:planned priority:medium prereqs:T-23 relates:T-24 -->
 
 **Status:** Not started. Blocked on OPAQUE implementation.
 
@@ -302,6 +308,7 @@ Note field (`note: "..."`) — storing free-text without proper client-side encr
 **Status:** Phase 1 ✅ complete (2026-03-18). T-06c ✅ complete (2026-03-18). T-06b deferred. Details in TICKETS_DONE.md.
 
 ### Phase 2 — Venue messaging (T-06b, deferred)
+<!-- TICKET id:T-06b status:deferred priority:medium prereqs:T-08 -->
 
 - Manager inbox context ("acting as venue X")
 - `GET /manager/venues/:id/messages`
@@ -323,6 +330,7 @@ T-15 tracks orphan venue reassignment (when manager is deleted) — still deferr
 ---
 
 ## T-15 — Orphan Venue Reassignment
+<!-- TICKET id:T-15 status:deferred priority:low -->
 
 **Status:** Not started. Deferred until multi-role support exists.
 
@@ -346,6 +354,7 @@ No implementation until multi-role support is landed and a preferred option is c
 ---
 
 ## T-07b — Device Notifications
+<!-- TICKET id:T-07b status:not-started priority:medium -->
 
 **Status:** Not started. **Priority: medium.**
 
@@ -393,6 +402,7 @@ Phase 1 ✅ complete (2026-03-18). Details in TICKETS_DONE.md.
 ---
 
 ### Phase 2 — Authority Service (ex-T-08)
+<!-- TICKET id:T-08 status:in-progress priority:high phase:1/2 prereqs:T-01,T-04c -->
 
 **Problem:** No single authority for user rights and limits.
 
@@ -485,6 +495,7 @@ Scope (normalise accountType/tier/role data model) absorbed into T-08 as Phase 1
 ---
 
 ## T-09 — Role CRUD with Permissions UI
+<!-- TICKET id:T-09 status:not-started priority:medium prereqs:T-08 -->
 
 **Status:** Not started. Requires backend changes.
 
@@ -520,6 +531,7 @@ This does not require a `roles` collection and can be implemented at any time.
 ---
 
 ## T-16 — meta collection: runtime-configurable settings
+<!-- TICKET id:T-16 status:in-progress priority:medium phase:1/2 prereqs:T-08 -->
 
 **Status:** Partially implemented (2026-03-23). The `admin_settings` MongoDB collection (seeded by migration `009_admin_settings`) and the admin Settings tab are live. Remaining: location/sharding settings (SHARD_SIZE_M — Phase 5 of T-20 deferred), and user-scope keys already handled by T-07a preferences. See below for what is still open.
 
@@ -584,6 +596,7 @@ Everything crypto, bcrypt cost, JWT structure, CORS — hard-code, no exceptions
 ---
 
 ## T-14 — Manager-tier venue quota (tiered multi-venue)
+<!-- TICKET id:T-14 status:deferred priority:low prereqs:T-08 -->
 
 **Status:** Deferred — no tier infrastructure exists for managers yet.
 
@@ -622,7 +635,8 @@ truth for roles + tiers before adding a second tier dimension.
 
 ---
 
-## T-19 Notification banner on the map
+## T-19 — Notification banner on the map
+<!-- TICKET id:T-19 status:open priority:medium -->
 
 **Status:** Open
 
