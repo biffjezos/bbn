@@ -6,68 +6,100 @@
 
 ---
 
-**Branch:** `claude/test-harness-structure-ejKZg`
+**Branch:** `claude/review-next-tasks-uK0sn`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24 wrap-up
+**Last updated:** 2026-03-24 pre-commit
 
 ---
 
 ## In Progress
 
-_(nothing — session wrapped up cleanly)_
+T-08 Phase 2 — Authority Service implementation (committing now).
 
 ---
 
 ## Completed This Session
 
-- [c5ccf82] harness: AUDIT concern files tagged + sessionstart audit board
-- [4d2fd20] harness: SESSION.md mtime refresh (fix for verify.sh stale check)
-- [36c0973] harness: unified ITEM format — audit files, TICKETS.md, sessionstart.sh
+- T-08 Phase 3 added to TICKETS.md (dynamic feature-tier admin UI)
+- `authority-service` crate created: `src/main.rs`, `src/auth.rs` (OPAQUE), `src/tiers.rs` (tier CRUD + features), `src/verify.rs` (`POST /authority/verify`)
+- `services/Cargo.toml` — added `authority-service` to workspace members
+- `services/Dockerfile.authority` created (mirrors Dockerfile.auth pattern)
+- Gateway modularised into 5 modules: `rate.rs`, `proxy.rs`, `guards.rs`, `handlers.rs`, `ws.rs` — `main.rs` trimmed to ~260 lines (Config + AppState + main + router)
+- Gateway env var `AUTH_SERVICE_URL` → `AUTHORITY_SERVICE_URL` (covers auth + tiers + verify)
+- `TIERS_SERVICE_URL` removed from gateway — all tier routes now point to authority-service
+- `common/src/auth.rs` — added `GatewayIdentity`, `AuthedByGateway`, `RegisteredByGateway`, `TokenProfile`, `ProfileFromToken`
+- `messages-service`, `favourites-service`, `blocks-service` — `RequireRegistered` → `RegisteredByGateway`
+- `location-service` — `AuthToken` → `AuthedByGateway + ProfileFromToken`; `get_nearby` uses `identity.radii.nearby_m` directly (eliminates tiers-service round-trip when gateway headers present)
+- All changed crates: `cargo check` clean (warnings only)
 
 ---
 
 ## Key Decisions Made
 
-- Unified tag: `<!-- ITEM id:X status:Y priority:Z concern:W [phase:N/M] [prereqs:...] [relates:...] -->`
-- `T` is a valid prefix — `T-08` follows the same `PREFIX-N` pattern as `INFRA-1.1`, `SEC-1.10`, etc.
-- `severity` renamed to `priority` (same concept, unified vocabulary)
-- `concern` field added to ticket tags: `auth · services · db · infra · ui`
-- Status vocabulary: `open · planned · active · blocked · deferred · done · closed · superseded`
-- `sessionstart.sh` uses a shared `parse_items()` function — tickets skip `done:closed`, audit skips `resolved:superseded`
+- **gateway modules**: `main.rs` is now only Config + AppState + main(). All handlers, guards, proxy helpers, rate limiting, and WS logic are in their own modules. Requested by owner.
+- **`proxy()` takes `Option<VerifyResponse>` by value** (not by ref) — avoids async borrow lifetime issues when closures own the identity.
+- **`AUTH_SERVICE_URL` renamed to `AUTHORITY_SERVICE_URL`** — single URL for auth + tiers + verify. Old `TIERS_SERVICE_URL` removed from gateway config. Admin tiers routes now go to authority-service.
+- **`ProfileFromToken`** extractor added to common — decodes nickname/sex/age from JWT without tokenVersion check. Used by location-service's `put_location` because those profile fields aren't in GatewayIdentity.
+- **Backwards-compatible**: `AuthedByGateway` falls back to `AuthToken` (JWT decode + DB check) when X-Auth-Sub is absent. Services continue to work before gateway is updated.
+- **`fetch_favourite_ids` refactored** in location-service to take `(sub: &str, role: &str)` instead of `&UserClaims` — simpler, no type dependency.
 
 ---
 
 ## Blockers / Parked Items
 
-_(none)_
+- MAINT-2.3 (per-handler role guards scattered in services): partially resolved — gateway now uses `authority_guard` + `role_guard` consistently; services are now using `RegisteredByGateway` which is role-aware.
+- `authority-service` not yet deployed on Railway — see handoff notes below for required actions.
 
 ---
 
 ## Handoff Notes
 
-### Harness state — fully complete
+### What was built
 
-All harness structure work on this branch is done and pushed:
+The full T-08 Phase 2 code is done:
 
-1. **`<!-- ITEM ... -->` tags** are present on every ticket in `TICKETS.md` and every finding in all five audit concern files.
-2. **Field vocabulary is unified** across tickets and audit: `id`, `status`, `priority`, `concern`, optional `phase`, `prereqs`, `relates`.
-3. **`sessionstart.sh`** uses a single `parse_items()` bash function that generates both the TICKETS board and the AUDIT board from their respective files — no duplication, no divergence.
-4. **verify.sh** passes cleanly. The only check is SESSION.md freshness (mtime < 10 min at push time).
+1. **`authority-service`** — new crate that merges auth-service + tiers-service. Exposes all auth routes, all tier routes, and the new `POST /authority/verify`. Build with `Dockerfile.authority`.
 
-### To add a new item
+2. **Gateway modularised** — `main.rs` is now ~260 lines. Five new module files. All compile clean.
 
-- Tickets: add a `## T-XX — Title` heading in `TICKETS.md`, then `<!-- ITEM id:T-XX status:open priority:medium concern:X -->` on the next line.
-- Audit: add a `### PREFIX-N.N Title` heading in the relevant concern file, then `<!-- ITEM id:PREFIX-N.N status:open priority:medium concern:X -->`.
-- It will appear automatically on the next session-start board.
+3. **Gateway env var change** — `AUTH_SERVICE_URL` is gone. Gateway now reads `AUTHORITY_SERVICE_URL` (required). `TIERS_SERVICE_URL` is also gone from gateway config. The old tiers-service can remain running on Railway — gateway just won't call it anymore.
 
-### To close/resolve an item
+4. **Downstream services** updated: messages, favourites, blocks, location all use `AuthedByGateway`/`RegisteredByGateway`. They are fully backwards-compatible (fall back to AuthToken when X-Auth-Sub header absent).
 
-- Tickets: change `status:` to `done` or `closed` → disappears from board. Then move to `TICKETS_DONE.md` with a stub.
-- Audit: change `status:` to `resolved` or `superseded` → disappears from board. Then move to `AUDIT_DONE.md` with a stub.
+### Railway deployment steps (owner must do manually)
+
+**Before deploying authority-service:**
+1. Create a new Railway service named `authority-service`.
+2. Set build command: `docker build -f services/Dockerfile.authority -t authority-service .` (or configure Railway to use `Dockerfile.authority`).
+3. Set env vars (copy from existing `auth-service` Railway service — they are the same):
+   - `MONGO_URI`
+   - `JWT_SECRET`
+   - `SERVICE_SECRET`
+   - `EMAIL_PEPPER`
+   - `OPAQUE_SERVER_SETUP`
+   - `DB_NAME` (optional, defaults to `boomboom`)
+
+**After authority-service is running:**
+4. In the **gateway** Railway service, set:
+   - `AUTHORITY_SERVICE_URL` = internal URL of the new authority-service
+   - Remove `AUTH_SERVICE_URL` (no longer needed)
+   - Remove `TIERS_SERVICE_URL` (no longer needed)
+5. Redeploy gateway.
+
+**Auth-service** can remain running until confirmed stable; then retire it.
+
+### Phase 2 step status
+
+Steps from the T-08 Phase 2 ticket:
+1. ✅ Merge auth-service + tiers-service → authority-service (code done, not yet deployed)
+2. ✅ `POST /authority/verify` endpoint (done)
+3. ✅ Gateway updated — calls authority/verify, injects X-Auth-* headers (code done, not yet deployed)
+4. ✅ Downstream services updated to read X-Auth-* (done, backwards-compatible)
+5. ⬜ Retire tiers-service on Railway (pending deployment of authority-service)
 
 ### Next work
 
-Owner will merge PR for this branch. Next session picks up from the open tickets:
-- **T-08 (active/high)** — Authority Service Phase 2
-- **T-16 (active/medium)** — meta collection runtime-configurable settings Phase 2
-- **T-24 (planned/high)** — Profile Data Encryption
+- Deploy authority-service (see Railway steps above)
+- Retire auth-service and tiers-service after confirming authority-service is healthy
+- T-08 Phase 3: dynamic feature-tier admin UI (see TICKETS.md)
+- T-16 Phase 2: meta collection runtime-configurable settings

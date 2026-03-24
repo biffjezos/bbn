@@ -20,16 +20,19 @@
 ### MAINT-2.3 Per-handler role guards still scattered across services
 <!-- ITEM id:MAINT-2.3 status:open priority:low concern:maintainability -->
 
-**Date:** 2026-03-16 (updated 2026-03-19)
-**Files:** `services/users-service/src/main.rs`, `services/gateway/src/main.rs`, `ui/_layouts/default.html`
+**Date:** 2026-03-16 (updated 2026-03-24)
+**Files:** `services/users-service/src/main.rs`, `ui/_layouts/default.html`
 
-**What is now resolved:** Token *verification* is fully centralised — `AuthToken`, `RequireRegistered`, `ServiceToken`, and `AdminUser` Axum extractors in `services/common/src/auth.rs` handle all JWT validation. No per-service re-implementations remain. The original three-layer bug (frontend guard, backend verifyToken, issueUserToken) is fixed.
+**What is now resolved (2026-03-24 T-08 Phase 2):**
+- Gateway now uses a single `authority_guard()` + `role_guard()` pattern — no more `admin_guard()`/`manager_guard()` helpers.
+- Messages, favourites, blocks, location services now use `RegisteredByGateway`/`AuthedByGateway` from common — no per-service JWT decoding or role checks in those handlers.
+- `common/src/auth.rs` has `GatewayIdentity` with pre-verified role — a role change in authority now propagates automatically.
 
-**What remains:** Individual *role guards* inside handler bodies are still per-service (e.g., `claims.role != "admin"` repeated in `users-service` for every admin endpoint; gateway has its own `admin_guard()` / `manager_guard()` helpers). The gateway does **not** inject `X-Auth-Role` or similar trusted headers — it passes the raw `Authorization` header downstream. Adding a new role still requires auditing handler-level checks across multiple files.
+**What remains:** `users-service` still has `AdminUser`/`RequireRegistered` extractors for its own admin routes (separate from gateway). These run an independent tokenVersion DB check. This is intentional (services must still validate independently when not behind the gateway), but the pattern is inconsistent with the newer `AuthedByGateway` approach.
 
-**Suggested resolution:** T-08 Phase 2 — gateway injects `X-Auth-Sub`, `X-Auth-Role`, `X-Auth-Tier`, `X-Auth-TV` as trusted headers; services drop JWT re-verification and read headers. Role-model changes would then require only one file.
+**Suggested next step:** Migrate `users-service` admin handlers to `AuthedByGateway` in a focused follow-up session.
 
-**Priority:** LOW — token verification is solid; the remaining scatter is a future-maintenance risk, not an active bug.
+**Priority:** LOW — role guards are correct; this is a consistency improvement.
 
 ---
 

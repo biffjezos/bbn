@@ -20,7 +20,7 @@ use axum::{
     Router,
 };
 use common::{
-    auth::{JwtSecret, ServiceSecret, RequireRegistered, ServiceToken},
+    auth::{JwtSecret, ServiceSecret, RegisteredByGateway, ServiceToken},
     geo::haversine_distance,
     mongo::safe_object_id,
     service_token::ServiceTokenCache,
@@ -222,12 +222,12 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn get_favourites(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let entries: Vec<FavouriteDoc> = match state.db
         .collection::<FavouriteDoc>("favourites")
-        .find(doc! { "ownerUserId": &claims.sub })
+        .find(doc! { "ownerUserId": &identity.sub })
         .sort(doc! { "addedAt": -1 })
         .await
     {
@@ -305,11 +305,11 @@ async fn get_favourites(
 
 async fn post_favourite(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(favourite_user_id): Path<String>,
 ) -> impl IntoResponse {
-    if claims.sub == favourite_user_id {
+    if identity.sub == favourite_user_id {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Cannot favourite yourself." }))).into_response();
     }
 
@@ -330,7 +330,7 @@ async fn post_favourite(
 
     match state.db.collection::<Document>("favourites")
         .insert_one(doc! {
-            "ownerUserId":     &claims.sub,
+            "ownerUserId":     &identity.sub,
             "favouriteUserId": &favourite_user_id,
             "addedAt":         BsonDateTime::now(),
         })
@@ -344,7 +344,7 @@ async fn post_favourite(
 
     // Notify the favourited user — upsert so remove+re-add doesn't stack up
     let notif_result: anyhow::Result<()> = async {
-        let owner_oid = safe_object_id(&claims.sub).ok_or_else(|| anyhow::anyhow!("bad oid"))?;
+        let owner_oid = safe_object_id(&identity.sub).ok_or_else(|| anyhow::anyhow!("bad oid"))?;
         let owner = state.db.collection::<UserProfile>("users")
             .find_one(doc! { "_id": owner_oid })
             .projection(doc! { "_id": 1, "nickname": 1, "sex": 1, "accountType": 1 })
@@ -355,12 +355,12 @@ async fn post_favourite(
             .replace_one(
                 doc! {
                     "recipientUserId": &favourite_user_id,
-                    "fromUserId":      &claims.sub,
+                    "fromUserId":      &identity.sub,
                     "type":            "new_favourite",
                 },
                 doc! {
                     "recipientUserId": &favourite_user_id,
-                    "fromUserId":      &claims.sub,
+                    "fromUserId":      &identity.sub,
                     "fromNickname":    owner.nickname.as_deref().unwrap_or(""),
                     "fromSex":         from_sex,
                     "type":            "new_favourite",
@@ -383,18 +383,18 @@ async fn post_favourite(
 
 async fn get_is_mutual(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(user_id): Path<String>,
 ) -> impl IntoResponse {
-    if claims.sub == user_id {
+    if identity.sub == user_id {
         return Json(json!({ "mutual": false })).into_response();
     }
 
     let fav_coll = state.db.collection::<Document>("favourites");
     let (my_doc, their_doc) = tokio::join!(
-        fav_coll.find_one(doc! { "ownerUserId": &claims.sub, "favouriteUserId": &user_id }),
-        fav_coll.find_one(doc! { "ownerUserId": &user_id, "favouriteUserId": &claims.sub }),
+        fav_coll.find_one(doc! { "ownerUserId": &identity.sub, "favouriteUserId": &user_id }),
+        fav_coll.find_one(doc! { "ownerUserId": &user_id, "favouriteUserId": &identity.sub }),
     );
 
     match (my_doc, their_doc) {
@@ -601,12 +601,12 @@ async fn post_range_sync(
 
 async fn delete_favourite(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(favourite_user_id): Path<String>,
 ) -> impl IntoResponse {
     match state.db.collection::<Document>("favourites")
-        .delete_one(doc! { "ownerUserId": &claims.sub, "favouriteUserId": &favourite_user_id })
+        .delete_one(doc! { "ownerUserId": &identity.sub, "favouriteUserId": &favourite_user_id })
         .await
     {
         Ok(r) if r.deleted_count == 0 => (StatusCode::NOT_FOUND, Json(json!({ "error": "Favourite not found." }))).into_response(),
@@ -619,12 +619,12 @@ async fn delete_favourite(
 
 async fn get_notifications(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let items: Vec<NotificationDoc> = match state.db
         .collection::<NotificationDoc>("notifications")
-        .find(doc! { "recipientUserId": &claims.sub })
+        .find(doc! { "recipientUserId": &identity.sub })
         .sort(doc! { "createdAt": -1 })
         .limit(20)
         .await
@@ -639,7 +639,7 @@ async fn get_notifications(
         HashSet::new()
     } else {
         match state.db.collection::<Document>("favourites")
-            .find(doc! { "ownerUserId": &claims.sub, "favouriteUserId": { "$in": &sender_ids } })
+            .find(doc! { "ownerUserId": &identity.sub, "favouriteUserId": { "$in": &sender_ids } })
             .projection(doc! { "favouriteUserId": 1 })
             .await
         {
@@ -670,7 +670,7 @@ async fn get_notifications(
 
 async fn delete_notification(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(notif_id): Path<String>,
 ) -> impl IntoResponse {
@@ -680,7 +680,7 @@ async fn delete_notification(
     };
 
     match state.db.collection::<Document>("notifications")
-        .delete_one(doc! { "_id": oid, "recipientUserId": &claims.sub })
+        .delete_one(doc! { "_id": oid, "recipientUserId": &identity.sub })
         .await
     {
         Ok(r) if r.deleted_count == 0 => (StatusCode::NOT_FOUND, Json(json!({ "error": "Notification not found." }))).into_response(),
