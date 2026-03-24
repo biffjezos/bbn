@@ -20,14 +20,13 @@ Implementing collaboration workflow improvements (requested by owner this sessio
 - `.claude/settings.json` — project-level hook wiring ✅
 - `.claude/verify.sh` — post-commit artifact verification script ✅
 - `.claude/SESSION.md` — this file ✅
-- `.claude/CLAUDE.md` — rule updates (in progress)
-- `.claude/CHANGELOG.md` — log entry (pending)
+- `.claude/settings.json` — adding SessionStart compact hook (pending commit)
 
 ---
 
 ## Completed This Session
 
-_(no commits yet — initial file creation phase)_
+- [5c5b30f] harness: SESSION.md, hooks (PreCompact, PostToolUse), verify.sh, settings.json, CLAUDE.md rules
 
 ---
 
