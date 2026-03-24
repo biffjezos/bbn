@@ -8,13 +8,13 @@
 
 **Branch:** `claude/review-next-tasks-uK0sn`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24 pre-commit
+**Last updated:** 2026-03-24 hotfix
 
 ---
 
 ## In Progress
 
-T-08 Phase 2 — Authority Service implementation (committing now).
+Hotfix: added `authority-service` workspace stub to all 9 existing Dockerfiles so Railway builds don't fail when resolving the Cargo workspace.
 
 ---
 
