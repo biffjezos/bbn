@@ -95,6 +95,10 @@ async function initAdmin() {
     '      <i class="bi bi-person-badge me-2"></i>Roles</button>',
     '  </li>',
     '  <li class="nav-item" role="presentation">',
+    '    <button class="nav-link" data-tab="features" type="button">',
+    '      <i class="bi bi-toggles me-2"></i>Features</button>',
+    '  </li>',
+    '  <li class="nav-item" role="presentation">',
     '    <button class="nav-link" data-tab="settings" type="button">',
     '      <i class="bi bi-sliders me-2"></i>Settings</button>',
     '  </li>',
@@ -108,6 +112,7 @@ async function initAdmin() {
       btn.classList.add('active');
       if (btn.dataset.tab === 'users') renderUsersTab();
       else if (btn.dataset.tab === 'tiers') renderTiersTab();
+      else if (btn.dataset.tab === 'features') renderFeaturesTab();
       else if (btn.dataset.tab === 'settings') renderSettingsTab();
       else renderRolesTab();
     });
@@ -677,6 +682,86 @@ function renderRolesTab() {
     '  </ul>',
     '</div>',
   ].join('');
+}
+
+// ── Features tab ──────────────────────────────────────────────
+
+var TIER_ORDER = ['guest', 'regular', 'premium', 'unrestricted'];
+
+async function renderFeaturesTab() {
+  var content = document.getElementById('adminTabContent');
+  content.innerHTML = '<p class="text-muted-bb small">Loading features…</p>';
+  try {
+    var data = await window.Api.adminListFeatures();
+    var features = (data.features || []).slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name);
+    });
+
+    var html = ['<div id="featuresContainer">'];
+    html.push('<div class="bbm-section mb-4">');
+    html.push('  <p class="small text-muted-bb mb-3">Set the minimum tier required to access each feature. Changes take effect within 60 seconds.</p>');
+    if (features.length === 0) {
+      html.push('  <p class="text-muted-bb small">No features found.</p>');
+    } else {
+      html.push('  <div class="row g-3">');
+      features.forEach(function (f) {
+        html.push('    <div class="col-12 col-sm-6 col-md-4">');
+        html.push('      <div class="bbm-section p-3">');
+        html.push('        <div class="fw-semibold mb-1" style="font-size:0.9rem">' + escHtml(f.label) + '</div>');
+        html.push('        <code class="small text-muted-bb d-block mb-1">' + escHtml(f.name) + '</code>');
+        html.push('        <div class="small text-muted-bb mb-2" style="font-size:0.75rem">' + escHtml(f.description) + '</div>');
+        html.push('        <div class="d-flex align-items-center gap-2">');
+        html.push('          <select class="form-select form-select-sm" id="feature-tier-' + escHtml(f.name) + '" data-feature-name="' + escHtml(f.name) + '">');
+        TIER_ORDER.forEach(function (t) {
+          var sel = t === (f.minTier || f.min_tier) ? ' selected' : '';
+          html.push('            <option value="' + t + '"' + sel + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>');
+        });
+        html.push('          </select>');
+        html.push('          <button class="btn btn-bbm-primary btn-sm flex-shrink-0"'
+          + ' data-save-feature="' + escHtml(f.name) + '"'
+          + ' data-feature-label="' + escHtml(f.label) + '"'
+          + ' data-feature-desc="' + escHtml(f.description) + '"'
+          + '>Save</button>');
+        html.push('        </div>');
+        html.push('        <div id="feature-msg-' + escHtml(f.name) + '" class="small mt-1" style="min-height:1em"></div>');
+        html.push('      </div>');
+        html.push('    </div>');
+      });
+      html.push('  </div>');
+    }
+    html.push('</div>');
+    html.push('</div>');
+    content.innerHTML = html.join('');
+
+    content.querySelectorAll('[data-save-feature]').forEach(function (btn) {
+      btn.addEventListener('click', function () { saveFeatureMinTier(btn.dataset.saveFeature); });
+    });
+  } catch (err) {
+    content.innerHTML = '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
+  }
+}
+
+async function saveFeatureMinTier(name) {
+  var sel = document.getElementById('feature-tier-' + name);
+  var msg = document.getElementById('feature-msg-' + name);
+  var btn = document.querySelector('[data-save-feature="' + name + '"]');
+  if (!sel || !msg) return;
+  var minTier = sel.value;
+  msg.style.color = '';
+  msg.textContent = 'Saving…';
+  try {
+    await window.Api.adminUpdateFeature(name, {
+      label:       btn ? btn.dataset.featureLabel : name,
+      description: btn ? btn.dataset.featureDesc  : '',
+      minTier:     minTier,
+    });
+    msg.style.color = 'var(--bbm-success, #00e5a0)';
+    msg.textContent = 'Saved.';
+    setTimeout(function () { if (msg.textContent === 'Saved.') msg.textContent = ''; }, 2000);
+  } catch (err) {
+    msg.style.color = 'var(--bbm-danger, #e74c3c)';
+    msg.textContent = err.message || 'Error saving.';
+  }
 }
 
 // ── Settings tab ──────────────────────────────────────────────

@@ -90,6 +90,7 @@ const MIGRATIONS: &[&str] = &[
     "007_shard_index",
     "008_opaque_emailhash",
     "009_admin_settings",
+    "010_meta_rename_and_features",
 ];
 
 async fn migration_001(db: &Database) -> Result<(), mongodb::error::Error> {
@@ -340,6 +341,78 @@ async fn migration_009(db: &Database) -> Result<(), mongodb::error::Error> {
     Ok(())
 }
 
+async fn migration_010(db: &Database) -> Result<(), mongodb::error::Error> {
+    // 1. Rename tiers → meta_tiers (copy + drop)
+    {
+        let meta_tiers = db.collection::<Document>("meta_tiers");
+        meta_tiers.create_index(
+            IndexModel::builder()
+                .keys(doc! { "name": 1 })
+                .options(IndexOptions::builder().unique(true).build())
+                .build(),
+        ).await?;
+        let old = db.collection::<Document>("tiers");
+        let docs: Vec<Document> = match old.find(doc! {}).await {
+            Ok(c) => c.try_collect().await.unwrap_or_default(),
+            Err(_) => vec![],
+        };
+        if !docs.is_empty() { let _ = meta_tiers.insert_many(docs).await; }
+        let _ = old.drop().await;
+    }
+
+    // 2. Rename admin_settings → meta_settings (copy + drop)
+    {
+        let meta_settings = db.collection::<Document>("meta_settings");
+        meta_settings.create_index(
+            IndexModel::builder()
+                .keys(doc! { "key": 1 })
+                .options(IndexOptions::builder().unique(true).build())
+                .build(),
+        ).await?;
+        let old = db.collection::<Document>("admin_settings");
+        let docs: Vec<Document> = match old.find(doc! {}).await {
+            Ok(c) => c.try_collect().await.unwrap_or_default(),
+            Err(_) => vec![],
+        };
+        if !docs.is_empty() { let _ = meta_settings.insert_many(docs).await; }
+        let _ = old.drop().await;
+    }
+
+    // 3. Drop stale sessions TTL index so gateway can recreate with correct 15-min value (INFRA-1.2)
+    let _ = db.collection::<Document>("sessions").drop_index("createdAt_1").await;
+
+    // 4. Create meta_features collection, index, and seed defaults
+    {
+        let col = db.collection::<Document>("meta_features");
+        col.create_index(
+            IndexModel::builder()
+                .keys(doc! { "name": 1 })
+                .options(IndexOptions::builder().unique(true).build())
+                .build(),
+        ).await?;
+        let now = BsonDateTime::now();
+        let seeds: &[(&str, &str, &str, &str)] = &[
+            ("see_map",           "See Map",           "Can access the map view.",                  "guest"),
+            ("see_nearby",        "See Nearby Users",  "Can see other users on the map.",           "guest"),
+            ("message_online",    "Message Online",    "Can send messages to online users.",        "regular"),
+            ("message_offline",   "Message Offline",   "Can send messages to offline users.",       "regular"),
+            ("message_radius",    "Message Radius",    "Has an extended message radius.",           "regular"),
+            ("manage_favourites", "Manage Favourites", "Can add and remove users from favourites.", "regular"),
+        ];
+        for (name, label, description, min_tier) in seeds {
+            col.update_one(
+                doc! { "name": *name },
+                doc! { "$setOnInsert": doc! {
+                    "name": *name, "label": *label, "description": *description,
+                    "minTier": *min_tier, "createdAt": now, "updatedAt": now,
+                }},
+            ).upsert(true).await?;
+        }
+    }
+
+    Ok(())
+}
+
 async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Error> {
     match id {
         "001_indexes"                => migration_001(db).await,
@@ -351,6 +424,7 @@ async fn run_migration(id: &str, db: &Database) -> Result<(), mongodb::error::Er
         "007_shard_index"            => migration_007(db).await,
         "008_opaque_emailhash"       => migration_008(db).await,
         "009_admin_settings"         => migration_009(db).await,
+        "010_meta_rename_and_features" => migration_010(db).await,
         _                            => Ok(()), // unknown migration — skip
     }
 }

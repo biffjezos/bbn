@@ -6,65 +6,60 @@
 
 ---
 
-**Branch:** `claude/refactor-tickets-structure-FrWB7`
+**Branch:** `claude/verify-t08-phase2-deployment-z6h0n`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24 wrap-up
+**Last updated:** 2026-03-24
 
 ---
 
 ## In Progress
 
-Nothing — session wrapped.
+Committing T-08 Phase 3 implementation (all 5 services compile clean).
 
 ---
 
 ## Completed This Session
 
-- Ticket structure migrated from flat TICKETS.md/TICKETS_DONE.md to individual files:
-  - `.claude/tickets/<id>.md` — 14 open/active/planned/deferred tickets
-  - `.claude/tickets/done/<id>.md` — 13 done stubs
-  - `TICKETS.md` rewritten as a one-table index with implementation order and architectural decisions
-- `verify.sh` updated — ticket stub check now looks in `tickets/` directory first (with TICKETS.md fallback)
-- `AUDIT.md` concern file descriptions tightened to one concise line each
-- `CLAUDE.md` updated — Pre-Session Checklist, Before Each Commit, Wrap-Up Checklist, and Persistent Files section all reflect the new ticket structure
-- `CHANGELOG.md` updated with CHANGE entry
+- T-08 Phase 2 confirmed deployed and working by owner
+- `tickets/T-08.md` updated: phase 3/3 active; `tickets/done/T-08-phase2.md` created
+- `TICKETS.md` index updated
+- INFRA-1.0 and INFRA-1.1 resolved — Railway plan upgraded (1 TB storage)
+- `meta_*` collection naming convention agreed and implemented:
+  - `tiers` → `meta_tiers` (authority-service references updated)
+  - `admin_settings` → `meta_settings` (authority-service, users-service, messages-service updated)
+  - `meta_features` — new collection for feature-tier gate definitions
+- T-08 Phase 3 fully implemented (subagent):
+  - **migration 010** — renames `tiers`→`meta_tiers`, `admin_settings`→`meta_settings`, drops stale sessions TTL index (INFRA-1.2 fix), creates `meta_features` + seeds 6 default features
+  - **authority-service/tiers.rs** — `FeatureDoc` struct, `FeaturesCache` + `load_features()` (60s TTL, DB-backed), `can()` + `features_for_tier()` take map arg, all `"tiers"` → `"meta_tiers"`, admin CRUD for features
+  - **authority-service/main.rs** — `features_cache` in AppState, `"meta_settings"` collection
+  - **authority-service/verify.rs** — loads features from cache before feature check and response
+  - **users-service/main.rs** — `"meta_settings"` collection (4 occurrences)
+  - **messages-service/main.rs** — `"meta_settings"` collection (1 occurrence)
+  - **gateway/handlers.rs** — 4 admin features proxy handlers
+  - **gateway/main.rs** — `/api/admin/features` and `/api/admin/features/{name}` routes
+  - All 5 Rust services compile clean (warnings only)
 
 ---
 
 ## Key Decisions Made
 
-- **Option A for phases:** all phases stay in one ticket file (T-08.md); frontmatter tracks current phase. Avoids file-switching friction.
-- **All 5 concern files kept independent:** INFRA, MAINT, UX, SEC, PERF remain separate. No collapsing.
-- **Audit items stay in concern files** (no per-item individual files). Only tickets got the individual-file treatment.
-- **TICKETS_DONE.md kept** as legacy reference (not deleted) — done stubs in `tickets/done/` are the canonical record going forward.
+- **`meta_*` collection naming** — all app-config MongoDB collections prefixed with `meta_`. User data collections have no prefix. Makes ownership immediately obvious.
+- **INFRA-1.2 fix included in migration 010** — drops stale `sessions.createdAt_1` TTL index; gateway recreates with correct TTL on next boot. INFRA-1.2 is code-complete but pending deployment.
 
 ---
 
 ## Blockers / Parked Items
 
-- T-08 Phase 2 code is done; Railway deployment pending (owner action — see `tickets/T-08.md` for Railway steps).
+- Migration 010 must run on Railway before the new collection names take effect. Migration runs automatically on gateway boot — redeploy all services after merging this PR.
 
 ---
 
 ## Handoff Notes
 
-### What was done this session
-
-Full ticket structure refactor:
-- Every open ticket from TICKETS.md is now a standalone `tickets/T-XX.md` file with YAML frontmatter.
-- Every done ticket has a stub in `tickets/done/T-XX.md`.
-- TICKETS.md is now a clean index (one row per ticket, plus implementation order and architectural decisions).
-- CLAUDE.md describes the new structure fully; session-start reads only the index.
-- verify.sh checks `tickets/T-XX.md` and `tickets/done/T-XX.md` before falling back to TICKETS.md grep.
-
 ### What to do next
 
-1. Verify the PR is merged and Railway build is green for all services.
-2. Deploy authority-service on Railway (steps in `tickets/T-08.md`, Phase 2 section).
-3. Next code session: T-08 Phase 3 (dynamic feature-tier admin UI) or T-16 Phase 2.
-
-### Notes for next session
-
-- When opening a ticket, check its frontmatter first — `status` and `phase` are ground truth.
-- TICKETS_DONE.md still exists as legacy archive; ignore it for new work.
-- PostToolUse hook and verify.sh both work with the new structure.
+1. **Merge PR → dev** and **redeploy all services** on Railway (gateway boot triggers migration 010 automatically).
+2. Verify admin Features tab works at `/admin`.
+3. Verify Settings tab still works (now reads `meta_settings`).
+4. After deployment confirmed: close INFRA-1.2 (sessions TTL index recreated correctly).
+5. Next ticket: **T-16** or **T-09**.

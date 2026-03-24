@@ -371,6 +371,25 @@ const Api = {
     });
   },
 
+  adminListFeatures() {
+    return apiFetch('/admin/features');
+  },
+
+  adminCreateFeature(data) {
+    return apiFetch('/admin/features', { method: 'POST', body: JSON.stringify(data) });
+  },
+
+  adminUpdateFeature(name, data) {
+    return apiFetch(`/admin/features/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminDeleteFeature(name) {
+    return apiFetch(`/admin/features/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  },
+
   // ---- Notifications ------------------------------------------
 
   getNotifications() {

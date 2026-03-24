@@ -9,7 +9,6 @@ This file is the index — one row per ticket, sorted by priority.
 
 | ID | Status | Priority | Title | Phase |
 |---|---|---|---|---|
-| [T-08](tickets/T-08.md) | active | high | Authority Service + Identity Model | 2/3 |
 | [T-24](tickets/T-24.md) | planned | high | Profile Data Encryption | 0/4 |
 | [T-25](tickets/T-25.md) | planned | medium | Per-User OPRF Key Rotation | 0/3 |
 | [T-05b](tickets/T-05b.md) | planned | medium | Encrypted note field in blocks | — |
@@ -35,6 +34,7 @@ This file is the index — one row per ticket, sorted by priority.
 | [T-20 phases 1–4](tickets/done/T-20-phases1-4.md) | 2026-03-23 | Sharded Location Store (phases 1–4) |
 | [T-18](tickets/done/T-18.md) | 2026-03-22 | Login modal filled after logout |
 | [T-17](tickets/done/T-17.md) | 2026-03-19 | T-17 |
+| [T-08](tickets/done/T-08.md) | 2026-03-24 | Authority Service + Identity Model (all 3 phases) |
 | [T-08 Phase 1](tickets/done/T-08-phase1.md) | 2026-03-18 | Normalise accountType/tier/role (ex-T-13) |
 | [T-07a](tickets/done/T-07a.md) | 2026-03-18 | Settings Page |
 | [T-06 Phase 1 + T-06c](tickets/done/T-06-phase1.md) | 2026-03-18 | Venue Accounts Phase 1 + multi-venue |
@@ -50,8 +50,7 @@ This file is the index — one row per ticket, sorted by priority.
 
 Before any marketing or scaling push:
 
-1. **T-08 Phase 2** — Deploy authority-service (code done, Railway deployment pending)
-2. **T-08 Phase 3** — Dynamic feature-tier admin UI (requires Phase 2 deployed)
+1. **T-08 Phase 3** — Dynamic feature-tier admin UI (Phase 2 ✅ deployed 2026-03-24)
 3. **T-16 Phase 2** — Remaining runtime-configurable settings
 4. **T-09** — Role CRUD with Permissions UI (requires T-08 deployed)
 5. **T-06b** — Venue messaging (requires T-08 for clean auth routing)

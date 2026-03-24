@@ -305,6 +305,22 @@ pub async fn admin_tiers_delete(State(s): State<AppState>, headers: HeaderMap, a
     if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
     admin_guard_then(&s, &headers, |id| proxy(&s, Method::DELETE, format!("{}/admin/tiers/{}", s.authority_url, name), auth_hdr(&headers), None, Some(id))).await
 }
+pub async fn admin_features_list(State(s): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    admin_guard_then(&s, &headers, |id| proxy(&s, Method::GET, format!("{}/admin/features", s.authority_url), auth_hdr(&headers), None, Some(id))).await
+}
+pub async fn admin_features_post(State(s): State<AppState>, headers: HeaderMap, body: Bytes) -> impl IntoResponse {
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    admin_guard_then(&s, &headers, |id| proxy(&s, Method::POST, format!("{}/admin/features", s.authority_url), auth_hdr(&headers), Some(body), Some(id))).await
+}
+pub async fn admin_features_put(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(name): axum::extract::Path<String>, body: Bytes) -> impl IntoResponse {
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    admin_guard_then(&s, &headers, |id| proxy(&s, Method::PUT, format!("{}/admin/features/{}", s.authority_url, name), auth_hdr(&headers), Some(body), Some(id))).await
+}
+pub async fn admin_features_delete(State(s): State<AppState>, headers: HeaderMap, axum::extract::Path(name): axum::extract::Path<String>) -> impl IntoResponse {
+    if !check_lim(&s.lim_api, real_ip(&headers)) { return rate_limited(); }
+    admin_guard_then(&s, &headers, |id| proxy(&s, Method::DELETE, format!("{}/admin/features/{}", s.authority_url, name), auth_hdr(&headers), None, Some(id))).await
+}
 
 // ── Manager (role-gated: venue_manager) ───────────────────────────────────────
 

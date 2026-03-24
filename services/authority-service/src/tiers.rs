@@ -5,7 +5,6 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
 
@@ -25,27 +24,57 @@ use tokio::sync::RwLock;
 
 use crate::AppState;
 
-// ── Feature definitions ───────────────────────────────────────────────────────
+// ── Feature document (stored in meta_features collection) ─────────────────────
 
-#[derive(Serialize, Clone)]
-pub struct Feature {
-    #[serde(rename = "minTier")]
-    pub min_tier: &'static str,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureDoc {
+    pub name:        String,
+    pub label:       String,
+    pub description: String,
+    pub min_tier:    String,
 }
 
-/// TO ADD A NEW FEATURE (Phase 3 will make this a DB operation):
-///   1. Add an entry here with a min_tier.
-///   2. Add the route in the gateway with the feature key.
-pub static FEATURES: LazyLock<HashMap<&'static str, Feature>> = LazyLock::new(|| {
-    HashMap::from([
-        ("see_map",           Feature { min_tier: "guest" }),
-        ("see_nearby",        Feature { min_tier: "guest" }),
-        ("message_online",    Feature { min_tier: "regular" }),
-        ("message_offline",   Feature { min_tier: "regular" }),
-        ("message_radius",    Feature { min_tier: "regular" }),
-        ("manage_favourites", Feature { min_tier: "regular" }),
-    ])
-});
+pub fn static_features() -> HashMap<String, FeatureDoc> {
+    [
+        ("see_map",           "See Map",           "Can access the map view.",                  "guest"),
+        ("see_nearby",        "See Nearby Users",  "Can see other users on the map.",           "guest"),
+        ("message_online",    "Message Online",    "Can send messages to online users.",        "regular"),
+        ("message_offline",   "Message Offline",   "Can send messages to offline users.",       "regular"),
+        ("message_radius",    "Message Radius",    "Has an extended message radius.",           "regular"),
+        ("manage_favourites", "Manage Favourites", "Can add and remove users from favourites.", "regular"),
+    ].into_iter().map(|(name, label, description, min_tier)| (name.to_string(), FeatureDoc {
+        name: name.to_string(), label: label.to_string(),
+        description: description.to_string(), min_tier: min_tier.to_string(),
+    })).collect()
+}
+
+// ── Features cache (60 s TTL) ─────────────────────────────────────────────────
+
+const FEATURES_CACHE_TTL: Duration = Duration::from_secs(60);
+
+pub struct FeaturesCache {
+    pub features:   HashMap<String, FeatureDoc>,
+    pub expires_at: Instant,
+}
+
+pub async fn load_features(cache: &tokio::sync::RwLock<Option<FeaturesCache>>, db: &Database) -> HashMap<String, FeatureDoc> {
+    {
+        let guard = cache.read().await;
+        if let Some(c) = guard.as_ref() {
+            if c.expires_at > Instant::now() { return c.features.clone(); }
+        }
+    }
+    let features = match db.collection::<FeatureDoc>("meta_features").find(doc! {}).await {
+        Err(_) => static_features(),
+        Ok(cursor) => {
+            let docs: Vec<FeatureDoc> = cursor.try_collect().await.unwrap_or_default();
+            if docs.is_empty() { static_features() } else { docs.into_iter().map(|f| (f.name.clone(), f)).collect() }
+        }
+    };
+    *cache.write().await = Some(FeaturesCache { features: features.clone(), expires_at: Instant::now() + FEATURES_CACHE_TTL });
+    features
+}
 
 // ── Tier ranks ────────────────────────────────────────────────────────────────
 
@@ -63,18 +92,15 @@ pub fn is_known_tier(tier: &str) -> bool {
     matches!(tier, "guest" | "regular" | "premium" | "unrestricted")
 }
 
-pub fn can(tier: &str, feature: &str) -> bool {
-    FEATURES
-        .get(feature)
-        .is_some_and(|f| tier_rank(tier) >= tier_rank(f.min_tier))
+pub fn can(tier: &str, feature: &str, features: &HashMap<String, FeatureDoc>) -> bool {
+    features.get(feature).is_some_and(|f| tier_rank(tier) >= tier_rank(&f.min_tier))
 }
 
 /// Returns all feature names the given tier can access.
-pub fn features_for_tier(tier: &str) -> Vec<String> {
-    FEATURES
-        .iter()
-        .filter(|(_, f)| tier_rank(tier) >= tier_rank(f.min_tier))
-        .map(|(k, _)| k.to_string())
+pub fn features_for_tier(tier: &str, features: &HashMap<String, FeatureDoc>) -> Vec<String> {
+    features.iter()
+        .filter(|(_, f)| tier_rank(tier) >= tier_rank(&f.min_tier))
+        .map(|(k, _)| k.clone())
         .collect()
 }
 
@@ -120,7 +146,7 @@ pub async fn load_tiers(cache: &RwLock<Option<TiersCache>>, db: &Database) -> Ha
             }
         }
     }
-    let tiers = match db.collection::<Tier>("tiers").find(doc! {}).await {
+    let tiers = match db.collection::<Tier>("meta_tiers").find(doc! {}).await {
         Err(_) => static_tiers(),
         Ok(cursor) => {
             let docs: Vec<Tier> = cursor.try_collect().await.unwrap_or_default();
@@ -174,7 +200,8 @@ pub async fn tier_info(
     let Some(tier) = tiers.get(&name) else {
         return (StatusCode::NOT_FOUND, Json(json!({ "error": "Unknown tier." }))).into_response();
     };
-    let tier_features = features_for_tier(&tier.name);
+    let features = load_features(&state.features_cache, &state.db).await;
+    let tier_features = features_for_tier(&tier.name, &features);
     Json(json!({
         "name":           tier.name,
         "label":          tier.label,
@@ -185,19 +212,21 @@ pub async fn tier_info(
     })).into_response()
 }
 
-pub async fn tiers_features(_: ServiceToken) -> Json<serde_json::Value> {
-    Json(json!({ "features": &*FEATURES }))
+pub async fn tiers_features(_: ServiceToken, State(state): State<AppState>) -> impl IntoResponse {
+    let features = load_features(&state.features_cache, &state.db).await;
+    Json(json!({ "features": features })).into_response()
 }
 
 #[derive(Deserialize)]
 pub struct CheckBody { tier: Option<String>, feature: Option<String> }
 
-pub async fn tiers_check(_: ServiceToken, Json(body): Json<CheckBody>) -> impl IntoResponse {
+pub async fn tiers_check(_: ServiceToken, State(state): State<AppState>, Json(body): Json<CheckBody>) -> impl IntoResponse {
     let (Some(tier), Some(feature)) = (body.tier, body.feature) else {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "tier and feature required." }))).into_response();
     };
-    if !can(&tier, &feature) {
-        let min_tier = FEATURES.get(feature.as_str()).map_or("unknown", |f| f.min_tier);
+    let features = load_features(&state.features_cache, &state.db).await;
+    if !can(&tier, &feature, &features) {
+        let min_tier = features.get(feature.as_str()).map_or("unknown".to_string(), |f| f.min_tier.clone());
         return (StatusCode::FORBIDDEN, Json(json!({
             "error":    format!("This feature requires the '{min_tier}' tier or above."),
             "yourTier": tier,
@@ -261,7 +290,7 @@ pub async fn admin_list_tiers(
     if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
         return e.into_response();
     }
-    let coll = state.db.collection::<mongodb::bson::Document>("tiers");
+    let coll = state.db.collection::<mongodb::bson::Document>("meta_tiers");
     let count = match coll.count_documents(doc! {}).await {
         Err(e) => { eprintln!("[authority/tiers] list count: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response(); }
         Ok(n)  => n,
@@ -314,7 +343,7 @@ pub async fn admin_create_tier(
     if !valid_tier_name(&name) {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "name must start with a lowercase letter and contain only [a-z0-9_], max 64 chars." }))).into_response();
     }
-    let _ = state.db.collection::<mongodb::bson::Document>("tiers")
+    let _ = state.db.collection::<mongodb::bson::Document>("meta_tiers")
         .update_many(doc! { "rank": { "$gte": body.rank as i32 } }, doc! { "$inc": { "rank": 1 } }).await;
     let now = DateTime::now();
     let doc = doc! {
@@ -323,7 +352,7 @@ pub async fn admin_create_tier(
         "messageRadiusM": body.message_radius_m.map(|v| v as i32),
         "createdAt": now, "updatedAt": now,
     };
-    match state.db.collection::<mongodb::bson::Document>("tiers").insert_one(doc).await {
+    match state.db.collection::<mongodb::bson::Document>("meta_tiers").insert_one(doc).await {
         Ok(_) => { *state.tiers_cache.write().await = None; Json(json!({ "ok": true, "name": name })).into_response() }
         Err(e) if e.to_string().contains("E11000") => (StatusCode::CONFLICT, Json(json!({ "error": "A tier with that name already exists." }))).into_response(),
         Err(e) => { eprintln!("[authority/tiers] create: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response() }
@@ -341,7 +370,7 @@ pub async fn admin_update_tier(
         return e.into_response();
     }
     let msg_bson = body.message_radius_m.map_or(mongodb::bson::Bson::Null, |v| (v as i32).into());
-    let result = state.db.collection::<mongodb::bson::Document>("tiers")
+    let result = state.db.collection::<mongodb::bson::Document>("meta_tiers")
         .update_one(doc! { "name": &name }, doc! { "$set": {
             "label": &body.label, "cls": &body.cls, "rank": body.rank as i32,
             "nearbyRadiusM": body.nearby_radius_m as i32, "messageRadiusM": msg_bson,
@@ -363,17 +392,136 @@ pub async fn admin_delete_tier(
     if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
         return e.into_response();
     }
-    match state.db.collection::<mongodb::bson::Document>("tiers").delete_one(doc! { "name": &name }).await {
+    match state.db.collection::<mongodb::bson::Document>("meta_tiers").delete_one(doc! { "name": &name }).await {
         Ok(r) if r.deleted_count == 0 => (StatusCode::NOT_FOUND, Json(json!({ "error": "Tier not found." }))).into_response(),
         Ok(_) => { *state.tiers_cache.write().await = None; Json(json!({ "ok": true })).into_response() }
         Err(e) => { eprintln!("[authority/tiers] delete: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response() }
     }
 }
 
+// ── Admin feature handlers ─────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureInput {
+    pub name:        Option<String>,
+    pub label:       String,
+    pub description: String,
+    pub min_tier:    String,
+}
+
+pub async fn admin_list_features(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    let col = state.db.collection::<mongodb::bson::Document>("meta_features");
+    let count = col.count_documents(doc! {}).await.unwrap_or(0);
+    if count == 0 {
+        // Seed static features on first admin access
+        let now = DateTime::now();
+        let docs: Vec<mongodb::bson::Document> = static_features().into_values().map(|f| doc! {
+            "name": &f.name, "label": &f.label, "description": &f.description,
+            "minTier": &f.min_tier, "createdAt": now, "updatedAt": now,
+        }).collect();
+        let _ = col.insert_many(docs).await;
+        *state.features_cache.write().await = None;
+    }
+    match col.find(doc! {}).await {
+        Err(e) => { eprintln!("[authority/features] list: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response() }
+        Ok(cursor) => {
+            let raw: Vec<mongodb::bson::Document> = cursor.try_collect().await.unwrap_or_default();
+            let mut features: Vec<serde_json::Value> = raw.iter().map(|d| json!({
+                "name":        d.get_str("name").unwrap_or(""),
+                "label":       d.get_str("label").unwrap_or(""),
+                "description": d.get_str("description").unwrap_or(""),
+                "minTier":     d.get_str("minTier").unwrap_or("guest"),
+            })).collect();
+            features.sort_by(|a, b| a["name"].as_str().unwrap_or("").cmp(b["name"].as_str().unwrap_or("")));
+            Json(json!({ "features": features })).into_response()
+        }
+    }
+}
+
+pub async fn admin_create_feature(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Json(body): Json<FeatureInput>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    let name = match body.name {
+        Some(n) => n,
+        None => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "name is required." }))).into_response(),
+    };
+    if !valid_tier_name(&name) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "name must start with a lowercase letter and contain only [a-z0-9_], max 64 chars." }))).into_response();
+    }
+    if !is_known_tier(&body.min_tier) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "minTier must be one of: guest, regular, premium, unrestricted." }))).into_response();
+    }
+    let now = DateTime::now();
+    let doc = doc! {
+        "name": &name, "label": &body.label, "description": &body.description,
+        "minTier": &body.min_tier, "createdAt": now, "updatedAt": now,
+    };
+    match state.db.collection::<mongodb::bson::Document>("meta_features").insert_one(doc).await {
+        Ok(_) => { *state.features_cache.write().await = None; Json(json!({ "ok": true, "name": name })).into_response() }
+        Err(e) if e.to_string().contains("E11000") => (StatusCode::CONFLICT, Json(json!({ "error": "A feature with that name already exists." }))).into_response(),
+        Err(e) => { eprintln!("[authority/features] create: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response() }
+    }
+}
+
+pub async fn admin_update_feature(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Json(body): Json<FeatureInput>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    if !is_known_tier(&body.min_tier) {
+        return (StatusCode::BAD_REQUEST, Json(json!({ "error": "minTier must be one of: guest, regular, premium, unrestricted." }))).into_response();
+    }
+    let result = state.db.collection::<mongodb::bson::Document>("meta_features")
+        .update_one(doc! { "name": &name }, doc! { "$set": {
+            "label": &body.label, "description": &body.description,
+            "minTier": &body.min_tier, "updatedAt": DateTime::now(),
+        }}).await;
+    match result {
+        Ok(r) if r.matched_count == 0 => (StatusCode::NOT_FOUND, Json(json!({ "error": "Feature not found." }))).into_response(),
+        Ok(_) => { *state.features_cache.write().await = None; Json(json!({ "ok": true })).into_response() }
+        Err(e) => { eprintln!("[authority/features] update: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response() }
+    }
+}
+
+pub async fn admin_delete_feature(
+    _: ServiceToken,
+    admin: AdminUser,
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    if let Err(e) = check_admin_tv(&state.db, &admin.0.sub, admin.0.tv.unwrap_or(0)).await {
+        return e.into_response();
+    }
+    match state.db.collection::<mongodb::bson::Document>("meta_features").delete_one(doc! { "name": &name }).await {
+        Ok(r) if r.deleted_count == 0 => (StatusCode::NOT_FOUND, Json(json!({ "error": "Feature not found." }))).into_response(),
+        Ok(_) => { *state.features_cache.write().await = None; Json(json!({ "ok": true })).into_response() }
+        Err(e) => { eprintln!("[authority/features] delete: {e}"); (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "DB error." }))).into_response() }
+    }
+}
+
 // ── Startup seeder ────────────────────────────────────────────────────────────
 
 pub async fn seed_tiers(db: &Database) {
-    let col = db.collection::<mongodb::bson::Document>("tiers");
+    let col = db.collection::<mongodb::bson::Document>("meta_tiers");
     let now = DateTime::now();
     let seeds: &[(&str, &str, &str, i32, i32, Option<i32>)] = &[
         ("guest",        "Guest",        "secondary", 0, 500,       None),
@@ -410,4 +558,6 @@ pub fn router() -> Router<AppState> {
         .route("/tiers/{name}/info",           get(tier_info))
         .route("/admin/tiers",                 get(admin_list_tiers).post(admin_create_tier))
         .route("/admin/tiers/{name}",          axum::routing::put(admin_update_tier).delete(admin_delete_tier))
+        .route("/admin/features",              get(admin_list_features).post(admin_create_feature))
+        .route("/admin/features/{name}",       axum::routing::put(admin_update_feature).delete(admin_delete_feature))
 }

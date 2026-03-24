@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    tiers::{can, features_for_tier, load_tiers, FEATURES},
+    tiers::{can, features_for_tier, load_features, load_tiers},
     AppState,
 };
 
@@ -86,10 +86,14 @@ pub async fn authority_verify(
     let tier = claims.tier.as_deref().unwrap_or("guest").to_string();
     let tv   = claims.tv.unwrap_or(0);
 
-    // ── 3. Feature check (optional) ───────────────────────────────────────────
+    // ── 3. Load tiers and features from cache ─────────────────────────────────
+    let tiers    = load_tiers(&state.tiers_cache, &state.db).await;
+    let features = load_features(&state.features_cache, &state.db).await;
+
+    // ── 4. Feature check (optional) ───────────────────────────────────────────
     if let Some(ref feature) = body.feature {
-        if !can(&tier, feature) {
-            let min_tier = FEATURES.get(feature.as_str()).map_or("unknown", |f| f.min_tier);
+        if !can(&tier, feature, &features) {
+            let min_tier = features.get(feature.as_str()).map_or("unknown".to_string(), |f| f.min_tier.clone());
             return (StatusCode::FORBIDDEN, Json(json!({
                 "error":    format!("This feature requires the '{min_tier}' tier or above."),
                 "yourTier": tier,
@@ -99,8 +103,7 @@ pub async fn authority_verify(
         }
     }
 
-    // ── 4. Resolve tier data ──────────────────────────────────────────────────
-    let tiers    = load_tiers(&state.tiers_cache, &state.db).await;
+    // ── 5. Resolve tier data ──────────────────────────────────────────────────
     let (nearby_m, message_m) = tiers.get(&tier)
         .map(|t| (t.nearby_radius_m, t.message_radius_m))
         .unwrap_or((500, None));
@@ -111,7 +114,7 @@ pub async fn authority_verify(
         account_type: claims.account_type,
         tier,
         tv,
-        features:     features_for_tier(claims.tier.as_deref().unwrap_or("guest")),
+        features:     features_for_tier(claims.tier.as_deref().unwrap_or("guest"), &features),
         radii:        Radii { nearby_m, message_m },
     }).into_response()
 }
