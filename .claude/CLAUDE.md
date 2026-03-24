@@ -24,7 +24,7 @@ Run this on every session-start signal, in order:
 
 1. Read `.claude/SESSION.md` **first** — this is the most recent context and bridges any prior compaction.
 2. Read `.claude/AUDIT.md` (the index and global summary table). Do not read individual concern files speculatively — open them only when you need full context on a specific item. Do not read the rest of the codebase speculatively.
-3. Read `.claude/TICKETS.md` for pending tickets relevant to this session.
+3. Read `.claude/TICKETS.md` (the index) for pending tickets. Open individual ticket files in `.claude/tickets/` only when you need full detail on a specific ticket.
 4. Greet the owner, present the last audit summary and SESSION.md "In Progress" state, and ask what to do.
 
 ---
@@ -66,8 +66,10 @@ Before writing any code for a ticket:
 
 - **Update SESSION.md.** Refresh the "In Progress", "Completed This Session", and "Handoff Notes" sections. This must happen before every commit so the file is never stale when the PreCompact hook checks it.
 - **Update tickets.** Reflect the current state of any ticket touched this session:
-  move completed phases/tickets to `TICKETS_DONE.md` (leave a stub), update status
-  lines, add any newly discovered tickets. Do this before every commit, not only at wrap-up.
+  update the frontmatter `status`/`phase` in the individual ticket file, move completed
+  phases/tickets to `.claude/tickets/done/` (create a stub there), update the TICKETS.md
+  index row, add any newly discovered tickets as new files. Do this before every commit,
+  not only at wrap-up.
 - **Update audit files.** If any audit item was resolved or its status changed during this
   session, move it to `AUDIT_DONE.md` (leave a stub), update the source concern file, and
   keep the global summary table in `AUDIT.md` in sync. Do this before every commit, not only at wrap-up.
@@ -116,9 +118,9 @@ without asking for permission:
    to `AUDIT_DONE.md`, update existing entries, and **keep the global summary table in
    `AUDIT.md` in sync** (update the status cell for any item that changed). File names
    and their concerns are listed in the Persistent Files section below.
-3. Update `.claude/TICKETS.md` — move completed tickets/phases to
-   `TICKETS_DONE.md`, leave stubs, add any new tickets discovered during the
-   session.
+3. Update ticket files — move completed tickets/phases to `.claude/tickets/done/`
+   (create a stub file there), update the individual ticket file's frontmatter,
+   update the TICKETS.md index row, add any new tickets as new files in `.claude/tickets/`.
 4. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
    compact them into the `Reflection` section summary and **remove them from the Log**. The Log retains only `CHANGE` entries after compaction.
 5. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md`, remove
@@ -181,24 +183,25 @@ Rules for moving:
 - Read AUDIT_DONE.md only when you need historical context for a specific item —
   not on session start, not speculatively.
 
-### `.claude/TICKETS.md` — Feature backlog
-Contains: planned features, postponed work, architectural proposals,
-implementation strategies. You maintain it. The project owner may also add
-items directly. Do not remove tickets unless the owner explicitly says to.
+### `.claude/TICKETS.md` — Ticket index *(read at session start)*
+Contains: one-row summary per ticket with link, status, priority, title, and phase.
+Also contains the recommended implementation order and cross-ticket architectural decisions.
+The project owner may add items directly. Do not remove rows unless the owner says to.
 
-### `.claude/TICKETS_DONE.md` — Completed tickets archive
-Contains: tickets and phases that are fully implemented and deployed. Move
-tickets/phases here when complete — never delete them.
+### `.claude/tickets/<id>.md` — Individual ticket files
+Contains: full spec, implementation phases, owner comments, and current status for one ticket.
+Frontmatter fields: `id`, `title`, `status`, `priority`, `concern`, `phase`, `prereqs`, `relates`.
+Read individual files only when you need full detail — not on session start, not speculatively.
 
-Rules for moving:
-- Move a **whole ticket** only when **all its phases and sub-tasks are done**.
-- Move a **phase** (e.g. T-06 Phase 1) individually if it is self-contained and
-  complete, even if other phases of the same ticket remain pending.
-- Never move a ticket or phase that has unresolved sub-tasks.
-- After moving, leave a one-line stub in TICKETS.md pointing to TICKETS_DONE.md
-  (e.g. `Phase 1 ✅ complete (date). Details in TICKETS_DONE.md.`).
-- Read TICKETS_DONE.md only when you need historical context for a specific
-  ticket — not on session start, not speculatively.
+Rules for creating and moving:
+- **New ticket:** create `.claude/tickets/T-XX.md` with YAML frontmatter; add a row to TICKETS.md index.
+- **Move a whole ticket to done:** create `.claude/tickets/done/T-XX.md` (summary + what was done);
+  update the TICKETS.md index row to link to `tickets/done/`. Move a whole ticket only when
+  **all its phases are done**.
+- **Move a phase to done:** create `.claude/tickets/done/T-XX-phaseN.md`; update the parent
+  ticket file to show the phase as complete; update the TICKETS.md index phase column.
+- Never delete ticket files — archive, don't remove.
+- Read `tickets/done/` only when you need historical context for a specific ticket.
 
 ### `.claude/CHANGELOG.md` — Change history and reflections
 Append an entry during every wrap-up. Two entry types:

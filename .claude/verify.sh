@@ -38,11 +38,21 @@ TICKET_REFS=$(echo "$COMMIT_MSG" | grep -oE 'T-[0-9]+' | sort -u)
 if [[ -n "$TICKET_REFS" ]]; then
   echo "── Ticket refs in commit ─────────────────────────────"
   for ref in $TICKET_REFS; do
-    if grep -q "$ref" "$CLAUDE_DIR/TICKETS.md" 2>/dev/null || grep -q "$ref" "$CLAUDE_DIR/TICKETS_DONE.md" 2>/dev/null; then
+    found=0
+    # Check individual ticket files (new structure)
+    [[ -f "$CLAUDE_DIR/tickets/${ref}.md" ]] && found=1
+    ls "$CLAUDE_DIR/tickets/${ref}-"*.md 2>/dev/null | grep -q . && found=1
+    [[ -f "$CLAUDE_DIR/tickets/done/${ref}.md" ]] && found=1
+    ls "$CLAUDE_DIR/tickets/done/${ref}-"*.md 2>/dev/null | grep -q . && found=1
+    # Fallback: index files (also catches refs in legacy TICKETS_DONE.md)
+    grep -q "$ref" "$CLAUDE_DIR/TICKETS.md" 2>/dev/null && found=1
+    grep -q "$ref" "$CLAUDE_DIR/TICKETS_DONE.md" 2>/dev/null && found=1
+
+    if [[ $found -eq 1 ]]; then
       echo "  ✅ $ref — stub found"
       ((PASS++))
     else
-      echo "  ❌ $ref — NO STUB in TICKETS.md or TICKETS_DONE.md"
+      echo "  ❌ $ref — NO STUB in tickets/ or TICKETS.md"
       ((FAIL++))
     fi
   done

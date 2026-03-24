@@ -8,13 +8,13 @@
 
 ## Concern Files
 
-Each concern has its own file with full item descriptions and a per-concern summary table. Add new findings to the correct file; cross-concern items or items that don't fit any category go in this file.
+Each concern has its own file. Add new findings to the correct file; cross-concern items go here.
 
-- **[AUDIT_INFRASTRUCTURE.md](AUDIT_INFRASTRUCTURE.md)** — Railway/MongoDB environment, service dependencies, deployment constraints, one-time ops required on the backend.
-- **[AUDIT_MAINTAINABILITY.md](AUDIT_MAINTAINABILITY.md)** — Code structure, duplication, architectural debt, patterns that complicate future changes.
-- **[AUDIT_USABILITY.md](AUDIT_USABILITY.md)** — User-facing friction, UX issues, interaction flows that degrade the user experience.
-- **[AUDIT_SECURITY.md](AUDIT_SECURITY.md)** — Security vulnerabilities, auth/privacy concerns, data exposure risks.
-- **[AUDIT_PERFORMANCE.md](AUDIT_PERFORMANCE.md)** — Performance bottlenecks, slow queries, inefficient patterns, scaling concerns.
+- **[AUDIT_INFRASTRUCTURE.md](AUDIT_INFRASTRUCTURE.md)** (`INFRA-`) — Railway/MongoDB environment, deployment constraints, one-time backend ops.
+- **[AUDIT_MAINTAINABILITY.md](AUDIT_MAINTAINABILITY.md)** (`MAINT-`) — Code structure, duplication, architectural debt.
+- **[AUDIT_USABILITY.md](AUDIT_USABILITY.md)** (`UX-`) — User-facing friction and broken interaction flows.
+- **[AUDIT_SECURITY.md](AUDIT_SECURITY.md)** (`SEC-`) — Security bugs, auth/privacy vulnerabilities.
+- **[AUDIT_PERFORMANCE.md](AUDIT_PERFORMANCE.md)** (`PERF-`) — Bottlenecks, slow queries, scaling concerns.
 
 Resolved items from any file → **[AUDIT_DONE.md](AUDIT_DONE.md)**
 
