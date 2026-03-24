@@ -3,12 +3,22 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/sessionstart.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {
             "type": "command",
-            "command": "echo '⚠️  CONTEXT WAS JUST COMPACTED. Read .claude/SESSION.md immediately to restore session state before continuing.'",
-            "timeout": 5
+            "command": "bash .claude/hooks/sessionstart.sh",
+            "timeout": 10
           }
         ]
       }
