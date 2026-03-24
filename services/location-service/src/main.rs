@@ -49,7 +49,7 @@ struct Config {
     jwt_secret:         String,
     service_secret:     String,
     fav_service_url:    String,
-    tiers_service_url:  String,
+    authority_service_url:  String,
     shard_m:            f64,
     nearby_limit:       usize,
     ttl:                Duration,
@@ -61,7 +61,7 @@ struct Config {
 
 impl Config {
     fn from_env() -> Result<Self, String> {
-        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "FAV_SERVICE_URL", "TIERS_SERVICE_URL"];
+        let required = ["JWT_SECRET", "SERVICE_SECRET", "MONGO_URI", "FAV_SERVICE_URL", "AUTHORITY_SERVICE_URL"];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
             return Err(format!(
@@ -76,7 +76,7 @@ impl Config {
             jwt_secret:        env::var("JWT_SECRET").unwrap(),
             service_secret:    env::var("SERVICE_SECRET").unwrap(),
             fav_service_url:   env::var("FAV_SERVICE_URL").unwrap(),
-            tiers_service_url: env::var("TIERS_SERVICE_URL").unwrap(),
+            authority_service_url: env::var("AUTHORITY_SERVICE_URL").unwrap(),
             shard_m:           env::var("LOCATION_SHARD_SIZE_M")
                                    .ok().and_then(|v| v.parse().ok()).unwrap_or(2_000.0),
             nearby_limit:      env::var("LOCATION_NEARBY_LIMIT")
@@ -129,7 +129,7 @@ struct AppState {
     jwt_secret:          String,
     service_secret:      String,
     fav_service_url:     String,
-    tiers_service_url:   String,
+    authority_service_url:   String,
     http:                reqwest::Client,
     svc_token_cache:     Arc<ServiceTokenCache>,
     nearby_cache:        Arc<RwLock<HashMap<String, NearbyCache>>>,
@@ -240,7 +240,7 @@ async fn get_nearby_radius_m(state: &AppState, tier: &str) -> f64 {
     };
 
     let radius_m = match state.http
-        .get(format!("{}/tiers/radius/nearby/{tier}", state.tiers_service_url))
+        .get(format!("{}/tiers/radius/nearby/{tier}", state.authority_service_url))
         .header("X-Service-Token", &svc_token)
         .timeout(Duration::from_secs(3))
         .send()
@@ -664,7 +664,7 @@ async fn main() {
         jwt_secret:          cfg.jwt_secret,
         service_secret:      cfg.service_secret,
         fav_service_url:     cfg.fav_service_url,
-        tiers_service_url:   cfg.tiers_service_url,
+        authority_service_url:   cfg.authority_service_url,
         http:                reqwest::Client::new(),
         svc_token_cache:     Arc::new(ServiceTokenCache::new()),
         nearby_cache:        Arc::new(RwLock::new(HashMap::new())),
