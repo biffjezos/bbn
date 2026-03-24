@@ -1,7 +1,11 @@
-# T-08 Phase 3 — Dynamic feature-tier mapping (admin UI)
+---
+id: T-08-phase3
+title: Authority Service (Phase 3)
+completed: 2026-03-24
+branch: claude/verify-t08-phase2-deployment-z6h0n
+---
 
-**Completed:** 2026-03-24
-**Branch:** `claude/verify-t08-phase2-deployment-z6h0n`
+# T-08 Phase 3 — Dynamic feature-tier mapping (admin UI)
 
 ## What was done
 
