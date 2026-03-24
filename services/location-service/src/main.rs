@@ -24,7 +24,7 @@ use axum::{
     Router,
 };
 use common::{
-    auth::{AuthToken, JwtSecret, ServiceSecret, ServiceToken, UserClaims},
+    auth::{AuthedByGateway, JwtSecret, ProfileFromToken, ServiceSecret, ServiceToken},
     models::BlockDoc,
     service_token::ServiceTokenCache,
 };
@@ -302,7 +302,8 @@ struct PutLocationBody {
 
 async fn put_location(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    AuthedByGateway(identity): AuthedByGateway,
+    ProfileFromToken(profile): ProfileFromToken,
     State(state): State<AppState>,
     Json(body): Json<PutLocationBody>,
 ) -> impl IntoResponse {
@@ -314,12 +315,12 @@ async fn put_location(
     }
 
     // Venue accounts have a fixed location — GPS pushes are not accepted.
-    if claims.account_type == "venue" {
+    if identity.account_type == "venue" {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Venue accounts have a fixed location." }))).into_response();
     }
 
-    let user_id  = &claims.sub;
-    let is_user  = matches!(claims.role.as_str(), "user" | "admin");
+    let user_id  = &identity.sub;
+    let is_user  = matches!(identity.role.as_str(), "user" | "admin");
     let accuracy = if body.accuracy.as_deref() == Some("ip") { "ip" } else { "gps" };
 
     // First push of a session: user not yet in the store.
@@ -330,9 +331,9 @@ async fn put_location(
         lat,
         lon,
         is_registered: is_user,
-        sex:           claims.sex.clone(),
-        nickname:      claims.nickname.clone(),
-        age:           claims.age.map(|a| a as i32),
+        sex:           profile.sex.clone(),
+        nickname:      profile.nickname.clone(),
+        age:           profile.age.map(|a| a as i32),
         accuracy:      accuracy.to_string(),
         updated_at:    std::time::Instant::now(),
     };
@@ -351,10 +352,10 @@ async fn put_location(
 
 async fn delete_location(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    AuthedByGateway(identity): AuthedByGateway,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    state.store.remove(&claims.sub).await;
+    state.store.remove(&identity.sub).await;
     Json(json!({ "ok": true })).into_response()
 }
 
@@ -368,7 +369,7 @@ struct NearbyQuery {
 
 async fn get_nearby(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    AuthedByGateway(identity): AuthedByGateway,
     State(state): State<AppState>,
     Query(q): Query<NearbyQuery>,
 ) -> impl IntoResponse {
@@ -376,20 +377,24 @@ async fn get_nearby(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "lat and lon query params required." }))).into_response();
     };
 
-    let tier     = claims.tier.as_deref().unwrap_or("guest");
-    let radius_m = get_nearby_radius_m(&state, tier).await;
+    // Use radius pre-resolved by authority-service when available, otherwise fall back to tiers-service.
+    let radius_m = if identity.radii.nearby_m > 0 {
+        identity.radii.nearby_m as f64
+    } else {
+        get_nearby_radius_m(&state, &identity.tier).await
+    };
 
     // Block list (registered users only).
     let mut exclude_ids: HashSet<String> = HashSet::new();
-    exclude_ids.insert(claims.sub.clone()); // never show yourself
-    if matches!(claims.role.as_str(), "user" | "admin") {
-        let blocked = get_blocked_ids(&state.db, &state.block_cache, &claims.sub).await;
+    exclude_ids.insert(identity.sub.clone()); // never show yourself
+    if matches!(identity.role.as_str(), "user" | "admin") {
+        let blocked = get_blocked_ids(&state.db, &state.block_cache, &identity.sub).await;
         exclude_ids.extend(blocked);
     }
 
     // Favourite ids — reserved slots that bypass the limit cap.
     // Use the 2-second nearby cache to avoid hammering favourites-service.
-    let cache_key = format!("fav:{}", claims.sub);
+    let cache_key = format!("fav:{}", identity.sub);
     let fav_ids: HashSet<String> = {
         let cache_r = state.nearby_cache.read().await;
         if let Some(cached) = cache_r.get(&cache_key) {
@@ -407,7 +412,7 @@ async fn get_nearby(
 
     // Fetch fresh fav ids if cache missed.
     let fav_ids = if fav_ids.is_empty() {
-        fetch_favourite_ids(&state, &claims).await
+        fetch_favourite_ids(&state, &identity.sub, &identity.role).await
     } else {
         fav_ids
     };
@@ -444,15 +449,15 @@ async fn get_nearby(
         }))
         .collect();
 
-    let blocked_for_venues = if matches!(claims.role.as_str(), "user" | "admin") {
-        get_blocked_ids(&state.db, &state.block_cache, &claims.sub).await
+    let blocked_for_venues = if matches!(identity.role.as_str(), "user" | "admin") {
+        get_blocked_ids(&state.db, &state.block_cache, &identity.sub).await
     } else {
         HashSet::new()
     };
 
     for v in venues {
         let venue_id = v.id.to_hex();
-        if venue_id == claims.sub { continue; }
+        if venue_id == identity.sub { continue; }
         if blocked_for_venues.contains(&venue_id) { continue; }
         let dist = common::geo::haversine_distance(lat, lon, v.fixed_lat, v.fixed_lon);
         if dist <= radius_m {
@@ -476,8 +481,8 @@ async fn get_nearby(
 
 /// Fetch the caller's favourite user IDs from favourites-service.
 /// Returns an empty set on any error (graceful degradation).
-async fn fetch_favourite_ids(state: &AppState, claims: &UserClaims) -> HashSet<String> {
-    if !matches!(claims.role.as_str(), "user" | "admin") {
+async fn fetch_favourite_ids(state: &AppState, sub: &str, role: &str) -> HashSet<String> {
+    if !matches!(role, "user" | "admin") {
         return HashSet::new();
     }
     let svc_token = match state.svc_token_cache.get("location", &state.service_secret).await {
@@ -487,7 +492,7 @@ async fn fetch_favourite_ids(state: &AppState, claims: &UserClaims) -> HashSet<S
     match state.http
         .get(format!("{}/favourites/ids", state.fav_service_url))
         .header("X-Service-Token", &svc_token)
-        .header("X-User-Id", &claims.sub)
+        .header("X-User-Id", sub)
         .timeout(Duration::from_secs(2))
         .send()
         .await

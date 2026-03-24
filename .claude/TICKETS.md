@@ -391,7 +391,7 @@ None for in-app extension. Web Push requires HTTPS (already satisfied) and VAPID
 
 ## T-08 — Coherent Identity Model + Authority Service
 
-**Status:** Phase 1 ✅ complete. Phase 2 pending.
+**Status:** Phase 1 ✅ complete. Phase 2 active. Phase 3 planned.
 
 **Rationale for merge with T-13:** T-13 (normalise the data model) and T-08 (enforce it centrally) solve opposite ends of the same structural problem. T-13 defines what the system should say; T-08 builds the single voice that says it. Phase 1 must be deployed before Phase 2 begins.
 
@@ -402,7 +402,7 @@ Phase 1 ✅ complete (2026-03-18). Details in TICKETS_DONE.md.
 ---
 
 ### Phase 2 — Authority Service (ex-T-08)
-<!-- ITEM id:T-08 status:active priority:high concern:services phase:1/2 prereqs:T-01,T-04c -->
+<!-- ITEM id:T-08 status:active priority:high concern:services phase:2/3 prereqs:T-01,T-04c -->
 
 **Problem:** No single authority for user rights and limits.
 
@@ -465,10 +465,34 @@ Each service reads `X-Auth-*` headers. `X-Service-Token` still protects services
 4. Update each Rust service to read `X-Auth-*` headers (one at a time, backwards-compatible).
 5. Retire tiers-service on Railway.
 
+### Phase 3 — Dynamic feature-tier mapping (admin UI)
+<!-- ITEM id:T-08 status:planned priority:medium concern:ui phase:3/3 prereqs:T-08-phase2 -->
+
+**Status:** Not started. Requires Phase 2 complete and deployed.
+
+**Problem:** Feature definitions in authority-service are still a static `LazyLock<HashMap>` in code. Adding a new feature or changing which tier it requires needs a redeploy.
+
+**Proposed changes:**
+
+1. **New `features` MongoDB collection** (migration `010_features_seed`):
+   ```
+   { name, label, description, minTier, type: "boolean"|"enum", options?: [...], default?: any, createdAt, updatedAt }
+   ```
+2. **authority-service** — read features from DB with 60 s TTL cache (same pattern as `tiers`). Fall back to `STATIC_FEATURES` if collection empty. Add admin CRUD endpoints: `GET/POST /admin/features`, `PUT/DELETE /admin/features/:name`.
+3. **Gateway** — add admin routes: `GET /api/admin/features`, `POST /api/admin/features`, `PUT /api/admin/features/:name`, `DELETE /api/admin/features/:name`.
+4. **Admin UI** — new "Features" tab in admin panel: table of features with min-tier selects and Save buttons (same pattern as Tiers tab).
+
+**What this unlocks:** Adding a new feature or changing its tier requirement becomes a runtime admin action — no redeploy needed.
+
+**Prerequisites:**
+- T-08 Phase 2 complete and deployed (authority-service running + gateway using it).
+- Feature type/options fields are prep for richer per-feature config (e.g. enum feature values). Phase 3 only exposes `boolean` min-tier gates; richer types deferred.
+
 ### Owner's Comments
 
 - 2026-03-16: Proposed by Claude based on admin-role cascade bug post-mortem (AUDIT.md 6.3).
 - 2026-03-18: T-13 merged into T-08 as Phase 1 — data model normalisation is prerequisite for the authority service. All prerequisites met (T-01 ✅, T-04c ✅). Ready to begin Phase 1.
+- 2026-03-24: Phase 3 added — dynamic feature-tier mapping admin UI, building on Phase 2's authority-service.
 
 ---
 

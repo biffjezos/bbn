@@ -15,7 +15,7 @@ use axum::{
     Router,
 };
 use common::{
-    auth::{JwtSecret, ServiceSecret, RequireRegistered, ServiceToken},
+    auth::{JwtSecret, ServiceSecret, RegisteredByGateway, ServiceToken},
     mongo::safe_object_id,
 };
 use futures_util::TryStreamExt;
@@ -104,12 +104,12 @@ struct UserProjection {
 
 async fn get_blocks(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let entries: Vec<Document> = match state.db
         .collection::<Document>("blocks")
-        .find(doc! { "blockerUserId": &claims.sub })
+        .find(doc! { "blockerUserId": &identity.sub })
         .sort(doc! { "createdAt": -1 })
         .await
     {
@@ -172,12 +172,12 @@ struct BlockBody {
 
 async fn post_block(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(blocked_id): Path<String>,
     Json(body): Json<BlockBody>,
 ) -> impl IntoResponse {
-    if claims.sub == blocked_id {
+    if identity.sub == blocked_id {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Cannot block yourself." }))).into_response();
     }
 
@@ -208,7 +208,7 @@ async fn post_block(
     match state.db
         .collection::<Document>("blocks")
         .insert_one(doc! {
-            "blockerUserId": &claims.sub,
+            "blockerUserId": &identity.sub,
             "blockedUserId": &blocked_id,
             "reason":        &reason,
             "createdAt":     BsonDateTime::now(),
@@ -225,14 +225,14 @@ async fn post_block(
 
 async fn delete_block(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(blocked_id): Path<String>,
 ) -> impl IntoResponse {
     match state.db
         .collection::<Document>("blocks")
         .delete_one(doc! {
-            "blockerUserId": &claims.sub,
+            "blockerUserId": &identity.sub,
             "blockedUserId": &blocked_id,
         })
         .await

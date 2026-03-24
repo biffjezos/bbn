@@ -412,3 +412,141 @@ pub fn issue_guest_token(
         &EncodingKey::from_secret(secret.as_bytes()),
     )
 }
+
+// ── GatewayIdentity / AuthedByGateway ─────────────────────────────────────────
+//
+// After Phase 2 of T-08, the gateway calls /authority/verify and injects
+// X-Auth-* headers into every authenticated request. Services read this
+// identity instead of decoding the JWT + querying tokenVersion themselves.
+//
+// AuthedByGateway trusts the gateway headers when X-Auth-Sub is present.
+// When absent (pre-Phase-2 deployment, or service called directly), it
+// falls back to AuthToken — so service deployment is backwards-compatible.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayRadii {
+    pub nearby_m:  u32,
+    pub message_m: Option<u32>,
+}
+
+/// Pre-verified identity injected by the gateway via X-Auth-* headers.
+#[derive(Debug, Clone)]
+pub struct GatewayIdentity {
+    pub sub:          String,
+    pub role:         String,
+    pub account_type: String,
+    pub tier:         String,
+    pub tv:           u32,
+    pub features:     Vec<String>,
+    pub radii:        GatewayRadii,
+}
+
+impl GatewayIdentity {
+    pub fn is_guest(&self) -> bool { self.role == "guest" }
+    pub fn is_registered(&self) -> bool { matches!(self.role.as_str(), "user" | "admin" | "venue_manager") }
+    pub fn has_feature(&self, f: &str) -> bool { self.features.iter().any(|x| x == f) }
+}
+
+/// Axum extractor — reads X-Auth-* headers injected by the gateway.
+/// Falls back to `AuthToken` (JWT decode + DB tokenVersion) if X-Auth-Sub is absent.
+pub struct AuthedByGateway(pub GatewayIdentity);
+
+impl<S> FromRequestParts<S> for AuthedByGateway
+where
+    JwtSecret: FromRef<S>,
+    mongodb::Database: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let sub = parts.headers.get("x-auth-sub").and_then(|v| v.to_str().ok()).map(String::from);
+
+        if let Some(sub) = sub {
+            // Gateway has already verified this identity — trust the headers.
+            let role         = parts.headers.get("x-auth-role").and_then(|v| v.to_str().ok()).unwrap_or("user").to_string();
+            let account_type = parts.headers.get("x-auth-account-type").and_then(|v| v.to_str().ok()).unwrap_or("user").to_string();
+            let tier         = parts.headers.get("x-auth-tier").and_then(|v| v.to_str().ok()).unwrap_or("regular").to_string();
+            let tv: u32      = parts.headers.get("x-auth-tv").and_then(|v| v.to_str().ok()).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let features     = parts.headers.get("x-auth-features")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+                .unwrap_or_default();
+            let radii        = parts.headers.get("x-auth-radii")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| serde_json::from_str::<GatewayRadii>(s).ok())
+                .unwrap_or(GatewayRadii { nearby_m: 500, message_m: None });
+
+            Ok(AuthedByGateway(GatewayIdentity { sub, role, account_type, tier, tv, features, radii }))
+        } else {
+            // Fallback: gateway didn't inject headers — decode JWT + check tokenVersion.
+            let AuthToken(claims) = AuthToken::from_request_parts(parts, state).await?;
+            Ok(AuthedByGateway(GatewayIdentity {
+                sub:          claims.sub,
+                role:         claims.role,
+                account_type: claims.account_type,
+                tier:         claims.tier.unwrap_or_else(|| "regular".to_string()),
+                tv:           claims.tv.unwrap_or(0),
+                features:     vec![],
+                radii:        GatewayRadii { nearby_m: 500, message_m: None },
+            }))
+        }
+    }
+}
+
+// ── ProfileFromToken ──────────────────────────────────────────────────────────
+//
+// Decodes only the display profile (nickname, sex, age) from the user JWT.
+// Does NOT check tokenVersion — these are display-only fields for services
+// like location-service that need to store them but already verify identity
+// via AuthedByGateway. Always succeeds (returns None fields on any error).
+
+#[derive(Debug, Clone, Default)]
+pub struct TokenProfile {
+    pub sex:      Option<String>,
+    pub nickname: Option<String>,
+    pub age:      Option<u32>,
+}
+
+pub struct ProfileFromToken(pub TokenProfile);
+
+impl<S> FromRequestParts<S> for ProfileFromToken
+where
+    JwtSecret: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let JwtSecret(secret) = JwtSecret::from_ref(state);
+        let raw   = parts.headers.get("authorization").and_then(|v| v.to_str().ok()).unwrap_or("");
+        let token = raw.strip_prefix("Bearer ").or_else(|| raw.strip_prefix("bearer ")).unwrap_or(raw).trim();
+        let profile = decode_user_token(token, &secret)
+            .map(|c| TokenProfile { sex: c.sex, nickname: c.nickname, age: c.age })
+            .unwrap_or_default();
+        Ok(ProfileFromToken(profile))
+    }
+}
+
+/// Like `AuthedByGateway` but additionally rejects guests.
+pub struct RegisteredByGateway(pub GatewayIdentity);
+
+impl<S> FromRequestParts<S> for RegisteredByGateway
+where
+    JwtSecret: FromRef<S>,
+    mongodb::Database: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthedByGateway(identity) = AuthedByGateway::from_request_parts(parts, state).await?;
+        if !identity.is_registered() {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({ "error": "Registered account required.", "code": "REGISTERED_REQUIRED" })),
+            ));
+        }
+        Ok(RegisteredByGateway(identity))
+    }
+}

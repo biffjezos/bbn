@@ -116,6 +116,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "authority-service"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "axum",
+ "base64",
+ "common",
+ "futures-util",
+ "hex",
+ "hmac",
+ "mongodb",
+ "opaque-ke",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

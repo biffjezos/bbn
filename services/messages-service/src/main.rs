@@ -20,7 +20,7 @@ use axum::{
     Router,
 };
 use common::{
-    auth::{JwtSecret, ServiceSecret, RequireRegistered, ServiceToken},
+    auth::{JwtSecret, ServiceSecret, RegisteredByGateway, ServiceToken},
     geo::haversine_distance,
     mongo::safe_object_id,
     service_token::ServiceTokenCache,
@@ -295,14 +295,14 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn get_messages(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let now = now_bson();
     let docs: Vec<MessageDoc> = match state.db
         .collection::<MessageDoc>("messages")
         .find(doc! {
-            "$or": [{ "fromUserId": &claims.sub }, { "toUserId": &claims.sub }],
+            "$or": [{ "fromUserId": &identity.sub }, { "toUserId": &identity.sub }],
             "expiresAt": { "$gt": now },
         })
         .sort(doc! { "sentAt": -1 })
@@ -320,7 +320,7 @@ async fn get_messages(
 
 async fn get_thread(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(other_id): Path<String>,
 ) -> impl IntoResponse {
@@ -339,7 +339,7 @@ async fn get_thread(
         Err(e)      => { eprintln!("[messages/thread GET] user lookup: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     }
 
-    let me = &claims.sub;
+    let me = &identity.sub;
     let now = now_bson();
     let docs: Vec<MessageDoc> = match state.db
         .collection::<MessageDoc>("messages")
@@ -370,7 +370,7 @@ struct SendBody {
 
 async fn send_message(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(to_id): Path<String>,
     Json(body): Json<SendBody>,
@@ -380,7 +380,7 @@ async fn send_message(
         let s = state.settings.read().unwrap();
         (s.user_rate_max, s.user_rate_window)
     };
-    if !check_user_rate(&state.user_buckets, &claims.sub, rate_max, rate_window) {
+    if !check_user_rate(&state.user_buckets, &identity.sub, rate_max, rate_window) {
         return (StatusCode::TOO_MANY_REQUESTS, Json(json!({ "error": "Message rate limit exceeded." }))).into_response();
     }
 
@@ -397,7 +397,7 @@ async fn send_message(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Message must be a valid E2EE ciphertext envelope." }))).into_response();
     }
 
-    let from_id = &claims.sub;
+    let from_id = &identity.sub;
     // Validate from_id is a safe ObjectId hex string. Capture the parsed OID so
     // URL interpolation uses the structured hex form, not the raw JWT string (CWE-918).
     let from_oid = match safe_object_id(from_id) {
@@ -538,7 +538,7 @@ async fn send_message(
             Err(e) => { eprintln!("[messages POST] location (recipient) parse: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
         };
 
-        let sender_tier    = claims.tier.as_deref().unwrap_or("regular");
+        let sender_tier    = identity.tier.as_str();
         let recipient_tier = to_user.get_str("tier").unwrap_or("regular");
 
         // Guard against SSRF: tier strings must be safe path segments before
@@ -624,7 +624,7 @@ async fn send_message(
 
 async fn delete_message(
     _svc: ServiceToken,
-    RequireRegistered(claims): RequireRegistered,
+    RegisteredByGateway(identity): RegisteredByGateway,
     State(state): State<AppState>,
     Path(msg_id_str): Path<String>,
 ) -> impl IntoResponse {
@@ -642,7 +642,7 @@ async fn delete_message(
         Err(e)      => { eprintln!("[messages DELETE] lookup: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
-    if msg.get_str("fromUserId").unwrap_or("") != claims.sub {
+    if msg.get_str("fromUserId").unwrap_or("") != identity.sub {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Not your message." }))).into_response();
     }
 
