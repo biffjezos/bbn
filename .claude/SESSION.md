@@ -31,7 +31,7 @@ Nothing. Session wrapped (hotfix committed post-wrap-up).
   - admin UI: Features tab live and showing features
 - INFRA-1.2 resolved — sessions TTL index corrected to 20 min via migration 010
 - Hotfix: `TIERS_SERVICE_URL` → `AUTHORITY_SERVICE_URL` (+ `ALLOWED_HOST`) in location-service, favourites-service, messages-service — they still referenced the retired tiers-service
-- Added `parse_service_url` SSRF guard to location-service and favourites-service — now consistent with messages-service; all service-to-service URLs validated against `*_ALLOWED_HOST` at startup
+- Added `parse_service_url` SSRF guard to location-service, favourites-service, and gateway — all service-to-service URLs in all services now validated against `*_ALLOWED_HOST` at startup
 - T-08 fully closed (all 3 phases done, moved to `tickets/done/`)
 - All audit infrastructure items now resolved
 
