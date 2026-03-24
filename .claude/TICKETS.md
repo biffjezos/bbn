@@ -9,62 +9,207 @@ Completed tickets and phases live in `TICKETS_DONE.md`.
 
 ## T-23 — OPAQUE Authentication + Email Privacy (SEC-1.1)
 
-✅ Implemented 2026-03-23. Details in `TICKETS_DONE.md`.
+✅ Fully deployed 2026-03-24. Details in `TICKETS_DONE.md`.
 
-**Still needed before going live:**
-- Wipe `users` collection in production DB
-- Set `EMAIL_PEPPER` (32-byte hex) in Railway for auth-service and users-service
-- Set `OPAQUE_SERVER_SETUP` in Railway (auth-service generates value on first run without it; copy from logs)
-- Run migration-service to apply migration `008_opaque_emailhash`
-- Update UI modals (login/register/settings forms) to call new `Api.login()` / `Api.register()` / `Api.changePassword()` — these are now wired through the OPAQUE WASM client
+Backend confirmed live by owner: users wiped, EMAIL_PEPPER set, OPAQUE_SERVER_SETUP set, migration 008 applied.
+UI modals verified 2026-03-24: login and register modals use OPAQUE two-round flow via Api.login()/Api.register(); password change in profile.js fixed to use Api.changePassword() (was incorrectly sending plaintext password via Api.updateMe).
 
 ---
 
-## T-24 — Profile Data Encryption (SEC items 4+5)
+## T-24 — Profile Data Encryption
 
-**Status:** Planned. Prerequisites: T-23 deployed (OPAQUE live), SEC-1.10/1.11 deployed (PBKDF2 + emailSalt in DB).
+**Status:** Planned. Prerequisites: T-23 deployed ✅ (OPAQUE live, `exportKey` available), SEC-1.10/1.11 deployed ✅ (PBKDF2 + `emailSalt` in DB).
 
-**Context:** After the OPAQUE + PBKDF2 deploy, each user document will have an `emailSalt`. This ticket uses that salt to encrypt all personal profile fields (nickname, age, sex) so they are stored only in ciphertext and only decrypted by authorised clients.
-
-**Architecture sketch:**
-
-1. Each user has an X25519 keypair. `privateKey` is encrypted with `exportKey` (from `OpaqueClient.loginFinish()`) and stored as `encryptedPrivateKey`. `publicKey` stored plaintext. Both fields already exist in the schema.
-2. Profile (`{ nickname, age, sex }`) is encrypted with a random symmetric `profileKey` (AES-GCM) → `profileCiphertext`. `profileKey` encrypted with owner's own public key → `encryptedProfileKey`. Both stored in DB. Server never has `profileKey` in plaintext.
-3. When B updates location (B is online — required to appear in nearby), B's client gets the nearby user list and for each viewer A computes: `sharedSecret = ECDH(B.privateKey, A.publicKey)`, encrypts `profileKey` with `sharedSecret`, sends the per-viewer blob to the server. Server stores it keyed to `(B.userId, A.userId)`.
-4. When A requests B's profile: server returns `profileCiphertext` + `profileKey` encrypted with `ECDH(B.privateKey, A.publicKey)`. A computes `sharedSecret = ECDH(A.privateKey, B.publicKey)` — identical value by ECDH property — decrypts `profileKey`, decrypts profile.
-5. If B has not updated location recently enough to have produced a blob for A, A cannot decrypt. No fallback.
-6. JWT `prof` claim: owner decrypts using `exportKey` → `privateKey` → `encryptedProfileKey` → `profileKey` → plaintext profile.
-
-**Why exportKey:**
-`exportKey` has full password entropy, is produced by the existing WASM `login_finish`, and never leaves the client. `emailSalt` is not involved in profile encryption — it keeps its SEC-1.11 role only.
-
-**Implementation notes:**
-
-- **exportKey only available after login, not registration.** `register_finish` returns only `RegistrationUpload` — no export key. Flow: register → auto-login → get `exportKey` → generate keypair → encrypt private key → encrypt profile → send to server.
-
-- **Password change invalidates exportKey.** New OPAQUE record → new `exportKey` → client must immediately re-encrypt `privateKey` with new `exportKey`. `profileCiphertext` and `profileKey` are unchanged. `tokenVersion` bump already happens on password change.
-
-- **Profile update.** Client re-encrypts `{ nickname, age, sex }` with same `profileKey`, sends new `profileCiphertext`. Per-viewer blobs are regenerated on next location update. Server returns fresh JWT with updated `prof` claim.
-
-**Relates to:** SEC-1.10 (PBKDF2 foundation), SEC-1.11 (emailSalt), analysis items 4+5 from 2026-03-23 session.
+**Relates to:** SEC-1.10, SEC-1.11, T-23, T-05b (block note — same key infrastructure).
 
 **Complexity:** HIGH — touches auth-service, users-service, location-service, frontend, JWT claims, and all profile read paths.
 
 ---
 
+### The Problem
+
+Profile fields (`nickname`, `age`, `sex`) currently sit in MongoDB in plaintext. Anyone with DB read access — a breach, a leaked connection string, a malicious operator — sees every user's personal data immediately. OPAQUE protects passwords, but the profile is completely unprotected.
+
+---
+
+### The Approach
+
+Use the cryptographic material OPAQUE already produces to build a layered encryption scheme:
+
+**Layer 1 — User keypair.** Each user has an X25519 keypair. The private key is wrapped with AES-GCM using `exportKey` (the key OPAQUE's `loginFinish` derives from the user's password and the server's OPRF — it has full password entropy and never leaves the client). The wrapped private key (`encryptedPrivateKey`) and the raw public key are stored in the DB. The server never has the unwrapped private key.
+
+**Layer 2 — Profile symmetric key.** A random 256-bit `profileKey` (AES-GCM) encrypts the profile fields. `profileKey` is separately encrypted for each party who needs to read the profile (owner + currently-nearby viewers) using ECDH shared secrets derived from their X25519 keypairs. The server stores `profileCiphertext` and a set of per-viewer key blobs. It never has `profileKey` in plaintext.
+
+**Layer 3 — Viewer access via location coupling.** Profile access is gated on proximity. When user B updates their location, B's client receives the public keys of currently nearby users from location-service. For each nearby user A, B computes `sharedSecret = ECDH(B.privateKey, A.publicKey)`, wraps `profileKey` with `sharedSecret`, and sends the resulting blob to the server, keyed by `(B.userId, A.userId)`. When A wants B's profile, A computes the same `sharedSecret = ECDH(A.privateKey, B.publicKey)` (identical by ECDH symmetry), decrypts the blob, and decrypts the profile. No blob → no access, no fallback.
+
+**Why `exportKey`, not `emailSalt`:**
+`exportKey` carries full password entropy and is produced by the existing WASM `loginFinish` path. It is session-bound (client memory only) and never transmitted. `emailSalt` remains a defence-in-depth measure for email privacy only (SEC-1.11) — it is not an input to profile encryption. The comment in SEC-1.11 about `profileKey = PBKDF2(email, emailSalt)` predates this design and is superseded by it.
+
+---
+
+### What This Protects Against
+
+- **DB breach:** attacker sees only `profileCiphertext` and per-viewer blobs — both are meaningless without the private keys.
+- **Malicious infra operator:** profile data is never in plaintext in MongoDB or in transit to/from the DB.
+- **Accidental log exposure:** no profile field ever appears in a log line or admin query result.
+- **Bulk harvesting:** even with full DB access, an attacker cannot recover profiles without also compromising individual users' OPAQUE credentials.
+
+### What This Does NOT Protect Against
+
+- **A legitimate viewer saving or sharing the decrypted profile.** Once A has decrypted B's profile, A's client has it in memory. Nothing prevents A from exfiltrating it.
+- **Server-sided public key substitution.** A's public key is stored plaintext on the server. If the server is malicious, it could swap A's public key with an attacker-controlled key; B would then encrypt `profileKey` for the attacker. There is no way to prevent this without a separate PKI or key pinning, neither of which is planned.
+- **Social graph inference.** The per-viewer blob table — keyed by `(B.userId, A.userId)` — tells the server exactly who is near whom at each location update. This is partially inherent to the app's proximity model, but it is a de-facto social graph even if the profiles are opaque.
+- **Compromised client.** If malware runs on the user's device, it can read the decrypted profile from memory and intercept the `exportKey`.
+- **Forward secrecy on per-viewer blobs.** If A's private key is compromised later, an attacker who stored old blobs can decrypt them retroactively.
+
+---
+
+### Caveats and Logic Holes
+
+**1. `exportKey` is only available after login, not registration.**
+`registerFinish` returns only `RegistrationUpload`; there is no `exportKey` at that point. Registration must trigger an immediate auto-login so the client can obtain `exportKey`, generate the keypair, encrypt the private key, encrypt the initial profile, and upload everything. This is a multi-step async sequence behind a single "Register" button tap — it must be atomic from the user's perspective. A failure midway (network drop) leaves the account in a partially-initialised state.
+
+**2. Password change is a critical failure path.**
+A password change creates a new OPAQUE record → new `exportKey`. The client must immediately re-derive `encryptedPrivateKey` with the new key in the same session. If this step fails (network error, tab closed), the private key becomes permanently unreadable — there is no recovery path without the old `exportKey`. `profileCiphertext` and per-viewer blobs remain in the DB but are now inaccessible. This needs either: (a) a retry mechanism with a clear "finalise security update" prompt, or (b) a session flag that blocks logout until key re-encryption succeeds.
+
+**3. Profile inaccessible until first location update.**
+A newly-registered user's profile is visible to nobody until B posts at least one location update that generates viewer blobs. A user who never shares location (account created but map not opened) has a permanently inaccessible profile. Similarly, when A first enters B's radius, A must wait up to one full location-update interval before B's client produces A's blob. This is an inherent attack window in usability terms — it must be handled gracefully in the UI ("Profile loading…" vs "Profile unavailable").
+
+**4. JWT `prof` claim chain is deep.**
+The current design threads profile data through the JWT `prof` claim, requiring four decrypt steps just for the owner to read their own profile: `exportKey` → `privateKey` → `encryptedProfileKeyForOwner` → `profileKey` → plaintext. This adds size to every JWT and couples profile data to auth flows. A simpler alternative: decrypt once at login, hold plaintext in JS memory for the session, skip the JWT claim entirely. Decision needed before Phase 2 begins.
+
+**5. Per-viewer blob scale.**
+If B has 50 nearby users, each location update requires 50 ECDH computations and a payload containing 50 encrypted blobs sent to the server. This is linear in active nearby users. At the scale this app targets (dozens of nearby users per urban area), it is manageable with WebCrypto, but the location update path becomes significantly heavier.
+
+**6. Blob cleanup / TTL.**
+Old blobs for users who are no longer nearby are not addressed. Two options: (a) blobs get a TTL matching `LOCATION_TTL` and expire automatically; (b) each location update overwrites the full blob set for B (regenerate for current nearby, implicitly removing stale ones). Option B is cleaner and recommended — it also means a viewer who moves away loses access on B's next location update, which is the correct access model.
+
+**7. Key revocation on block.**
+When B blocks A, B must generate a new `profileKey`, re-encrypt all profile data, and exclude A from the next location update's blob list. This is correct but not instantaneous: A retains access until B's next location update (one full update interval as attack window). If A's client cached the old blob, A can still decrypt offline until B re-encrypts `profileCiphertext` with the new key. This should be addressed in Phase 4 (revocation) and coordinated with T-05b.
+
+---
+
+### Implementation Phases
+
+**Phase 1 — Key infrastructure (no profile encryption yet)**
+- Generate X25519 keypair on the client after first login (post-registration auto-login, or first regular login if no keypair exists).
+- Wrap private key with AES-GCM(`exportKey`) → `encryptedPrivateKey`.
+- Store `{ publicKey, encryptedPrivateKey }` via new `POST /users/me/keys` endpoint.
+- On password change: immediately re-encrypt `encryptedPrivateKey` with new `exportKey`; block logout until complete.
+- Location-service response for location update: include `{ userId, publicKey }[]` for nearby users (needed in Phase 3).
+- DB schema: `publicKey` and `encryptedPrivateKey` fields on user document (may already exist from T-23).
+- No profile encryption yet — owner can still read/write plaintext profile fields. Profiles remain exposed in DB during this phase.
+
+**Phase 2 — Profile self-encryption (owner only)**
+- Generate random `profileKey` (AES-GCM, 256-bit) on the client.
+- Encrypt `{ nickname, age, sex }` → `profileCiphertext`.
+- Encrypt `profileKey` for owner's own access using self-ECDH or by wrapping with the owner's public key — same code path as Phase 3 viewer blobs, just where B = A.
+- Store `{ profileCiphertext, encryptedProfileKeyForOwner }` in DB via updated profile endpoint.
+- Owner reads their own profile: decrypt `encryptedProfileKeyForOwner` → `profileKey` → `profileCiphertext`. Decide here whether to use the JWT `prof` claim or hold in session memory (see caveat 4).
+- At end of this phase: profile data is encrypted in DB; no one else can read it yet. Existing profile read routes for other users return empty/placeholder.
+
+**Phase 3 — Viewer blob generation (location update integration)**
+- Location update response includes public keys of nearby users (added in Phase 1).
+- Client computes `sharedSecret = ECDH(B.privateKey, A.publicKey)` for each nearby user A.
+- Wraps `profileKey` with `sharedSecret` → per-viewer blob.
+- Sends blob set to new `POST /users/me/profile-keys` endpoint alongside the location update.
+- Server stores blobs with TTL (matching or slightly exceeding `LOCATION_TTL`).
+- Profile read endpoint (`GET /users/:id/profile`) returns `profileCiphertext` + the requester's blob.
+- If no blob exists for the requester: `403` with a specific code the UI handles gracefully.
+
+**Phase 4 — Key revocation / block integration**
+- On block: client generates new `profileKey`, re-encrypts `profileCiphertext`, uploads new profile ciphertext.
+- Next location update excludes blocked user from blob generation.
+- Old blob for blocked user is deleted server-side immediately on block action (best-effort; TTL handles remainder).
+- Coordinate with T-05b (encrypted block note) — same key infrastructure.
+
+---
+
 ## T-25 — OPAQUE Server Setup Rotation
 
-**Status:** ❌ Phase 1 reverted 2026-03-23 — owner confirmed there are no pre-OPAQUE accounts; backwards-compat re-registration code must not exist. Full rotation flow (new OPAQUE_SERVER_SETUP + DB wipe) still pending.
+**Status:** Planning. Phase 1 (backwards-compat re-registration code) was reverted 2026-03-23 — it must not exist. What remains is the rotation procedure, its operational safety, and reducing the impact of a future leak.
 
-**Context:** `OPAQUE_SERVER_SETUP` contains the server's OPRF private key. If it leaks, all `opaqueRecord` blobs are compromised. Rotation requires a DB wipe — no backwards compat.
+**Relates to:** SEC-1.1, T-23, T-24 (rotation post-T-24 is more destructive — see caveat below).
 
-**Rotation flow (owner action, no client code needed):**
-1. Generate a new `OPAQUE_SERVER_SETUP` (auth-service logs one on startup when env var is absent).
-2. Set the new value in Railway and redeploy auth-service.
-3. Wipe the `users` collection in the Railway MongoDB shell.
-4. Users re-register normally.
+---
 
-**Relates to:** SEC-1.1, T-23.
+### The Problem
+
+`OPAQUE_SERVER_SETUP` is the server's OPRF private key. It is the most sensitive secret in the entire system. With it and the `users` collection, an attacker can perform an offline dictionary attack against every user's `opaqueRecord`, effectively cracking all passwords. There is currently no formal rotation runbook, no protection against accidental logging of the value, no admin re-bootstrap mechanism after a wipe, and no user communication path for forced re-registration.
+
+---
+
+### The Approach
+
+OPAQUE's design does not support incremental key rotation — there is no way to re-key existing `opaqueRecord` blobs without each user providing their password again. Rotation therefore means: new OPRF key + DB wipe + forced re-registration. This is the only correct approach. The goal of this ticket is to make that operation as safe, fast, and least disruptive as possible.
+
+---
+
+### What Rotation Protects Against
+
+- **Future exploitation of a leaked OPRF key.** After rotation, new registrations produce blobs under the new key. The old key is worthless for attacking new records.
+- **Containing the blast radius.** If rotation happens quickly after suspected compromise, only records created during the attack window (between first compromise and rotation completion) are vulnerable.
+
+### What Rotation Does NOT Protect Against
+
+- **Pre-rotation captured traffic.** An attacker who recorded OPAQUE flows before rotation still holds valid challenge/response material. If they had the old `OPAQUE_SERVER_SETUP`, they can run offline dictionary attacks against those captures indefinitely. Rotation is not retroactive.
+- **Users already compromised.** If a password was recovered from a pre-rotation attack, that credential is in the attacker's hands regardless of rotation.
+- **The wipe itself as an attack.** A malicious operator who has Railway access can trigger a wipe without a real compromise. The rotation procedure must be owner-controlled.
+- **Future leaks.** A new `OPAQUE_SERVER_SETUP` is only as secure as the Railway environment that holds it.
+
+---
+
+### Caveats and Logic Holes
+
+**1. The attack window is the critical variable.**
+The risk of a compromised `OPAQUE_SERVER_SETUP` scales with the time before rotation. A key leaked today but rotated in 10 minutes exposes only accounts registered or logged in during those 10 minutes. A key leaked months ago and discovered today exposes the entire user base. Monitoring for anomalous auth behaviour (impossible login velocities, auth from unusual infrastructure) could shorten the detection window, but no such monitoring currently exists.
+
+**2. `OPAQUE_SERVER_SETUP` must never appear in logs.**
+The auth-service generates a new setup value and logs it to stdout when the env var is absent (useful for first-time setup). Once set, that log line must never reappear. Railway's log drain stores logs for N days — if the setup value ever appears in a log line during normal operation, it is exposed to anyone with Railway access. This must be audited before any production use.
+
+**3. Backups of `OPAQUE_SERVER_SETUP` are equivalent targets.**
+If the owner stores the value in a password manager, notes app, or email, a compromise of that storage is a compromise of the OPRF key. The backup must be treated with the same security posture as the primary.
+
+**4. Admin accounts are wiped too.**
+The `users` collection holds all accounts including admins. After a wipe, there is no admin — the only way back in is through a manual DB insertion or a bootstrap endpoint. Currently there is no bootstrap mechanism. A wipe without a plan locks the owner out of the admin panel permanently until a manual DB fix.
+
+**5. Post-T-24, rotation destroys all encrypted profile data.**
+Once T-24 is live, `encryptedPrivateKey` is wrapped with `exportKey` (derived from `OPAQUE_SERVER_SETUP` + user credentials). A new `OPAQUE_SERVER_SETUP` changes the OPRF output → new `exportKey` → old `encryptedPrivateKey` is unreadable → all profile data is permanently inaccessible. After T-24, a rotation wipes not just credentials but also all encrypted profile content. This must be called out clearly in any user communication. T-25 Phase 3 and 4 should be designed before T-24 is deployed.
+
+**6. No rolling rotation is possible.**
+OPAQUE does not support dual-key periods, grace windows, or transparent re-enrolment. Every account must re-register from scratch. There is no "login with old credentials to get a new record" path — that code was explicitly reverted.
+
+---
+
+### Implementation Phases
+
+**Phase 1 — Rotation runbook (no code; owner documentation)**
+Exact operational steps:
+1. Unset `OPAQUE_SERVER_SETUP` in Railway, redeploy auth-service — it logs a new value to stdout.
+2. Copy the logged value, immediately set it as the new `OPAQUE_SERVER_SETUP`, redeploy again.
+3. Enable maintenance mode flag in `admin_settings` (see Phase 4) to show re-registration message to users.
+4. Open MongoDB shell, wipe `users` collection: `db.users.drop()`.
+5. Run admin bootstrap (see Phase 2) to restore admin account.
+6. Disable maintenance mode.
+Document: what to do if the wipe fails, what to do if the redeploy fails, how to confirm rotation is complete.
+
+**Phase 2 — Admin bootstrap endpoint**
+- Add `POST /auth/bootstrap-admin` to auth-service.
+- Works only when the `users` collection is empty AND a `BOOTSTRAP_TOKEN` env var is set.
+- Creates a single admin account from payload `{ email, password }` using the OPAQUE registration flow.
+- After use: `BOOTSTRAP_TOKEN` must be unset in Railway immediately.
+- This eliminates the current dependency on manual DB insertion after a wipe.
+
+**Phase 3 — Startup log audit**
+- Audit all service startup code for any path that could log `OPAQUE_SERVER_SETUP` or any other sensitive env var value.
+- Auth-service currently logs the setup value intentionally when absent — confirm this path is unreachable when the var is set.
+- Add a startup assertion that validates the var is present and non-empty, without logging any bytes of its value.
+
+**Phase 4 — Maintenance mode / forced re-registration UX**
+- Add a `maintenance_mode` boolean key to `admin_settings`.
+- When true: gateway returns `503` with a specific JSON body `{ code: "MAINTENANCE", message: "..." }` on all non-bootstrap routes.
+- Client UI detects `MAINTENANCE` code and shows a full-screen banner: "We've made a security update — please re-register. Your data is safe." (or equivalent messaging agreed with owner).
+- Admin sets this before the wipe, clears it after bootstrap. Prevents confusing generic login errors during rotation.
 
 ---
 

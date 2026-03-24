@@ -245,17 +245,22 @@ const editableFields = isVenue ? `
         alertEl.className = 'alert alert-danger'; alertEl.textContent = 'New passwords do not match.'; alertEl.classList.remove('d-none'); return;
       }
       try {
-        // Re-encrypt the private key blob and update the password atomically.
-        // Both are sent in a single PUT /users/me so the key blob and password
-        // hash are never out of sync even if the request fails partway through.
-        const keys = await window.Api.getMyKeys();
-        const updatePayload = { currentPassword: curr, password: nw };
-        if (keys.encryptedPrivateKey) {
-          const newEncBlob = await window.BBMCrypto.reencrypt(curr, nw, keys.encryptedPrivateKey);
-          updatePayload.publicKey           = keys.publicKey;
-          updatePayload.encryptedPrivateKey = newEncBlob;
+        // Re-encrypt the private key blob locally using the current password before
+        // touching the server. curr is only used here — it is never sent over the wire.
+        let newPublicKey = null, newEncBlob = null;
+        if (window.BBMCrypto) {
+          const keys = await window.Api.getMyKeys();
+          if (keys.encryptedPrivateKey) {
+            newEncBlob   = await window.BBMCrypto.reencrypt(curr, nw, keys.encryptedPrivateKey);
+            newPublicKey = keys.publicKey;
+          }
         }
-        await window.Api.updateMe(updatePayload);
+        // OPAQUE two-round password change — no plaintext password leaves the browser.
+        await window.Api.changePassword({ password: nw });
+        // Save re-encrypted key blob now that the OPAQUE record is updated.
+        if (newPublicKey && newEncBlob) {
+          await window.Api.saveKeys(newPublicKey, newEncBlob);
+        }
         alertEl.className = 'alert alert-success'; alertEl.textContent = 'Password updated.'; alertEl.classList.remove('d-none');
         ['currentPw','newPw','confirmPw'].forEach(id => document.getElementById(id).value = '');
       } catch (err) {
