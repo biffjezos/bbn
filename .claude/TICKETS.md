@@ -9,7 +9,7 @@ This file is the index — one row per ticket, sorted by priority.
 
 | ID | Status | Priority | Title | Phase |
 |---|---|---|---|---|
-| [T-08](tickets/T-08.md) | active | high | Authority Service + Identity Model | 2/3 |
+| [T-08](tickets/T-08.md) | active | medium | Authority Service + Identity Model | 3/3 |
 | [T-24](tickets/T-24.md) | planned | high | Profile Data Encryption | 0/4 |
 | [T-25](tickets/T-25.md) | planned | medium | Per-User OPRF Key Rotation | 0/3 |
 | [T-05b](tickets/T-05b.md) | planned | medium | Encrypted note field in blocks | — |
@@ -50,8 +50,7 @@ This file is the index — one row per ticket, sorted by priority.
 
 Before any marketing or scaling push:
 
-1. **T-08 Phase 2** — Deploy authority-service (code done, Railway deployment pending)
-2. **T-08 Phase 3** — Dynamic feature-tier admin UI (requires Phase 2 deployed)
+1. **T-08 Phase 3** — Dynamic feature-tier admin UI (Phase 2 ✅ deployed 2026-03-24)
 3. **T-16 Phase 2** — Remaining runtime-configurable settings
 4. **T-09** — Role CRUD with Permissions UI (requires T-08 deployed)
 5. **T-06b** — Venue messaging (requires T-08 for clean auth routing)

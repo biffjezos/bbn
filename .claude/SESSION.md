@@ -6,43 +6,36 @@
 
 ---
 
-**Branch:** `claude/refactor-tickets-structure-FrWB7`
+**Branch:** `claude/verify-t08-phase2-deployment-z6h0n`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24 wrap-up
+**Last updated:** 2026-03-24
 
 ---
 
 ## In Progress
 
-Nothing — session wrapped.
+Nothing — marking T-08 Phase 2 as done, then committing.
 
 ---
 
 ## Completed This Session
 
-- Ticket structure migrated from flat TICKETS.md/TICKETS_DONE.md to individual files:
-  - `.claude/tickets/<id>.md` — 14 open/active/planned/deferred tickets
-  - `.claude/tickets/done/<id>.md` — 13 done stubs
-  - `TICKETS.md` rewritten as a one-table index with implementation order and architectural decisions
-- `verify.sh` updated — ticket stub check now looks in `tickets/` directory first (with TICKETS.md fallback)
-- `AUDIT.md` concern file descriptions tightened to one concise line each
-- `CLAUDE.md` updated — Pre-Session Checklist, Before Each Commit, Wrap-Up Checklist, and Persistent Files section all reflect the new ticket structure
-- `CHANGELOG.md` updated with CHANGE entry
+- T-08 Phase 2 confirmed deployed and working by owner (2026-03-24)
+- `tickets/T-08.md` — phase updated to 3/3, priority to medium, Phase 2 section replaced with done stub
+- `tickets/done/T-08-phase2.md` — created
+- `TICKETS.md` index — T-08 row updated (phase 3/3, medium); implementation order updated
 
 ---
 
 ## Key Decisions Made
 
-- **Option A for phases:** all phases stay in one ticket file (T-08.md); frontmatter tracks current phase. Avoids file-switching friction.
-- **All 5 concern files kept independent:** INFRA, MAINT, UX, SEC, PERF remain separate. No collapsing.
-- **Audit items stay in concern files** (no per-item individual files). Only tickets got the individual-file treatment.
-- **TICKETS_DONE.md kept** as legacy reference (not deleted) — done stubs in `tickets/done/` are the canonical record going forward.
+- T-08 Phase 2 is fully live: authority-service deployed, auth-service and tiers-service retired, gateway using AUTHORITY_SERVICE_URL.
 
 ---
 
 ## Blockers / Parked Items
 
-- T-08 Phase 2 code is done; Railway deployment pending (owner action — see `tickets/T-08.md` for Railway steps).
+None.
 
 ---
 
@@ -50,21 +43,14 @@ Nothing — session wrapped.
 
 ### What was done this session
 
-Full ticket structure refactor:
-- Every open ticket from TICKETS.md is now a standalone `tickets/T-XX.md` file with YAML frontmatter.
-- Every done ticket has a stub in `tickets/done/T-XX.md`.
-- TICKETS.md is now a clean index (one row per ticket, plus implementation order and architectural decisions).
-- CLAUDE.md describes the new structure fully; session-start reads only the index.
-- verify.sh checks `tickets/T-XX.md` and `tickets/done/T-XX.md` before falling back to TICKETS.md grep.
+T-08 Phase 2 confirmed deployed by owner. Ticket files updated to reflect phase 3 as the active work.
 
 ### What to do next
 
-1. Verify the PR is merged and Railway build is green for all services.
-2. Deploy authority-service on Railway (steps in `tickets/T-08.md`, Phase 2 section).
-3. Next code session: T-08 Phase 3 (dynamic feature-tier admin UI) or T-16 Phase 2.
-
-### Notes for next session
-
-- When opening a ticket, check its frontmatter first — `status` and `phase` are ground truth.
-- TICKETS_DONE.md still exists as legacy archive; ignore it for new work.
-- PostToolUse hook and verify.sh both work with the new structure.
+1. **T-08 Phase 3** — Dynamic feature-tier admin UI (next up):
+   - New `features` MongoDB collection (migration `010_features_seed`)
+   - authority-service: DB-backed features with 60s TTL cache + admin CRUD endpoints
+   - Gateway: proxy the new admin feature routes
+   - Admin UI: new "Features" tab (same pattern as Tiers tab)
+2. **T-16 Phase 2** — Remaining runtime-configurable settings
+3. **T-09** — Role CRUD with Permissions UI
