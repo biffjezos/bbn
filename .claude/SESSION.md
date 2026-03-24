@@ -8,25 +8,21 @@
 
 **Branch:** `claude/test-harness-structure-ejKZg`
 **Session date:** 2026-03-24
-**Last updated:** 2026-03-24 13:10 UTC (pre-commit: unified ITEM format changes)
+**Last updated:** 2026-03-24 wrap-up
 
 ---
 
 ## In Progress
 
-Harness testing — unified `<!-- ITEM ... -->` format for tickets and audit items:
-- All ticket tags in TICKETS.md migrated to `<!-- ITEM ... -->` with `concern:` field added ✅
-- All audit tags in 5 concern files migrated to `<!-- ITEM ... -->`, `severity:` → `priority:` ✅
-- `status:in-progress` → `status:active`, `status:not-started` → `status:open` ✅
-- `sessionstart.sh` refactored: shared `parse_items()` function, one parser for both boards ✅
+_(nothing — session wrapped up cleanly)_
 
 ---
 
 ## Completed This Session
 
-- [caaa058] harness: machine-readable TICKETS.md metadata + sessionstart board injection (PR #65, merged)
 - [c5ccf82] harness: AUDIT concern files tagged + sessionstart audit board
-- [this commit] harness: unified <!-- ITEM --> format for tickets and audit items
+- [4d2fd20] harness: SESSION.md mtime refresh (fix for verify.sh stale check)
+- [36c0973] harness: unified ITEM format — audit files, TICKETS.md, sessionstart.sh
 
 ---
 
@@ -35,9 +31,9 @@ Harness testing — unified `<!-- ITEM ... -->` format for tickets and audit ite
 - Unified tag: `<!-- ITEM id:X status:Y priority:Z concern:W [phase:N/M] [prereqs:...] [relates:...] -->`
 - `T` is a valid prefix — `T-08` follows the same `PREFIX-N` pattern as `INFRA-1.1`, `SEC-1.10`, etc.
 - `severity` renamed to `priority` (same concept, unified vocabulary)
-- `concern` added to ticket tags: `auth · services · db · infra · ui`
+- `concern` field added to ticket tags: `auth · services · db · infra · ui`
 - Status vocabulary: `open · planned · active · blocked · deferred · done · closed · superseded`
-- `sessionstart.sh` uses a shared `parse_items()` bash function — tickets skip `done:closed`, audit skips `resolved:superseded`
+- `sessionstart.sh` uses a shared `parse_items()` function — tickets skip `done:closed`, audit skips `resolved:superseded`
 
 ---
 
@@ -49,7 +45,29 @@ _(none)_
 
 ## Handoff Notes
 
-> All items (tickets + audit) now use `<!-- ITEM ... -->` tags with identical field structure.
-> To add any new item: write `## T-XX — Title` or `### PREFIX-N.N Title` heading, then add the `<!-- ITEM ... -->` tag on the next line.
-> To close/resolve: change `status:` to `done`/`closed` (tickets) or `resolved`/`superseded` (audit) — disappears from boards automatically.
-> sessionstart.sh `parse_items()` function accepts: file, skip-statuses (colon-separated), tmpfile, show_phase flag.
+### Harness state — fully complete
+
+All harness structure work on this branch is done and pushed:
+
+1. **`<!-- ITEM ... -->` tags** are present on every ticket in `TICKETS.md` and every finding in all five audit concern files.
+2. **Field vocabulary is unified** across tickets and audit: `id`, `status`, `priority`, `concern`, optional `phase`, `prereqs`, `relates`.
+3. **`sessionstart.sh`** uses a single `parse_items()` bash function that generates both the TICKETS board and the AUDIT board from their respective files — no duplication, no divergence.
+4. **verify.sh** passes cleanly. The only check is SESSION.md freshness (mtime < 10 min at push time).
+
+### To add a new item
+
+- Tickets: add a `## T-XX — Title` heading in `TICKETS.md`, then `<!-- ITEM id:T-XX status:open priority:medium concern:X -->` on the next line.
+- Audit: add a `### PREFIX-N.N Title` heading in the relevant concern file, then `<!-- ITEM id:PREFIX-N.N status:open priority:medium concern:X -->`.
+- It will appear automatically on the next session-start board.
+
+### To close/resolve an item
+
+- Tickets: change `status:` to `done` or `closed` → disappears from board. Then move to `TICKETS_DONE.md` with a stub.
+- Audit: change `status:` to `resolved` or `superseded` → disappears from board. Then move to `AUDIT_DONE.md` with a stub.
+
+### Next work
+
+Owner will merge PR for this branch. Next session picks up from the open tickets:
+- **T-08 (active/high)** — Authority Service Phase 2
+- **T-16 (active/medium)** — meta collection runtime-configurable settings Phase 2
+- **T-24 (planned/high)** — Profile Data Encryption
