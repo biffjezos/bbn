@@ -9,6 +9,23 @@
 
   function $(id) { return document.getElementById(id); }
 
+  function showRateLimitBanner() {
+    var container = $('notifBanner');
+    if (!container) return;
+    if (container.querySelector('.bbm-rate-limit-banner')) return;
+    var div = document.createElement('div');
+    div.className = 'alert alert-warning alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0 bbm-rate-limit-banner';
+    div.setAttribute('role', 'alert');
+    div.style.cssText = 'border-left:none;border-right:none;border-top:none';
+    div.innerHTML =
+      '<i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>' +
+      '<span>You\'ve been rate-limited. Help keep bOOmbOOm.NOW! growing: ' +
+      '<a href="' + (window.BOOMBOOM_BASE || '') + '/donate/" class="alert-link">Support us &#x2665;</a></span>' +
+      '<button type="button" class="btn-close ms-auto flex-shrink-0" aria-label="Dismiss"></button>';
+    div.querySelector('.btn-close').addEventListener('click', function () { div.remove(); });
+    container.appendChild(div);
+  }
+
   // ── Desktop nav links ─────────────────────────────────────
   var BASE = (window.BOOMBOOM_BASE);
   function getRole() {
@@ -89,6 +106,7 @@
 
   Auth.onGuestReady   = function () { /* status owned by GeoModule */ };
   Auth.onGuestExpired = function () { /* handled by GeoModule */ };
+  Auth.onRateLimited  = function () { showRateLimitBanner(); };
 
   // ── Kick off Auth.init() now — hooks are ready ────────────
   window.__authReady = Auth.init();
@@ -116,6 +134,7 @@
           var modal = bootstrap.Modal.getInstance($('loginModal'));
           if (modal) modal.hide();
         } catch (err) {
+          if (err.status === 429) showRateLimitBanner();
           if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
         } finally {
           loginBtn.disabled = false;
@@ -169,6 +188,7 @@
           var modal = bootstrap.Modal.getInstance($('registerModal'));
           if (modal) modal.hide();
         } catch (err) {
+          if (err.status === 429) showRateLimitBanner();
           if (errEl) { errEl.textContent = err.message; errEl.classList.remove('d-none'); }
         } finally {
           regBtn.disabled = false;

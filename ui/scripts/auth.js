@@ -146,6 +146,7 @@ const Auth = (() => {
           return Auth.initGuest(true);
         }
         console.warn('[Auth] Guest token failed', err);
+        if (err.status === 429) Auth.onRateLimited?.();
         Auth.onGuestExpired?.();
       }
     },
