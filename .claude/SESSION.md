@@ -6,22 +6,24 @@
 
 ---
 
-**Branch:** `claude/fix-service-compilation-9Q2Nw`
+**Branch:** `claude/fix-venue-messaging-MKdDl`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T19:30Z
+**Last updated:** 2026-03-25T20:00Z
 
 ---
 
 ## In Progress
 
-- Diagnosing venue not appearing in WS nearby.
-  - Found: `GET /favourites/ids` endpoint missing from favourites-service → 405 → fav_ids always empty (not the venue bug, separate issue).
-  - Added explicit deserialise-error logging to location-service venue query.
-  - Both fixes compiled. Pending deploy to confirm root cause via Railway logs.
+(nothing)
 
 ---
 
 ## Completed This Session
+
+- **Fix: cannot send message to venue — "User has no public key"**
+  - Root cause: `getPublicKey(venueId)` in `messages.js` calls `getProfile(venueId)` → `/users/${venueId}/profile`. Venues have no account and no public key. The profile endpoint also didn't include `managerId` in its projection or response, so the frontend had no way to find the manager.
+  - Fix (backend): added `managerId` to `ProfileDoc`, added it to both DB projections and both JSON response blocks in `get_profile` (`users-service/src/main.rs`).
+  - Fix (frontend): `getPublicKey` in `messages.js` now checks `profile.accountType === 'venue'` + `profile.managerId` and recursively resolves the manager's public key instead of erroring.
 
 - **Fix: venues not appearing in nearby WS for premium users**
   - Root cause: `tiers.rs` `nearby_radius` and `message_radius` endpoints used `load_tiers()` then `tiers.get(&tier).map_or(500, ...)`. If `meta_tiers` collection is partially seeded (has some docs but not "premium"), `tiers.get("premium")` returns None → fallback 500m. Location-service caches this 500m for premium, so nearby radius = 500m instead of 23km. Venue is outside 500m → excluded from nearby.
@@ -65,10 +67,9 @@
 ## Handoff Notes
 
 ### What to do next
-1. Merge `claude/fix-service-compilation-9Q2Nw` → `dev`.
-2. Redeploy **authority-service** and **location-service** on Railway.
-3. After deploy: **restart location-service** (or wait 5 min) to clear the stale 500m tier_radius_cache entry for "premium". Then test: premium user should see venues on the map.
-4. CodeQL SSRF alerts (18 open) — take priority at next session.
+1. Merge `claude/fix-venue-messaging-MKdDl` → `dev`.
+2. Redeploy **users-service** on Railway (backend change to `get_profile`).
+3. CodeQL SSRF alerts (18 open) — take priority at next session.
 
 ### Notes for next session
 - The `nearby_m: 0` sentinel is the correct fallback in `GatewayRadii`. Do NOT restore it to 500.
