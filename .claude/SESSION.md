@@ -76,3 +76,4 @@
 - The WS nearby path in `gateway/src/ws.rs` still does not inject X-Auth headers — it relies on the 0-fallback in common/auth.rs + tier lookup in location-service. This works but is architecturally imperfect.
 - `withinRange` reset on tier change is done in users-service via `$unset`. Range-sync recalculates on next location push.
 - The partial-seeding bug pattern (load_tiers() returns DB docs when collection is non-empty, so missing tiers get the default instead of static fallback) is now fixed in all three places: `verify.rs`, `tiers.rs::nearby_radius`, `tiers.rs::message_radius`. No further instances known.
+- Venue messaging E2EE now works: `getPublicKey` resolves venue → manager transparently. The venue's `managerId` is now returned by `GET /users/:id/profile` for venue accounts.
