@@ -6,9 +6,9 @@
 
 ---
 
-**Branch:** `claude/new-session-Sz0e6`
+**Branch:** `claude/new-session-WFPpq`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T10:20Z
+**Last updated:** 2026-03-25T11:00Z
 
 ---
 
@@ -20,20 +20,20 @@ Nothing.
 
 ## Completed This Session
 
-- Added `.claude/settings.local.json` to `.gitignore`.
-- Stored `GITHUB_TOKEN` in `.claude/settings.local.json` (gitignored).
-- Created `.github/workflows/fetch-codeql-alerts.yml` — runs Wednesday 11:15, commits alert snapshot to `dev`.
-- Added pre-session step 4 to CLAUDE.md: reads alert file from `origin/dev` via `git fetch + git show`; reports if written this Wednesday.
-- Trimmed step 4 to two sentences.
-- Filed CodeQL findings as SEC-1.13 and SEC-1.14 in AUDIT_SECURITY.md and AUDIT.md.
+- Fixed SEC-1.13 / SEC-1.14 (CodeQL CWE-312 alerts):
+  - `auth.js`: removed `STORAGE_SEX_KEY` / `bbm_sex` sessionStorage key; `_sex` now read from `parseJwt(token).sex` on `init()`; `updateProfile()` keeps sex in memory only.
+  - `favourites.js`: removed `sex` from `bbm_meet` localStorage object in `toggleMeet()`.
+  - `map.js`: removed `meet.sex` fallback; `targetSex` now derived from live nearby-users only.
+  - Updated AUDIT_SECURITY.md, AUDIT_DONE.md, AUDIT.md global table.
 
 ---
 
 ## Key Decisions Made
 
-- CodeQL alerts fetched weekly by GitHub Actions (not live on session start).
-- Pre-session step reads from `origin/dev` so sessions open before 11:15 still see fresh alerts.
-- `GITHUB_TOKEN` in `.claude/settings.local.json` only — never committed. Owner must rotate the token shared in chat.
+- `sex` is already in the JWT payload (`IssuedUserClaims.sex`) — no backend change needed.
+- CodeQL rule is a syntactic heuristic; fix satisfies the rule without changing the underlying data model (sex still plain in JWT and DB).
+- True encryption deferred to T-24.
+- Minor cosmetic regression accepted: meeting-mode pill has no gender border colour when target is off-map.
 
 ---
 
@@ -45,18 +45,6 @@ None.
 
 ## Handoff Notes
 
-### Open CodeQL alerts (SEC-1.13 / SEC-1.14) — fix before tickets
-All HIGH, `js/clear-text-storage-of-sensitive-data` (CWE-312):
-
-| Alert | File | Line |
-|---|---|---|
-| #41 | `ui/scripts/auth.js` | 204 |
-| #40 | `ui/scripts/auth.js` | 37 |
-| #3  | `ui/scripts/favourites.js` | 38 |
-
-Likely the `sex` profile field stored in localStorage/cookie. Fix is part of T-24 (Profile Data Encryption).
-
 ### What to do next
-1. Fix SEC-1.13 / SEC-1.14 (CodeQL alerts) — priority over tickets.
-2. Owner merges open session branches → `dev`.
-3. Next ticket: **T-24** (Profile Data Encryption, high priority) or **T-09** (Role CRUD).
+1. Owner merges open session branches → `dev`.
+2. Next ticket: **T-24** (Profile Data Encryption, high priority) or **T-09** (Role CRUD).
