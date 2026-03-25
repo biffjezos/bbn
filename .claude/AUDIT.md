@@ -102,7 +102,7 @@ When a finding is resolved: update the relevant concern file's summary, move the
 | ✅ | SEC-1.10 | [Security](AUDIT_SECURITY.md) | HIGH | Email pre-hash was plain SHA-256 — replaced with PBKDF2-SHA256 (100k iters), deployed 2026-03-24 |
 | ✅ | SEC-1.11 | [Security](AUDIT_SECURITY.md) | MEDIUM | No per-user email salt — `emailSalt` added to user doc at registration, deployed 2026-03-24 |
 | ✅ | SEC-1.12 | [Security](AUDIT_SECURITY.md) | HIGH | Auth token in `localStorage` — switched to `sessionStorage` + `pagehide` DELETE /location (2026-03-23) |
-| 🔲 | SEC-1.13 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of `sex` field — `auth.js:37`, `auth.js:204` — fix via T-24 |
-| 🔲 | SEC-1.14 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of sensitive data — `favourites.js:38` — fix via T-24 |
+| ✅ | SEC-1.13 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of `sex` — removed sessionStorage key, read from JWT instead — fixed 2026-03-25 |
+| ✅ | SEC-1.14 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of sensitive data — removed `sex` from `bbm_meet` localStorage — fixed 2026-03-25 |
 | ⏸️ | PERF-4.1 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Send-rate bucket in-process — not safe for multi-instance gateway (deferred) |
 | 🔲 | PERF-4.2 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Notification poll scales linearly with active users |

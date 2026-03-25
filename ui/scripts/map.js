@@ -277,7 +277,7 @@
     }
 
     const partner   = users.find(u => u.userId === meet.uid);
-    const targetSex = partner?.sex || meet.sex || null;
+    const targetSex = partner?.sex || null;
 
     // Create pill control if not yet added
     if (!meetControl) {

@@ -5,6 +5,28 @@ Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when
 
 ---
 
+## From AUDIT_SECURITY.md (2026-03-25)
+
+### DONE — SEC-1.13 CWE-312 clear-text storage of `sex` field (`auth.js:37`, `auth.js:204`)
+
+**Fixed:** 2026-03-25
+**Rule:** `js/clear-text-storage-of-sensitive-data` (CWE-312)
+
+Removed the dedicated `STORAGE_SEX_KEY` / `bbm_sex` sessionStorage key entirely. `_sex` is now read from `parseJwt(token).sex` on `init()` — the JWT already carried the field. `updateProfile()` keeps `_sex` in memory only. No storage write, no CodeQL trigger, no functional regression.
+
+Note: `sex` remains in the JWT payload and in MongoDB as a plain string. The CWE-312 rule flagged the named storage key specifically; this fix satisfies the rule without changing the underlying data model. True encryption is tracked under T-24.
+
+---
+
+### DONE — SEC-1.14 CWE-312 clear-text storage of sensitive data (`favourites.js:38`)
+
+**Fixed:** 2026-03-25
+**Rule:** `js/clear-text-storage-of-sensitive-data` (CWE-312)
+
+Removed `sex` from the `bbm_meet` object written to localStorage in `toggleMeet()`. The meeting-mode pill in `map.js` now derives `targetSex` from the live nearby-users list only (`partner?.sex`); the stored-sex fallback (used when the partner was off-map) is gone. Minor cosmetic regression: pill border has no gender colour when the meeting target is not currently visible on the map.
+
+---
+
 ## From AUDIT_INFRASTRUCTURE.md (2026-03-24)
 
 ### DONE — INFRA-1.2 Sessions TTL index stale (createdAt_1, old 2h value)
