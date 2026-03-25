@@ -12,10 +12,6 @@
 name: "Weekly CodeQL"
 
 on:
-  push:
-    branches: [ "dev" ]
-  pull_request:
-    branches: [ "dev" ]
   schedule:
     - cron: '37 10 * * 3'
 
