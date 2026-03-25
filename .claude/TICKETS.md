@@ -9,6 +9,8 @@ This file lists only open, active, planned, and deferred tickets — one row eac
 
 | ID | Status | Priority | Title | Phase |
 |---|---|---|---|---|
+| [T-27](tickets/T-27.md) | planned | high | App Architecture Specs | - |
+| [T-26](tickets/T-26.md) | planned | high | auth layering violation | - |
 | [T-24](tickets/T-24.md) | planned | high | Profile Data Encryption | 0/4 |
 | [T-25](tickets/T-25.md) | planned | medium | Per-User OPRF Key Rotation | 0/3 |
 | [T-05b](tickets/T-05b.md) | planned | medium | Encrypted note field in blocks | — |
