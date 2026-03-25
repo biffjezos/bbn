@@ -6,21 +6,22 @@
 
 ---
 
-**Branch:** `claude/new-session-WFPpq`
+**Branch:** `claude/fix-security-warnings-9SEqk`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T11:30Z
+**Last updated:** 2026-03-25T12:00Z
 
 ---
 
 ## In Progress
 
-Nothing.
+Nothing. (SEC-1.13/SEC-1.14 code fix already merged; added `workflow_dispatch` to codeql.yml so owner can trigger a rescan to clear stale GitHub alerts.)
 
 ---
 
 ## Completed This Session
 
-- Fixed SEC-1.13 / SEC-1.14 (CodeQL CWE-312 alerts):
+- Added `workflow_dispatch` trigger to `.github/workflows/codeql.yml` so owner can manually rescan to clear the 3 stale GitHub security alerts (code fix was already in dev from previous session).
+- Fixed SEC-1.13 / SEC-1.14 (CodeQL CWE-312 alerts — done in previous session, merged via PR #79):
   - `auth.js`: removed `STORAGE_SEX_KEY` / `bbm_sex` sessionStorage key; `_sex` now read from `parseJwt(token).sex` on `init()`; `updateProfile()` keeps sex in memory only.
   - `favourites.js`: removed `sex` from `bbm_meet` localStorage object in `toggleMeet()`.
   - `map.js`: removed `meet.sex` fallback; `targetSex` now derived from live nearby-users only.
@@ -46,5 +47,6 @@ Nothing.
 ## Handoff Notes
 
 ### What to do next
-1. Owner merges open session branches → `dev`.
-2. Next ticket: **T-24** (Profile Data Encryption, high priority) or **T-09** (Role CRUD).
+1. Merge this branch → `dev`.
+2. On GitHub → Actions → "Weekly CodeQL" → click "Run workflow" to trigger a manual rescan. The 3 stale security alerts (auth.js lines 37/204, favourites.js line 38) will close automatically once CodeQL confirms the issues are gone.
+3. Next ticket: **T-24** (Profile Data Encryption, high priority) or **T-09** (Role CRUD).
