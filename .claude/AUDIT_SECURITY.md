@@ -100,6 +100,28 @@ for the per-user `profileKey = PBKDF2(email, emailSalt)` derivation when profile
 
 ---
 
+### SEC-1.13 — CWE-312 Clear-text storage of `sex` field (`auth.js` lines 37 and 204)
+<!-- ITEM id:SEC-1.13 status:open priority:high concern:security -->
+
+**Files:** `ui/scripts/auth.js:37` (col 62–66), `ui/scripts/auth.js:204` (col 114–118)
+**Rule:** `js/clear-text-storage-of-sensitive-data` (CWE-312/315/359)
+**Source:** CodeQL scan 2026-03-25
+
+The `sex` (biological sex) profile field is stored in clear text — likely in `localStorage` or a cookie. Storing sensitive personal attributes unencrypted violates the privacy-by-design requirement. Relates to T-24 (Profile Data Encryption).
+
+---
+
+### SEC-1.14 — CWE-312 Clear-text storage of sensitive data (`favourites.js:38`)
+<!-- ITEM id:SEC-1.14 status:open priority:high concern:security -->
+
+**File:** `ui/scripts/favourites.js:38` (col 38–89)
+**Rule:** `js/clear-text-storage-of-sensitive-data` (CWE-312/315/359)
+**Source:** CodeQL scan 2026-03-25
+
+Sensitive profile data (traced to `sex` field) stored in clear text in favourites.js. Same class as SEC-1.13; may be fixed by the same T-24 change.
+
+---
+
 ## Summary Table
 
 | Status | ID | Severity | Finding |
@@ -116,5 +138,7 @@ for the per-user `profileKey = PBKDF2(email, emailSalt)` derivation when profile
 | ✅ | SEC-1.10 | HIGH | Email pre-hash was plain SHA-256 — replaced with PBKDF2-SHA256 (100k iters, 2026-03-23, pending deploy) |
 | ✅ | SEC-1.11 | MEDIUM | No per-user email salt — `emailSalt` added to user document at registration (2026-03-23, pending deploy) |
 | ✅ | SEC-1.12 | HIGH | Auth token stored in `localStorage` persisted after tab close — session takeover risk — switched to `sessionStorage` + `pagehide` DELETE /location (2026-03-23) |
+| 🔲 | SEC-1.13 | HIGH | CWE-312 clear-text storage of `sex` field — `auth.js:37` and `auth.js:204` — fix via T-24 |
+| 🔲 | SEC-1.14 | HIGH | CWE-312 clear-text storage of sensitive data — `favourites.js:38` — fix via T-24 |
 
 Resolved items → AUDIT_DONE.md
