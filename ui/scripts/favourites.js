@@ -136,10 +136,12 @@ function favItemHtml(f, isFav, unreadIds = new Set(), blockedIds = new Set()) {
   const meetIcon    = isMeet ? 'bi-compass-fill' : 'bi-compass';
   const hasUnread   = unreadIds.has(f.userId);
   const msgCls      = `fav-msg-btn${hasUnread ? ' fav-msg--unread' : ''}`;
-  const canMsg      = isSelf || (!isBlocked && f.withinRange === true);
+  const canReceiveMsg = f.canReceiveMessages !== false; // false only when explicitly set
+  const canMsg      = canReceiveMsg && (isSelf || (!isBlocked && f.withinRange === true));
+  // Hide the icon entirely when messaging is not possible (blocked, out of range, or venue disabled).
   const msgBtnHtml  = canMsg
     ? `<a href="${threadHref}" class="btn fav-action-btn ${msgCls}" title="${isSelf ? 'Message yourself' : 'Message'}"><i class="bi bi-chat-dots"></i></a>`
-    : `<span class="btn fav-action-btn fav-msg--disabled" title="${isBlocked ? 'User blocked' : 'Not in range'}"><i class="bi bi-chat-dots"></i></span>`;
+    : '';
 
   let rangeLine = '';
   if (isBlocked) {

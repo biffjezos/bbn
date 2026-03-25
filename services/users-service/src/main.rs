@@ -1042,6 +1042,15 @@ async fn admin_patch_tier(
         Err(e)      => { eprintln!("[admin/tier PATCH] {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
     };
 
+    // Reset withinRange for all favourites involving this user so range-sync
+    // recalculates with the new tier's radius on the next location push.
+    let _ = state.db.collection::<Document>("favourites")
+        .update_many(
+            doc! { "$or": [{ "ownerUserId": &id }, { "favouriteUserId": &id }] },
+            doc! { "$unset": { "withinRange": "" } },
+        )
+        .await;
+
     Json(json!({ "ok": true, "tokenVersion": result.token_version.unwrap_or(0) })).into_response()
 }
 
@@ -1155,6 +1164,16 @@ async fn admin_patch_user(
     };
 
     let tv = result.token_version.unwrap_or(0).max(0) as u32;
+
+    // Reset withinRange for all favourites so range-sync recalculates with the new tier.
+    if body.tier.is_some() {
+        let _ = state.db.collection::<Document>("favourites")
+            .update_many(
+                doc! { "$or": [{ "ownerUserId": &id }, { "favouriteUserId": &id }] },
+                doc! { "$unset": { "withinRange": "" } },
+            )
+            .await;
+    }
 
     // When admin patches their own account issue a fresh JWT so their session isn't immediately invalidated.
     if claims.sub == id {

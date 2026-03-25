@@ -104,7 +104,11 @@ pub async fn authority_verify(
     }
 
     // ── 5. Resolve tier data ──────────────────────────────────────────────────
+    // DB tiers take priority; fall back to static definitions so a partially-seeded
+    // meta_tiers collection never silently caps a premium user to the guest radius.
+    let static_fallback = crate::tiers::static_tiers();
     let (nearby_m, message_m) = tiers.get(&tier)
+        .or_else(|| static_fallback.get(&tier))
         .map(|t| (t.nearby_radius_m, t.message_radius_m))
         .unwrap_or((500, None));
 
