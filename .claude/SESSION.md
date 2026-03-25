@@ -6,9 +6,9 @@
 
 ---
 
-**Branch:** `claude/fix-tickets-tracking-xk0iK`
-**Session date:** 2026-03-24
-**Last updated:** 2026-03-24
+**Branch:** `claude/test-wasm-opaque-client-CD6A8`
+**Session date:** 2026-03-25
+**Last updated:** 2026-03-25
 
 ---
 
@@ -20,17 +20,14 @@ Nothing.
 
 ## Completed This Session
 
-- Cleaned up TICKETS.md: removed redundant Done table, removed stale Recommended Implementation
-  Order, removed T-19 from the open table (it was done), updated header description.
-- Updated CLAUDE.md TICKETS.md description to match.
-- Logged change in CHANGELOG.md.
+- Answered informational question about how to verify the OPAQUE WASM client works.
+- No code changes made.
 
 ---
 
 ## Key Decisions Made
 
-- Done tickets are not listed in TICKETS.md — their existence in `tickets/done/` is sufficient.
-- No implementation order in TICKETS.md — owner decides at each session start.
+None.
 
 ---
 
@@ -43,8 +40,9 @@ None.
 ## Handoff Notes
 
 ### State of the codebase
-- Branch `claude/fix-tickets-tracking-xk0iK` — housekeeping only, no code changes.
+- Branch `claude/test-wasm-opaque-client-CD6A8` — no code changes this session.
 - Previous session branches still need PRs → `dev`:
+  - `claude/fix-tickets-tracking-xk0iK`
   - `claude/find-smallest-ticket-POL5G` (T-16)
   - `claude/verify-t08-phase2-deployment-z6h0n`
   - `claude/review-open-tasks-Vf3ZM` (T-19)
