@@ -8,7 +8,7 @@
 
 **Branch:** `claude/new-session-WFPpq`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T11:00Z
+**Last updated:** 2026-03-25T11:30Z
 
 ---
 
@@ -39,7 +39,7 @@ Nothing.
 
 ## Blockers / Parked Items
 
-None.
+- `fetch-codeql-alerts.yml` fails to push to `dev` — branch is protected. Owner must either allow `github-actions[bot]` to bypass the protection rule, or workflow needs to be rewritten to push to an unprotected branch.
 
 ---
 
