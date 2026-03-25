@@ -8,7 +8,7 @@
 
 **Branch:** `claude/fix-security-warnings-9SEqk`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T12:10Z
+**Last updated:** 2026-03-25T12:30Z
 
 ---
 
@@ -22,6 +22,8 @@ Nothing. (SEC-1.13/SEC-1.14 code fix already merged; added `workflow_dispatch` t
 
 - Added `workflow_dispatch` trigger to `.github/workflows/codeql.yml` so owner can manually rescan to clear the 3 stale GitHub security alerts (code fix was already in dev from previous session).
 - Added `paths: ui/**` filter to `deploy.yml` so Pages only deploys on frontend changes.
+- Removed stale `tiers-service` and `auth-service` from `services/Cargo.toml` workspace members (dirs don't exist — broke `cargo build`).
+- Changed CodeQL Rust `build-mode` from `none` to `autobuild` so CodeQL actually compiles the code and gets proper type/call resolution (fixes "Low Rust Analysis Quality" warning).
 - Fixed SEC-1.13 / SEC-1.14 (CodeQL CWE-312 alerts — done in previous session, merged via PR #79):
   - `auth.js`: removed `STORAGE_SEX_KEY` / `bbm_sex` sessionStorage key; `_sex` now read from `parseJwt(token).sex` on `init()`; `updateProfile()` keeps sex in memory only.
   - `favourites.js`: removed `sex` from `bbm_meet` localStorage object in `toggleMeet()`.
