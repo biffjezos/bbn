@@ -245,7 +245,8 @@ pub async fn nearby_radius(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Unknown tier." }))).into_response();
     }
     let tiers    = load_tiers(&state.tiers_cache, &state.db).await;
-    let radius_m = tiers.get(&tier).map_or(500, |t| t.nearby_radius_m);
+    let statics  = static_tiers();
+    let radius_m = tiers.get(&tier).or_else(|| statics.get(&tier)).map_or(500, |t| t.nearby_radius_m);
     Json(json!({ "tier": tier, "radiusM": radius_m })).into_response()
 }
 
@@ -258,7 +259,8 @@ pub async fn message_radius(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Unknown tier." }))).into_response();
     }
     let tiers    = load_tiers(&state.tiers_cache, &state.db).await;
-    let radius_m = tiers.get(&tier).and_then(|t| t.message_radius_m).map_or(-1i64, |r| r as i64);
+    let statics  = static_tiers();
+    let radius_m = tiers.get(&tier).or_else(|| statics.get(&tier)).and_then(|t| t.message_radius_m).map_or(-1i64, |r| r as i64);
     Json(json!({ "tier": tier, "radiusM": radius_m })).into_response()
 }
 

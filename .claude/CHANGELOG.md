@@ -43,6 +43,7 @@ Structural fixes applied across sessions: pre-commit ticket + audit update steps
 
 ## Log
 
+- 2026-03-25 — REFLECTION: [Pattern blindness] When fixing the partial-seeding bug in `verify.rs` (load_tiers() returns DB data when non-empty but specific tier is missing → wrong radius), I did not grep for other callers of `load_tiers()` with the same `.get(&tier).map_or(default, ...)` pattern. The same bug existed in `tiers.rs::nearby_radius` and `tiers.rs::message_radius` and surfaced the next session. Fix: after patching any "missing key in a loaded map" bug, always grep the whole service for the same access pattern before closing the ticket.
 - 2026-03-25 — CHANGE: Added to "Never Do" in CLAUDE.md: do not change CI/CD workflow configuration (codeql.yml, deploy.yml, etc.) beyond what was explicitly requested. Observed issues go to AUDIT.md; fixes require owner instruction.
 - 2026-03-25 — CHANGE: Added pre-session step 4 to CLAUDE.md: runs `git fetch origin dev + git show` to read `.claude/codeql-alerts.md` from `origin/dev`; reports open CodeQL alerts (priority over tickets) if file was written since last Wednesday. Added `.github/workflows/fetch-codeql-alerts.yml` to auto-fetch and commit the alert snapshot every Wednesday 11:15.
 - 2026-03-24 — CHANGE: Simplified TICKETS.md — removed Done table (redundant; done tickets are inferred from `tickets/done/`), removed Recommended Implementation Order (unused; owner decides each session start). Fixed T-19 incorrectly listed in the open table. Updated CLAUDE.md TICKETS.md description to match.
