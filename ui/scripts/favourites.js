@@ -35,7 +35,7 @@ function toggleMeet(uid, nickname, sex) {
   if (getMeetUid() === uid) {
     localStorage.removeItem('bbm_meet');
   } else {
-    localStorage.setItem('bbm_meet', JSON.stringify({ uid, nickname, sex: sex || null }));
+    localStorage.setItem('bbm_meet', JSON.stringify({ uid, nickname }));
   }
   renderFavourites();
 }

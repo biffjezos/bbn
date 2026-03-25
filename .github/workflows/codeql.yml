@@ -12,12 +12,8 @@
 name: "Weekly CodeQL"
 
 on:
-  push:
-    branches: [ "dev" ]
-  pull_request:
-    branches: [ "dev" ]
   schedule:
-    - cron: '37 10 * * 3'
+    - cron: '37 6 * * 3'
 
 jobs:
   analyze:

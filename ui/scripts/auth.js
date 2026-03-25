@@ -5,7 +5,6 @@
 const STORAGE_TOKEN_KEY = 'bbm_token';
 const STORAGE_GUEST_KEY = 'bbm_guest_id';
 const STORAGE_NICK_KEY  = 'bbm_nickname';
-const STORAGE_SEX_KEY   = 'bbm_sex';
 const STORAGE_GUEST_EXP = 'bbm_guest_exp';
 const GUEST_TTL_MS      = 15 * 60 * 1000;
 const GUEST_CLEANUP_MS  = 60 * 60 * 1000; // 1 hour
@@ -34,13 +33,11 @@ const Auth = (() => {
   function saveToStorage() {
     if (_token)    sessionStorage.setItem(STORAGE_TOKEN_KEY, _token);
     if (_nickname) sessionStorage.setItem(STORAGE_NICK_KEY,  _nickname);
-    if (_sex)      sessionStorage.setItem(STORAGE_SEX_KEY,   _sex);
   }
 
   function clearUserStorage() {
     sessionStorage.removeItem(STORAGE_TOKEN_KEY);
     sessionStorage.removeItem(STORAGE_NICK_KEY);
-    sessionStorage.removeItem(STORAGE_SEX_KEY);
     localStorage.removeItem('bbm_meet');
     // Keep guest keys — guest session is independent of user account
   }
@@ -96,7 +93,7 @@ const Auth = (() => {
       if (stored && !isTokenExpired(stored)) {
         _token    = stored;
         _nickname = sessionStorage.getItem(STORAGE_NICK_KEY);
-        _sex      = sessionStorage.getItem(STORAGE_SEX_KEY);
+        _sex      = parseJwt(stored)?.sex || null;
         _isUser   = true;
         Auth.onLogin?.({ nickname: _nickname, sex: _sex });
         // Keys can't be unlocked without password — show lock screen if needed
@@ -201,7 +198,7 @@ const Auth = (() => {
     },
 
     updateProfile(fields) {
-      if (fields.sex      !== undefined) { _sex      = fields.sex;      sessionStorage.setItem(STORAGE_SEX_KEY,  _sex);      }
+      if (fields.sex      !== undefined) { _sex      = fields.sex;      }
       if (fields.nickname !== undefined) { _nickname = fields.nickname; sessionStorage.setItem(STORAGE_NICK_KEY, _nickname); }
     },
 

@@ -2,7 +2,7 @@ name: Fetch CodeQL Alerts
 
 on:
   schedule:
-    - cron: '15 11 * * 3'  # Wednesday 11:15 CET (10:15 UTC)
+    - cron: '57 6 * * 3'
   workflow_dispatch:
 
 permissions:
