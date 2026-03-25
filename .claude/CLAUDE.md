@@ -25,7 +25,8 @@ Run this on every session-start signal, in order:
 1. Read `.claude/SESSION.md` **first** — this is the most recent context and bridges any prior compaction.
 2. Read `.claude/AUDIT.md` (the index and global summary table). Do not read individual concern files speculatively — open them only when you need full context on a specific item. Do not read the rest of the codebase speculatively.
 3. Read `.claude/TICKETS.md` (the index) for pending tickets. Open individual ticket files in `.claude/tickets/` only when you need full detail on a specific ticket.
-4. Greet the owner, present the last audit summary and SESSION.md "In Progress" state, and ask what to do.
+4. **CodeQL alerts** — read `.claude/codeql-alerts.md` if it exists. A scheduled agent writes this file every Wednesday at 11:15 after the scan completes. If the file was written since the most recent Wednesday and has not been reviewed this session, report the alerts to the owner and note that **CodeQL alerts take priority over tickets**. Do not fetch live from the API on every session — only the scheduled agent does that. If the file is missing or outdated (older than last Wednesday), note it briefly and move on.
+5. Greet the owner, present the last audit summary and SESSION.md "In Progress" state, and ask what to do.
 
 ---
 

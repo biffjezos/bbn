@@ -1,0 +1,60 @@
+name: Fetch CodeQL Alerts
+
+on:
+  schedule:
+    - cron: '15 10 * * 3'  # Wednesday 11:15 CET (10:15 UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  security-events: read
+
+jobs:
+  fetch-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Fetch open CodeQL alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          alerts=$(gh api \
+            /repos/${{ github.repository }}/code-scanning/alerts?state=open\&per_page=100 \
+            --jq '[.[] | {
+              number: .number,
+              severity: .rule.security_severity_level,
+              rule: .rule.id,
+              description: .rule.description,
+              file: .most_recent_instance.location.path,
+              line: .most_recent_instance.location.start_line,
+              message: (.most_recent_instance.message.text | split("\n")[0])
+            }]')
+
+          count=$(echo "$alerts" | jq 'length')
+          fetched_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          cat > .claude/codeql-alerts.md << EOF
+          # CodeQL Alerts
+
+          **Fetched:** $fetched_at
+          **Open alerts:** $count
+
+          \`\`\`json
+          $alerts
+          \`\`\`
+          EOF
+
+      - name: Commit alerts file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .claude/codeql-alerts.md
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update CodeQL alerts snapshot [$(date -u +%Y-%m-%d)]"
+            git push origin dev
+          fi
