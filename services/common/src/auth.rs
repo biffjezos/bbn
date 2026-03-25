@@ -475,11 +475,13 @@ where
             let radii        = parts.headers.get("x-auth-radii")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| serde_json::from_str::<GatewayRadii>(s).ok())
-                .unwrap_or(GatewayRadii { nearby_m: 500, message_m: None });
+                // 0 signals "not resolved yet" — location-service falls back to tier lookup.
+                .unwrap_or(GatewayRadii { nearby_m: 0, message_m: None });
 
             Ok(AuthedByGateway(GatewayIdentity { sub, role, account_type, tier, tv, features, radii }))
         } else {
             // Fallback: gateway didn't inject headers — decode JWT + check tokenVersion.
+            // nearby_m: 0 signals "unknown" so location-service can resolve via tier lookup.
             let AuthToken(claims) = AuthToken::from_request_parts(parts, state).await?;
             Ok(AuthedByGateway(GatewayIdentity {
                 sub:          claims.sub,
@@ -488,7 +490,7 @@ where
                 tier:         claims.tier.unwrap_or_else(|| "regular".to_string()),
                 tv:           claims.tv.unwrap_or(0),
                 features:     vec![],
-                radii:        GatewayRadii { nearby_m: 500, message_m: None },
+                radii:        GatewayRadii { nearby_m: 0, message_m: None },
             }))
         }
     }

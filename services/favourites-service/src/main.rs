@@ -150,11 +150,13 @@ struct RangeSyncFavDoc {
 #[derive(Deserialize)]
 struct UserProfile {
     #[serde(rename = "_id")]
-    id:           mongodb::bson::oid::ObjectId,
-    nickname:     Option<String>,
-    sex:          Option<String>,
+    id:                    mongodb::bson::oid::ObjectId,
+    nickname:              Option<String>,
+    sex:                   Option<String>,
     #[serde(rename = "accountType")]
-    account_type: String,
+    account_type:          String,
+    #[serde(rename = "canReceiveMessages")]
+    can_receive_messages:  Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -276,7 +278,7 @@ async fn get_favourites(
     let users: Vec<UserProfile> = match state.db
         .collection::<UserProfile>("users")
         .find(doc! { "_id": { "$in": &oids } })
-        .projection(doc! { "_id": 1, "nickname": 1, "sex": 1, "accountType": 1 })
+        .projection(doc! { "_id": 1, "nickname": 1, "sex": 1, "accountType": 1, "canReceiveMessages": 1 })
         .await
     {
         Ok(c)  => c.try_collect().await.unwrap_or_default(),
@@ -314,15 +316,17 @@ async fn get_favourites(
             {
                 let is_venue = u.account_type == "venue";
                 json!({
-                    "userId":        e.favourite_user_id,
-                    "nickname":      u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
-                    "sex":           u.sex.as_deref(),
-                    "accountType":   u.account_type,
+                    "userId":              e.favourite_user_id,
+                    "nickname":            u.nickname.as_deref().unwrap_or(&e.favourite_user_id),
+                    "sex":                 u.sex.as_deref(),
+                    "accountType":         u.account_type,
                     // Venues are always online
-                    "online":        is_venue || online_set.contains(&e.favourite_user_id),
-                    "addedAt":       e.added_at.and_then(|d| d.try_to_rfc3339_string().ok()),
-                    "withinRange":   e.within_range,
-                    "withinRangeAt": e.within_range_at.and_then(|d| d.try_to_rfc3339_string().ok()),
+                    "online":              is_venue || online_set.contains(&e.favourite_user_id),
+                    "addedAt":             e.added_at.and_then(|d| d.try_to_rfc3339_string().ok()),
+                    "withinRange":         e.within_range,
+                    "withinRangeAt":       e.within_range_at.and_then(|d| d.try_to_rfc3339_string().ok()),
+                    // Venues with canReceiveMessages:false are not messageable by anyone.
+                    "canReceiveMessages":  if is_venue { Some(u.can_receive_messages.unwrap_or(true)) } else { None },
                 })
             }
         })
