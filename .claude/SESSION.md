@@ -62,11 +62,13 @@ Nothing — fixes committed and pushed.
 ## Handoff Notes
 
 ### What to do next
-1. Merge `claude/fix-premium-user-visibility-EYIK8` → `dev` and redeploy all four services (common, authority-service, favourites-service, users-service) on Railway.
-2. After deploy: premium user should reconnect WS (refresh page) to pick up new 23 km radius.
-3. CodeQL SSRF alerts (18 open) — take priority at next session.
+1. Merge `claude/fix-service-compilation-9Q2Nw` → `dev`.
+2. Redeploy **authority-service** and **location-service** on Railway.
+3. After deploy: **restart location-service** (or wait 5 min) to clear the stale 500m tier_radius_cache entry for "premium". Then test: premium user should see venues on the map.
+4. CodeQL SSRF alerts (18 open) — take priority at next session.
 
 ### Notes for next session
-- The `nearby_m: 0` sentinel is now the correct fallback in `GatewayRadii`. Do NOT restore it to 500.
-- The WS nearby path in `gateway/src/ws.rs` still does not inject X-Auth headers — it relies on the 0-fallback in common/auth.rs + tier lookup in location-service. This works but is architecturally imperfect; a full fix would call authority_guard at WS connect time.
-- `withinRange` reset on tier change is now done in users-service via `$unset`. Range-sync recalculates on next push.
+- The `nearby_m: 0` sentinel is the correct fallback in `GatewayRadii`. Do NOT restore it to 500.
+- The WS nearby path in `gateway/src/ws.rs` still does not inject X-Auth headers — it relies on the 0-fallback in common/auth.rs + tier lookup in location-service. This works but is architecturally imperfect.
+- `withinRange` reset on tier change is done in users-service via `$unset`. Range-sync recalculates on next location push.
+- The partial-seeding bug pattern (load_tiers() returns DB docs when collection is non-empty, so missing tiers get the default instead of static fallback) is now fixed in all three places: `verify.rs`, `tiers.rs::nearby_radius`, `tiers.rs::message_radius`. No further instances known.
