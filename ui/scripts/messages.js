@@ -44,6 +44,10 @@ async function getPublicKey(userId) {
   const hit = _pubKeyCache[userId];
   if (hit && hit.exp > Date.now()) return hit.value;
   const profile = await window.Api.getProfile(userId);
+  // Venues have no account of their own — resolve to the manager's public key.
+  if (profile.accountType === 'venue' && profile.managerId) {
+    return getPublicKey(profile.managerId);
+  }
   if (!profile.publicKey) throw new Error('User has no public key — not yet logged in since E2EE update.');
   _pubKeyCache[userId] = { value: profile.publicKey, exp: Date.now() + _CACHE_TTL_MS };
   return profile.publicKey;

@@ -143,6 +143,8 @@ struct ProfileDoc {
     public_key:            Option<String>,
     #[serde(rename = "accountType")]
     account_type:          String,
+    #[serde(rename = "managerId")]
+    manager_id:            Option<String>,
     #[serde(rename = "venueName")]
     venue_name:            Option<String>,
     description:           Option<String>,
@@ -575,7 +577,7 @@ async fn get_profile(
             // Viewer blocked the target — return profile with flag
             let user = match state.db.collection::<ProfileDoc>("users")
                 .find_one(doc! { "_id": oid })
-                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
+                .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "managerId": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
                 .await
             {
                 Ok(Some(u)) => u,
@@ -588,6 +590,7 @@ async fn get_profile(
                 "sex":                 user.sex.as_deref(),
                 "publicKey":           user.public_key.as_deref(),
                 "accountType":         user.account_type,
+                "managerId":           user.manager_id.as_deref(),
                 "venueName":           user.venue_name.as_deref(),
                 "description":         user.description.as_deref(),
                 "openingHours":        user.opening_hours.as_deref(),
@@ -601,7 +604,7 @@ async fn get_profile(
 
     let user = match state.db.collection::<ProfileDoc>("users")
         .find_one(doc! { "_id": oid })
-        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
+        .projection(doc! { "nickname": 1, "age": 1, "sex": 1, "publicKey": 1, "accountType": 1, "managerId": 1, "venueName": 1, "description": 1, "openingHours": 1, "locationType": 1, "address": 1, "canReceiveMessages": 1, "_id": 0 })
         .await
     {
         Ok(Some(u)) => u,
@@ -615,6 +618,7 @@ async fn get_profile(
         "sex":                user.sex.as_deref(),
         "publicKey":          user.public_key.as_deref(),
         "accountType":        user.account_type,
+        "managerId":          user.manager_id.as_deref(),
         "venueName":          user.venue_name.as_deref(),
         "description":        user.description.as_deref(),
         "openingHours":       user.opening_hours.as_deref(),
