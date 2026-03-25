@@ -17,6 +17,9 @@ services/target/
 .env.local
 *.log
 
+# Claude Code local settings (may contain secrets)
+.claude/settings.local.json
+
 # OS
 .DS_Store
 Thumbs.db

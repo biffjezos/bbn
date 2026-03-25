@@ -6,9 +6,9 @@
 
 ---
 
-**Branch:** `claude/test-wasm-opaque-client-CD6A8`
+**Branch:** `claude/new-session-Sz0e6`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25
+**Last updated:** 2026-03-25T10:20Z
 
 ---
 
@@ -20,14 +20,20 @@ Nothing.
 
 ## Completed This Session
 
-- Answered informational question about how to verify the OPAQUE WASM client works.
-- No code changes made.
+- Added `.claude/settings.local.json` to `.gitignore`.
+- Stored `GITHUB_TOKEN` in `.claude/settings.local.json` (gitignored).
+- Created `.github/workflows/fetch-codeql-alerts.yml` — runs Wednesday 11:15, commits alert snapshot to `dev`.
+- Added pre-session step 4 to CLAUDE.md: reads alert file from `origin/dev` via `git fetch + git show`; reports if written this Wednesday.
+- Trimmed step 4 to two sentences.
+- Filed CodeQL findings as SEC-1.13 and SEC-1.14 in AUDIT_SECURITY.md and AUDIT.md.
 
 ---
 
 ## Key Decisions Made
 
-None.
+- CodeQL alerts fetched weekly by GitHub Actions (not live on session start).
+- Pre-session step reads from `origin/dev` so sessions open before 11:15 still see fresh alerts.
+- `GITHUB_TOKEN` in `.claude/settings.local.json` only — never committed. Owner must rotate the token shared in chat.
 
 ---
 
@@ -39,15 +45,18 @@ None.
 
 ## Handoff Notes
 
-### State of the codebase
-- Branch `claude/test-wasm-opaque-client-CD6A8` — no code changes this session.
-- Previous session branches still need PRs → `dev`:
-  - `claude/fix-tickets-tracking-xk0iK`
-  - `claude/find-smallest-ticket-POL5G` (T-16)
-  - `claude/verify-t08-phase2-deployment-z6h0n`
-  - `claude/review-open-tasks-Vf3ZM` (T-19)
+### Open CodeQL alerts (SEC-1.13 / SEC-1.14) — fix before tickets
+All HIGH, `js/clear-text-storage-of-sensitive-data` (CWE-312):
+
+| Alert | File | Line |
+|---|---|---|
+| #41 | `ui/scripts/auth.js` | 204 |
+| #40 | `ui/scripts/auth.js` | 37 |
+| #3  | `ui/scripts/favourites.js` | 38 |
+
+Likely the `sex` profile field stored in localStorage/cookie. Fix is part of T-24 (Profile Data Encryption).
 
 ### What to do next
-
-1. Owner merges all open branches → `dev`.
-2. Next ticket: **T-09** (Role CRUD with Permissions UI) — open, medium priority.
+1. Fix SEC-1.13 / SEC-1.14 (CodeQL alerts) — priority over tickets.
+2. Owner merges open session branches → `dev`.
+3. Next ticket: **T-24** (Profile Data Encryption, high priority) or **T-09** (Role CRUD).

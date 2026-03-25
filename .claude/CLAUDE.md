@@ -25,7 +25,8 @@ Run this on every session-start signal, in order:
 1. Read `.claude/SESSION.md` **first** — this is the most recent context and bridges any prior compaction.
 2. Read `.claude/AUDIT.md` (the index and global summary table). Do not read individual concern files speculatively — open them only when you need full context on a specific item. Do not read the rest of the codebase speculatively.
 3. Read `.claude/TICKETS.md` (the index) for pending tickets. Open individual ticket files in `.claude/tickets/` only when you need full detail on a specific ticket.
-4. Greet the owner, present the last audit summary and SESSION.md "In Progress" state, and ask what to do.
+4. **CodeQL alerts** — run `git fetch origin dev --quiet && git show origin/dev:.claude/codeql-alerts.md 2>/dev/null`. If the file exists and was written since the most recent Wednesday, report the alerts — they take priority over tickets.
+5. Greet the owner, present the last audit summary and SESSION.md "In Progress" state, and ask what to do.
 
 ---
 
