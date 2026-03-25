@@ -4,8 +4,6 @@ WORKDIR /build
 COPY services/Cargo.toml services/rust-toolchain.toml ./
 COPY services/common ./common
 # Stub workspace members not being built
-COPY services/auth-service/Cargo.toml ./auth-service/Cargo.toml
-RUN mkdir -p ./auth-service/src && echo 'fn main(){}' > ./auth-service/src/main.rs
 COPY services/location-service/Cargo.toml ./location-service/Cargo.toml
 RUN mkdir -p ./location-service/src && echo 'fn main(){}' > ./location-service/src/main.rs
 COPY services/messages-service/Cargo.toml ./messages-service/Cargo.toml
