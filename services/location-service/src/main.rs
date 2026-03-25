@@ -473,7 +473,10 @@ async fn get_nearby(
         .projection(doc! { "_id": 1, "nickname": 1, "fixedLat": 1, "fixedLon": 1 })
         .await
     {
-        Ok(cursor) => cursor.try_collect().await.unwrap_or_default(),
+        Ok(cursor) => match cursor.try_collect::<Vec<VenueDoc>>().await {
+            Ok(docs) => { if docs.is_empty() { eprintln!("[location/nearby] venues: query returned 0 docs"); } docs }
+            Err(e)   => { eprintln!("[location/nearby] venues: deserialize error: {e}"); vec![] }
+        },
         Err(e) => { eprintln!("[location/nearby] venues: {e}"); vec![] }
     };
 

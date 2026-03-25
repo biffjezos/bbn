@@ -14,7 +14,7 @@ use std::{
 
 use axum::{
     extract::{FromRef, Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
     routing::{delete, get, post},
     Router,
@@ -248,6 +248,31 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         Ok(_)  => Json(json!({ "ok": true })).into_response(),
         Err(_) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "ok": false, "error": "DB unreachable" }))).into_response(),
     }
+}
+
+// ── GET /favourites/ids ───────────────────────────────────────────────────────
+// Internal: called by location-service to get fav IDs for limit bypass.
+
+async fn get_favourite_ids(
+    _svc: ServiceToken,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let user_id = match headers.get("x-user-id").and_then(|v| v.to_str().ok()) {
+        Some(id) if !id.is_empty() => id.to_string(),
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({ "error": "X-User-Id required." }))).into_response(),
+    };
+    let ids: Vec<String> = match state.db
+        .collection::<FavouriteDoc>("favourites")
+        .find(doc! { "ownerUserId": &user_id })
+        .projection(doc! { "favouriteUserId": 1 })
+        .await
+    {
+        Ok(c)  => c.try_collect::<Vec<FavouriteDoc>>().await.unwrap_or_default()
+                    .into_iter().map(|d| d.favourite_user_id).collect(),
+        Err(e) => { eprintln!("[favourites/ids] find: {e}"); return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response(); }
+    };
+    Json(json!({ "userIds": ids })).into_response()
 }
 
 // ── GET /favourites ───────────────────────────────────────────────────────────
@@ -770,6 +795,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/health",                                  get(health))
+        .route("/favourites/ids",                          get(get_favourite_ids))
         .route("/favourites",                              get(get_favourites))
         .route("/favourites/{user_id}",                    post(post_favourite))
         .route("/favourites/{user_id}",                    delete(delete_favourite))

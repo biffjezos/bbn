@@ -8,13 +8,16 @@
 
 **Branch:** `claude/fix-service-compilation-9Q2Nw`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T18:45Z
+**Last updated:** 2026-03-25T19:30Z
 
 ---
 
 ## In Progress
 
-Nothing — fixes committed and pushed.
+- Diagnosing venue not appearing in WS nearby.
+  - Found: `GET /favourites/ids` endpoint missing from favourites-service → 405 → fav_ids always empty (not the venue bug, separate issue).
+  - Added explicit deserialise-error logging to location-service venue query.
+  - Both fixes compiled. Pending deploy to confirm root cause via Railway logs.
 
 ---
 
