@@ -6,19 +6,23 @@
 
 ---
 
-**Branch:** `claude/fix-premium-user-visibility-EYIK8`
+**Branch:** `claude/fix-service-compilation-9Q2Nw`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T15:30Z
+**Last updated:** 2026-03-25T18:00Z
 
 ---
 
 ## In Progress
 
-Nothing — fixes committed and pushed.
+Nothing — fix committed and pushed.
 
 ---
 
 ## Completed This Session
+
+- **Fix: all services fail to build — tiers-service removed from workspace but still referenced in Dockerfiles**
+  - Root cause: `tiers-service` was removed from `services/Cargo.toml` workspace members but all 8 Dockerfiles (`Dockerfile.authority`, `.users`, `.favourites`, `.gateway`, `.location`, `.messages`, `.blocks`, `.migration`) still had `COPY services/tiers-service/Cargo.toml` + `RUN mkdir -p ./tiers-service/src` lines.
+  - Fix: removed those two lines from all 8 Dockerfiles. Not a cache issue — the file simply no longer exists in the repo.
 
 - **Fix: premium users see zero nearby users / venues not on map / compass "out of range"**
   - Root cause 1: `common/src/auth.rs` — `AuthedByGateway` fallback (used when X-Auth-Radii headers are absent, i.e. the WS nearby path) was hardcoded to `nearby_m: 500`. Premium users were capped at 500 m instead of 23 km.
