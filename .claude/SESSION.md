@@ -8,17 +8,22 @@
 
 **Branch:** `claude/fix-service-compilation-9Q2Nw`
 **Session date:** 2026-03-25
-**Last updated:** 2026-03-25T18:00Z
+**Last updated:** 2026-03-25T18:45Z
 
 ---
 
 ## In Progress
 
-Nothing — fix committed and pushed.
+Nothing — fixes committed and pushed.
 
 ---
 
 ## Completed This Session
+
+- **Fix: venues not appearing in nearby WS for premium users**
+  - Root cause: `tiers.rs` `nearby_radius` and `message_radius` endpoints used `load_tiers()` then `tiers.get(&tier).map_or(500, ...)`. If `meta_tiers` collection is partially seeded (has some docs but not "premium"), `tiers.get("premium")` returns None → fallback 500m. Location-service caches this 500m for premium, so nearby radius = 500m instead of 23km. Venue is outside 500m → excluded from nearby.
+  - Fix: added `.or_else(|| static_tiers().get(&tier))` to both `nearby_radius` and `message_radius` — mirrors the fix applied to `verify.rs` in the previous session.
+  - **Note**: after deploy, the location-service tier_radius_cache must expire (5-minute TTL) before premium users see the correct 23km radius. Or restart location-service.
 
 - **Fix: all services fail to build — tiers-service removed from workspace but still referenced in Dockerfiles**
   - Root cause: `tiers-service` was removed from `services/Cargo.toml` workspace members but all 8 Dockerfiles (`Dockerfile.authority`, `.users`, `.favourites`, `.gateway`, `.location`, `.messages`, `.blocks`, `.migration`) still had `COPY services/tiers-service/Cargo.toml` + `RUN mkdir -p ./tiers-service/src` lines.
