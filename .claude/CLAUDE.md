@@ -230,6 +230,7 @@ Never edit or remove existing entries.
   suggestions on those files without explicit permission.
 - **Do not change `var DEBUG` in `ui/scripts/api.js`** without explicit
   permission.
+- **Do not change CI/CD workflow files** (`.github/workflows/`) beyond what was explicitly requested. If a CI quality or configuration issue is observed, log it as an audit item and ask the owner — do not self-authorize a fix.
 - **Do not tell me what the project is about.** I already know.
 - **Do not hallucinate errors.** If you cannot find the reported bug, say so.
   Check whether other components are down, environment variables are missing, or
