@@ -1,0 +1,13 @@
+# ============================================================
+# bOOmbOOm.NOW! — Jekyll Configuration
+# ============================================================
+
+title: bOOmbOOm.NOW!
+baseurl: "/bbn"
+url: "https://biffjezos.github.io"
+
+api_url: "https://boom.up.railway.app/api"
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
