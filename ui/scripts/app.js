@@ -20,27 +20,39 @@ if ('serviceWorker' in navigator) {
 // ------------------ PWA Install ------------------
 let deferredPrompt;
 
+var _isIOS = /ipad|iphone|ipod/i.test(navigator.userAgent) && !window.MSStream;
+var _isInStandalone = window.matchMedia('(display-mode: standalone)').matches
+                   || window.navigator.standalone === true;
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  const btn = document.getElementById('installBtn');
-  if (btn) btn.style.display = 'block';
+  const sec = document.getElementById('installSection');
+  if (sec) sec.style.display = '';
 });
 
 window.addEventListener('appinstalled', () => {
-  console.log('App successfully installed!');
+  deferredPrompt = null;
+  const sec = document.getElementById('installSection');
+  if (sec) sec.style.display = 'none';
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+  // iOS: show manual instructions if not already installed
+  if (_isIOS && !_isInStandalone) {
+    const hint = document.getElementById('iosInstallHint');
+    if (hint) hint.style.display = '';
+  }
+
   const btn = document.getElementById('installBtn');
   if (btn) {
     btn.addEventListener('click', async () => {
       if (!deferredPrompt) return;
       deferredPrompt.prompt();
       const choice = await deferredPrompt.userChoice;
-      console.log('Install outcome:', choice.outcome);
       deferredPrompt = null;
-      btn.style.display = 'none';
+      const sec = document.getElementById('installSection');
+      if (sec) sec.style.display = 'none';
     });
   }
 });
