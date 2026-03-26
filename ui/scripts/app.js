@@ -119,10 +119,12 @@ window.addEventListener('DOMContentLoaded', () => {
         '<a href="' + BASE + '/messages/"   class="nav-link ' + (p.startsWith(BASE + '/messages/')   ? 'active' : '') + '"><i class="bi bi-chat-dots me-1"></i>Messages</a>' +
         '<a href="' + BASE + '/favourites/" class="nav-link ' + (p.startsWith(BASE + '/favourites/') ? 'active' : '') + '"><i class="bi bi-star me-1"></i>Favourites</a>' +
         '<a href="' + BASE + '/profile/"    class="nav-link ' + (p.startsWith(BASE + '/profile/')    ? 'active' : '') + '"><i class="bi bi-person-circle me-1"></i>Profile</a>';
+      /** removed by Project Owner. No admin menu item in main menu bar.
       if (getRole() === 'admin') {
         el.innerHTML +=
           '<a href="' + BASE + '/admin/" class="nav-link ' + (p.startsWith(BASE + '/admin/') ? 'active' : '') + '"><i class="bi bi-shield-lock me-1"></i>Admin</a>';
       }
+      */
     }
   }
 
