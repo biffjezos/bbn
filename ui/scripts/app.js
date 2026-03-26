@@ -11,7 +11,27 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/bbn/service-worker.js');
   }
-  // 
+  let deferredPrompt;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); // Stop Chrome from showing the prompt automatically
+    deferredPrompt = e;
+
+    // Show a custom install button
+    const btn = document.getElementById('installBtn');
+    btn.style.display = 'block';
+    btn.addEventListener('click', () => {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(choice => {
+        if (choice.outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+        } else {
+          console.log('User dismissed the install prompt');
+        }
+        deferredPrompt = null;
+      });
+    });
+  });
 
   function $(id) { return document.getElementById(id); }
 
