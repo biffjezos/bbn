@@ -31,17 +31,12 @@ const ASSETS = [
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME).then(cache => {
-            const promises = ASSETS.map(url => 
-                cache.add(url).catch(err => {
-                    console.error('Failed to cache:', url, err);
-                })
-            );
-            return Promise.all(promises);
+            return cache.addAll(ASSETS); // FAILS CLEANLY if any asset can't be fetched
         }).then(() => self.skipWaiting())
     );
 });
 
-// Activate event: clean up old caches
+// Activate event: clean up old caches + claim clients
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
@@ -49,20 +44,23 @@ self.addEventListener('activate', event => {
                 keys.filter(key => key !== CACHE_NAME)
                     .map(key => caches.delete(key))
             )
-        )
+        ).then(() => self.clients.claim())
     );
     console.log('Service Worker activated');
 });
 
-// Fetch event: respond with cache first, fallback to network
+// Fetch event: respond with cache first, network fallback with error handling
 self.addEventListener('fetch', event => {
     event.respondWith(
         caches.match(event.request)
             .then(response => {
                 if (response) return response;
 
-                return fetch(event.request).catch(() => {
-                    // Optional fallback
+                // Catch fetch errors
+                return fetch(event.request).catch(err => {
+                    console.error('Fetch failed for:', event.request.url, err);
+
+                    // Only fallback for navigation requests (HTML pages)
                     if (event.request.mode === 'navigate') {
                         return caches.match('/bbn/');
                     }
