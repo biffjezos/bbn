@@ -32,13 +32,17 @@ const ASSETS = [
     '/bbn/styles/fonts.css'
 ];
 
-// Install: cache all assets
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(ASSETS))
-            .then(() => self.skipWaiting())
-            .catch(err => console.error('Cache installation failed:', err))
+        caches.open(CACHE_NAME).then(async cache => {
+            for (const url of ASSETS) {
+                try {
+                    await cache.add(url);
+                } catch (err) {
+                    console.warn('Failed to cache:', url, err);
+                }
+            }
+        }).then(() => self.skipWaiting())
     );
 });
 
