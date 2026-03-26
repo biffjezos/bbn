@@ -20,38 +20,57 @@ if ('serviceWorker' in navigator) {
 // ------------------ PWA Install ------------------
 let deferredPrompt;
 
-var _isIOS = /ipad|iphone|ipod/i.test(navigator.userAgent) && !window.MSStream;
-var _isInStandalone = window.matchMedia('(display-mode: standalone)').matches
-                   || window.navigator.standalone === true;
+var _isIOS        = /ipad|iphone|ipod/i.test(navigator.userAgent) && !window.MSStream;
+var _isFirefox    = /firefox/i.test(navigator.userAgent);
+var _isMobile     = /android|ipad|iphone|ipod/i.test(navigator.userAgent);
+var _isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                 || window.navigator.standalone === true;
+
+function _activateInstallBtn() {
+  var btn      = document.getElementById('installBtn');
+  var fallback = document.getElementById('installFallback');
+  if (btn)      btn.disabled = false;
+  if (fallback) fallback.style.display = 'none';
+}
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  const sec = document.getElementById('installSection');
-  if (sec) sec.style.display = '';
+  _activateInstallBtn(); // activate button (DOM may already be ready)
 });
 
 window.addEventListener('appinstalled', () => {
   deferredPrompt = null;
-  const sec = document.getElementById('installSection');
+  var sec = document.getElementById('installSection');
   if (sec) sec.style.display = 'none';
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  // iOS: show manual instructions if not already installed
-  if (_isIOS && !_isInStandalone) {
-    const hint = document.getElementById('iosInstallHint');
+  if (_isStandalone) return; // already running as installed app — hide everything
+
+  if (_isIOS) {
+    var hint = document.getElementById('iosInstallHint');
     if (hint) hint.style.display = '';
+  } else if (_isFirefox && _isMobile) {
+    var ffHint = document.getElementById('firefoxInstallHint');
+    if (ffHint) ffHint.style.display = '';
+  } else if (_isMobile) {
+    // Chrome / Edge / Samsung on Android — show section immediately;
+    // button starts disabled + fallback text visible until beforeinstallprompt fires.
+    var sec = document.getElementById('installSection');
+    if (sec) sec.style.display = '';
+    // If beforeinstallprompt already fired before DOMContentLoaded, activate now.
+    if (deferredPrompt) _activateInstallBtn();
   }
 
-  const btn = document.getElementById('installBtn');
+  var btn = document.getElementById('installBtn');
   if (btn) {
     btn.addEventListener('click', async () => {
       if (!deferredPrompt) return;
       deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
+      await deferredPrompt.userChoice;
       deferredPrompt = null;
-      const sec = document.getElementById('installSection');
+      var sec = document.getElementById('installSection');
       if (sec) sec.style.display = 'none';
     });
   }

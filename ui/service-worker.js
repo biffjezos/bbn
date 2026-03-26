@@ -3,7 +3,7 @@
 // Full cache + fetch handling with offline fallbacks
 // ============================================================
 
-const CACHE_NAME = 'app-v1';
+const CACHE_NAME = 'app-v2';
 const ASSETS = [
     '/bbn/',
     '/bbn/donate',
