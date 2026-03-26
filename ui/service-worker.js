@@ -30,12 +30,15 @@ const ASSETS = [
 // Install event: cache all assets
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME)
-            .then(cache => cache.addAll(ASSETS))
-            .then(() => self.skipWaiting())
-            .catch(err => console.error('Cache addAll failed:', err))
+        caches.open(CACHE_NAME).then(cache => {
+            const promises = ASSETS.map(url => 
+                cache.add(url).catch(err => {
+                    console.error('Failed to cache:', url, err);
+                })
+            );
+            return Promise.all(promises);
+        }).then(() => self.skipWaiting())
     );
-    console.log('Service Worker installed');
 });
 
 // Activate event: clean up old caches
