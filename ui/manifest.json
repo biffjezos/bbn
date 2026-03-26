@@ -1,7 +1,7 @@
 {
   "name": "bOOm bOOm.NOW!",
   "short_name": "bOOm",
-  "start_url": "/bbn",
+  "start_url": "/bbn/",
   "display": "standalone",
   "icons": [
     {

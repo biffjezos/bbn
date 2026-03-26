@@ -6,8 +6,7 @@ const ASSETS = [
     '/favourites',
     '/profile',
     '/settings',
-    '/scripts',
-    '/assets',
+    '/assets/icons/1024.png',
     '/scripts/app.js',
     '/scripts/api.js',
     '/scripts/auth.js',
@@ -34,5 +33,12 @@ self.addEventListener('install', event => {
             .then(cache => cache.addAll(ASSETS))
             .then(() => self.skipWaiting())
         );
+
+    self.addEventListener('fetch', event => {
+        event.respondWith(
+            caches.match(event.request)
+              .then(response => response || fetch(event.request))
+        );
+    });
     console.log('Service Worker installed');
 });
