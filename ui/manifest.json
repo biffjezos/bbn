@@ -1,16 +1,16 @@
 {
   "name": "bOOm bOOm.NOW!",
   "short_name": "bOOm",
-  "start_url": "/bbn?utm_source=homescreen",
+  "start_url": "/bbn",
   "display": "standalone",
   "icons": [
     {
-      "src": "/assets/icons/icon-1024.png",
+      "src": "/bbn/assets/icons/icon-1024.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/assets/icons/icon-1024.png",
+      "src": "/bbn/assets/icons/icon-1024.png",
       "sizes": "512x512",
       "type": "image/png"
     }
