@@ -65,12 +65,19 @@
 
         </div>
       </div>
+      <!-- Install App prompt (shown by app.js when available) -->
+      <div class="px-4 pb-2" id="installSection" style="display:none">
+        <button id="installBtn" class="btn btn-bbm-primary w-100">
+          <i class="bi bi-download me-2"></i>Install App
+        </button>
+      </div>
+      <div class="px-4 pb-2" id="iosInstallHint" style="display:none">
+        <p class="mb-0 small" style="color:var(--bbm-text-faint,#aaa)">
+          <i class="bi bi-box-arrow-up me-1"></i>Tap <strong>Share</strong> &rsaquo; <strong>Add to Home Screen</strong>
+        </p>
+      </div>
       <!-- Build info — bottom of offcanvas -->
       <div class="px-4 pb-3" style="font-size:0.65rem;color:var(--bbm-text-faint,#555);letter-spacing:0.04em">
-        <!-- Add this somewhere in your HTML -->
-        <button id="installBtn" role="link" style="display:none; position:fixed; bottom:20px; right:20px; z-index:9999;">
-          Install App
-        </button>
         {% if site.github.build_revision %}
           rev {{ site.github.build_revision | slice: 0, 7 }}
         {% else %}
