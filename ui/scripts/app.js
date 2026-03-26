@@ -9,9 +9,10 @@
 
   // app install
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' });
+    navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' })
+      .catch(err => console.error('SW registration failed:', err));
   }
-  
+
   window.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('installBtn');
     let deferredPrompt;
@@ -19,21 +20,26 @@
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
-      btn.style.display = 'block';
+      if (btn) btn.style.display = 'block';
     });
 
-    btn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === 'accepted') {
-        console.log('User accepted the install prompt');
-      } else {
-        console.log('User dismissed the install prompt');
-      }
-      deferredPrompt = null;
-      btn.style.display = 'none';
-    });
+    if (btn) {
+      btn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+
+        if (choice.outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+        } else {
+          console.log('User dismissed the install prompt');
+        }
+
+        deferredPrompt = null;
+        btn.style.display = 'none';
+      });
+    }
   });
 
   function $(id) { return document.getElementById(id); }
