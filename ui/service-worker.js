@@ -6,7 +6,7 @@ const ASSETS = [
     '/bbn/favourites',
     '/bbn/profile',
     '/bbn/settings',
-    '/bbn/assets/icons/1024.png',
+    '/bbn/assets/icons/icon-1024.png',
     '/bbn/scripts/app.js',
     '/bbn/scripts/api.js',
     '/bbn/scripts/auth.js',
