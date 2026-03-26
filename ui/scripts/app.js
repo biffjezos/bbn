@@ -5,7 +5,7 @@
 // Also wires modals, offcanvas, FAB after DOMContentLoaded.
 // ============================================================
 
-(function () {
+
   // <<<< mobile app
   // app install
   if ('serviceWorker' in navigator) {
@@ -46,6 +46,7 @@
   });
 // >>> mobile app  
 
+(function () {
   function $(id) { return document.getElementById(id); }
 
   function showRateLimitBanner() {
