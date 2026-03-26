@@ -1,3 +1,8 @@
+// ============================================================
+// bOOmbOOm.NOW! — service-worker.js
+// Full cache + fetch handling with offline fallbacks
+// ============================================================
+
 const CACHE_NAME = 'app-v1';
 const ASSETS = [
     '/bbn/',
@@ -27,43 +32,47 @@ const ASSETS = [
     '/bbn/styles/fonts.css'
 ];
 
-// Install event: cache all assets
+// Install: cache all assets
 self.addEventListener('install', event => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then(cache => {
-            return cache.addAll(ASSETS); // FAILS CLEANLY if any asset can't be fetched
-        }).then(() => self.skipWaiting())
+        caches.open(CACHE_NAME)
+            .then(cache => cache.addAll(ASSETS))
+            .then(() => self.skipWaiting())
+            .catch(err => console.error('Cache installation failed:', err))
     );
 });
 
-// Activate event: clean up old caches + claim clients
+// Activate: clean old caches
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
-            Promise.all(
-                keys.filter(key => key !== CACHE_NAME)
-                    .map(key => caches.delete(key))
+            Promise.all(keys.filter(key => key !== CACHE_NAME)
+                .map(key => caches.delete(key))
             )
         ).then(() => self.clients.claim())
     );
     console.log('Service Worker activated');
 });
 
-// Fetch event: respond with cache first, network fallback with error handling
+// Fetch: cache first, network fallback, robust offline
 self.addEventListener('fetch', event => {
     event.respondWith(
         caches.match(event.request)
             .then(response => {
                 if (response) return response;
 
-                // Catch fetch errors
                 return fetch(event.request).catch(err => {
                     console.error('Fetch failed for:', event.request.url, err);
 
-                    // Only fallback for navigation requests (HTML pages)
+                    // Offline fallback for navigation requests
                     if (event.request.mode === 'navigate') {
-                        return caches.match('/bbn/');
+                        return caches.match('/bbn/') || new Response('<h1>Offline</h1>', {
+                            headers: { 'Content-Type': 'text/html' }
+                        });
                     }
+
+                    // Generic fallback for other requests
+                    return new Response('', { status: 503, statusText: 'Service Unavailable' });
                 });
             })
     );
