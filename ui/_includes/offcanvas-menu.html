@@ -67,6 +67,10 @@
       </div>
       <!-- Build info — bottom of offcanvas -->
       <div class="px-4 pb-3" style="font-size:0.65rem;color:var(--bbm-text-faint,#555);letter-spacing:0.04em">
+        <!-- Add this somewhere in your HTML -->
+        <button id="installBtn" role="link" style="display:none; position:fixed; bottom:20px; right:20px; z-index:9999;">
+          Install App
+        </button>
         {% if site.github.build_revision %}
           rev {{ site.github.build_revision | slice: 0, 7 }}
         {% else %}
