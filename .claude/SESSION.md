@@ -14,11 +14,22 @@
 
 ## In Progress
 
-(nothing)
+(nothing — second PWA fix committed, see below)
 
 ---
 
 ## Completed This Session
+
+- **Fix: PWA install button not visible on Android Chrome/Firefox (follow-up)**
+  - Root causes:
+    1. `#installSection` was hidden until `beforeinstallprompt` fired — but on Chrome Android the event can fire with a delay (engagement heuristic), leaving the section invisible. On Firefox the event never fires at all.
+    2. No Firefox-specific install hint. Firefox Android uses its own browser-menu install UI; `beforeinstallprompt` is not fired.
+    3. Stale SW cache (`app-v1`) could serve old HTML that lacks `#installSection`, causing DOM lookup to return null even when event fires.
+  - Fixes:
+    - `service-worker.js`: bumped `CACHE_NAME` to `app-v2` to force cache refresh.
+    - `offcanvas-menu.html`: install button now starts `disabled` with visible fallback text ("use browser menu → Install app"); added `#firefoxInstallHint` div.
+    - `app.js`: added `_isFirefox`, `_isMobile` detection. On Chrome/Edge Android, `#installSection` is shown immediately on DOMContentLoaded (button disabled + fallback text visible). Button activates (`disabled=false`, fallback hidden) when `beforeinstallprompt` fires. Firefox mobile shows `#firefoxInstallHint`. Race condition handled: if event fires before DOMContentLoaded, `_activateInstallBtn()` is called again in DOMContentLoaded.
+
 
 - **Fix: PWA not installable on Android Chrome/Firefox or iOS**
   - Root causes:

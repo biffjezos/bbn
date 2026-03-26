@@ -65,15 +65,25 @@
 
         </div>
       </div>
-      <!-- Install App prompt (shown by app.js when available) -->
+      <!-- Install App — Chrome/Edge Android (shown by JS, button activates on beforeinstallprompt) -->
       <div class="px-4 pb-2" id="installSection" style="display:none">
-        <button id="installBtn" class="btn btn-bbm-primary w-100">
+        <button id="installBtn" class="btn btn-bbm-primary w-100" disabled>
           <i class="bi bi-download me-2"></i>Install App
         </button>
+        <p class="mb-0 mt-1 small" id="installFallback" style="color:var(--bbm-text-faint,#aaa)">
+          <i class="bi bi-three-dots-vertical me-1"></i>Or open your <strong>browser menu</strong> and tap <strong>Install app</strong>
+        </p>
       </div>
+      <!-- Install App — iOS Safari -->
       <div class="px-4 pb-2" id="iosInstallHint" style="display:none">
         <p class="mb-0 small" style="color:var(--bbm-text-faint,#aaa)">
           <i class="bi bi-box-arrow-up me-1"></i>Tap <strong>Share</strong> &rsaquo; <strong>Add to Home Screen</strong>
+        </p>
+      </div>
+      <!-- Install App — Firefox Android -->
+      <div class="px-4 pb-2" id="firefoxInstallHint" style="display:none">
+        <p class="mb-0 small" style="color:var(--bbm-text-faint,#aaa)">
+          <i class="bi bi-three-dots-vertical me-1"></i>Tap the <strong>browser menu</strong> &rsaquo; <strong>Install</strong>
         </p>
       </div>
       <!-- Build info — bottom of offcanvas -->
