@@ -18,10 +18,12 @@
     let deferredPrompt;
 
     window.addEventListener('beforeinstallprompt', (e) => {
+       console.log('INSTALL EVENT FIRED');
       e.preventDefault();
       deferredPrompt = e;
       if (btn) btn.style.display = 'block';
-    });
+    }); 
+});
 
     if (btn) {
       btn.addEventListener('click', async () => {
