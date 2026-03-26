@@ -6,7 +6,7 @@
 // ============================================================
 
 (function () {
-
+  // <<<< mobile app
   // app install
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' })
@@ -17,19 +17,20 @@
     const btn = document.getElementById('installBtn');
     let deferredPrompt;
 
+    // Listen for the beforeinstallprompt event
     window.addEventListener('beforeinstallprompt', (e) => {
-       console.log('INSTALL EVENT FIRED');
-      e.preventDefault();
+      console.log('INSTALL EVENT FIRED');
+      e.preventDefault(); // Prevent automatic prompt
       deferredPrompt = e;
-      if (btn) btn.style.display = 'block';
-    }); 
-});
+      if (btn) btn.style.display = 'block'; // Show install button
+    });
 
+    // Click event for install button
     if (btn) {
       btn.addEventListener('click', async () => {
         if (!deferredPrompt) return;
 
-        deferredPrompt.prompt();
+        deferredPrompt.prompt(); // Show the install prompt
         const choice = await deferredPrompt.userChoice;
 
         if (choice.outcome === 'accepted') {
@@ -39,10 +40,11 @@
         }
 
         deferredPrompt = null;
-        btn.style.display = 'none';
+        btn.style.display = 'none'; // Hide button after prompt
       });
     }
   });
+// >>> mobile app  
 
   function $(id) { return document.getElementById(id); }
 
