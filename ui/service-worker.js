@@ -11,6 +11,8 @@ const ASSETS = [
     '/bbn/favourites',
     '/bbn/profile',
     '/bbn/settings',
+    '/bbn/assets/icons/icon-192.png',
+    '/bbn/assets/icons/icon-512.png',
     '/bbn/assets/icons/icon-1024.png',
     '/bbn/scripts/app.js',
     '/bbn/scripts/api.js',
