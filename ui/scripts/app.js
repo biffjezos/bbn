@@ -9,27 +9,30 @@
 
   // app install
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/bbn/service-worker.js');
+    navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' });
   }
-  let deferredPrompt;
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault(); // Stop Chrome from showing the prompt automatically
-    deferredPrompt = e;
-
-    // Show a custom install button
+  
+  window.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('installBtn');
-    btn.style.display = 'block';
-    btn.addEventListener('click', () => {
+    let deferredPrompt;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      btn.style.display = 'block';
+    });
+
+    btn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
       deferredPrompt.prompt();
-      deferredPrompt.userChoice.then(choice => {
-        if (choice.outcome === 'accepted') {
-          console.log('User accepted the install prompt');
-        } else {
-          console.log('User dismissed the install prompt');
-        }
-        deferredPrompt = null;
-      });
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
+        console.log('User accepted the install prompt');
+      } else {
+        console.log('User dismissed the install prompt');
+      }
+      deferredPrompt = null;
+      btn.style.display = 'none';
     });
   });
 
