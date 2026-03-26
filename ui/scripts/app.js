@@ -7,43 +7,44 @@
 
 
   // <<<< mobile app
-  // app install
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' })
-      .catch(err => console.error('SW registration failed:', err));
-  }
+// ============================================================
+// bOOmbOOm.NOW! — app.js
+// ============================================================
 
-  window.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('installBtn');
-    let deferredPrompt;
+// ------------------ Service Worker ------------------
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' })
+    .catch(err => console.error('SW registration failed:', err));
+}
 
-    // Listen for the beforeinstallprompt event
-    window.addEventListener('beforeinstallprompt', (e) => {
-      console.log('INSTALL EVENT FIRED');
-      e.preventDefault(); // Prevent automatic prompt
-      deferredPrompt = e;
-      if (btn) btn.style.display = 'block'; // Show install button
+// ------------------ PWA Install ------------------
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'block';
+});
+
+window.addEventListener('appinstalled', () => {
+  console.log('App successfully installed!');
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('installBtn');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      console.log('Install outcome:', choice.outcome);
+      deferredPrompt = null;
+      btn.style.display = 'none';
     });
+  }
+});
 
-    // Click event for install button
-    if (btn) {
-      btn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-
-        deferredPrompt.prompt(); // Show the install prompt
-        const choice = await deferredPrompt.userChoice;
-
-        if (choice.outcome === 'accepted') {
-          console.log('User accepted the install prompt');
-        } else {
-          console.log('User dismissed the install prompt');
-        }
-
-        deferredPrompt = null;
-        btn.style.display = 'none'; // Hide button after prompt
-      });
-    }
-  });
 // >>> mobile app  
 
 (function () {
