@@ -7,6 +7,12 @@
 
 (function () {
 
+  // app install
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js');
+  }
+  // 
+
   function $(id) { return document.getElementById(id); }
 
   function showRateLimitBanner() {
