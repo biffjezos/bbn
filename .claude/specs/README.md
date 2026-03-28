@@ -14,9 +14,11 @@ tests must be either state-driven or event-driven.
 ---
 id: unique string
 description: string
-additional_info: Option<String>
+additional_info: Option<string>
+related_spec: Option<string> // spec id
+related_ticket: Option<string> // ticket id
 pre_conditions: Option<OrderedList<string>>
-sources: Option<List>
+sources: Option<List> // absolute path
 expected_behaviour: List<string>
 status: string
 tests: OrderedList<string>
@@ -29,7 +31,7 @@ Ubiquitous rules that all specifications must follow (where applicable).
 - privacy-by-design, E2EE approach (eg. ECDH, PBKDF2, service authorization, JWT, OPAQUE, SHA256, ..)
 - data-minimization
 - early drop / deletetion, clearance of confidential or unused data
-- modularization of concerns in all types of scripts (javascript, rust)
+- modularization and decoupling of concerns in all services, modules and types of scripts (javascript, rust)
 - DRY (Don't repeat yourself)
 - update specs on refactoring, specs change, inconsistencies and contradictory specs
 - all incoming data must be validated
@@ -37,10 +39,11 @@ Ubiquitous rules that all specifications must follow (where applicable).
 
 ## Enforceable Rules
 
-- A specification must not violate general rules
-- A missing specification must stop the coding task.
-- A missing specification must be defined before setting a task 'in-progress'
-- Unit tests must be written if missing
-- New specifications must acknowledge current app architecture, frameworks and build upon it.
--The Specification id must be included in the relevant ticket file if missing.
+A specification: 
 
+- must not violate general rules
+- must be defined for a single ui element, function, state or event
+- if missing, must stop the interrupt the current coding task.
+- if missing, must be defined before setting a task 'in-progress'
+- must acknowledge the current app architecture, frameworks and build upon it.
+- must be included into a ticket by its unique id.
