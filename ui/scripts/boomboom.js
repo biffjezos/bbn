@@ -189,7 +189,6 @@ function wireUI(mapModule) {
       }).catch(function() {}); 
     }).catch(function() {});
   }
-
 }
 
 // ------------------ Init App ------------------

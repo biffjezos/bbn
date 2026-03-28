@@ -1,11 +1,11 @@
-// notifModule.js
+// ./lib/notifications.js
 
 const POLL_INTERVAL_MS = 2 * 60 * 1000; // 2 min — notifications are low-urgency
 let _pollTimer = null;
 let _paused = false;
 
 function esc(str) {
-  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function sexPronoun(sex) {
@@ -93,22 +93,26 @@ function stopNotifPoll() {
 }
 
 function initNotifications() {
-  const _origOnLogin = window.Auth.onLogin;
-  window.Auth.onLogin = (data) => {
-    if (_origOnLogin) _origOnLogin(data);
-    startNotifPoll();
-  };
+  if (window.Auth && typeof window.Auth.onLogin === 'function') {
+    const _origOnLogin = window.Auth.onLogin;
+    window.Auth.onLogin = (data) => {
+      if (_origOnLogin) _origOnLogin(data);
+      startNotifPoll();
+    };
 
-  const _origOnLogout = window.Auth.onLogout;
-  window.Auth.onLogout = () => {
-    if (_origOnLogout) _origOnLogout();
-    stopNotifPoll();
-  };
+    const _origOnLogout = window.Auth.onLogout;
+    window.Auth.onLogout = () => {
+      if (_origOnLogout) _origOnLogout();
+      stopNotifPoll();
+    };
 
-  // On page load with an already-valid token
-  window.__authReady && window.__authReady.then(() => {
-    if (window.Auth && window.Auth.isRegistered()) startNotifPoll();
-  });
+    // On page load with an already-valid token
+    window.__authReady && window.__authReady.then(() => {
+      if (window.Auth && window.Auth.isRegistered()) startNotifPoll();
+    });
+  } else {
+    console.error('Auth is not initialized or missing onLogin handler');
+  }
 
   document.addEventListener('visibilitychange', () => {
     _paused = document.hidden;
