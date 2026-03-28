@@ -7,8 +7,8 @@ sources:
   - /ui/_includes/modal-login.html
 expected_behaviour: always empty login and registration form after use.
 tests:
-  - register, navigate, logout, register > form shoul be empty
-  - register, logout, register > form shoul be empty
-  - login, navigate, logout, login > form shoul be empty
-  - login, navigate, logout, login > form shoul be empty
+  1: register, navigate, logout, register > form should be empty and deleted from memory
+  2: register, logout, register > form should be empty and deleted from memory
+  3: login, navigate, logout, login > form should be empty and deleted from memory
+  4: login, navigate, logout, login > form should be empty snd deleted from memory
 qa_report: 
