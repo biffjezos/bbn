@@ -1,5 +1,7 @@
 # Specifications
 
+**Note for Claude Agents:** For questions clarifications, improvements contact the project owner through the chat or ticket creation.
+
 ## Format, Schema, Storage
 
 - one file per specification
