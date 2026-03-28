@@ -6,7 +6,7 @@
 import { Api } from './lib/api.js';
 import { Auth } from './lib/auth.js';
 import { promptBlock } from './lib/blocks.js';
-import 
+import { BBNCrypto } from './lib/crypto.js';
 import { initDebugConsole } from './lib/debug.js';
 import { renderFavourites, initSearchBar } from './lib/favourites.js';
 import { GeoState, initGeo, pushLocation, connectLocWS, closeLocWS } from './lib/geo.js';

@@ -1,4 +1,4 @@
-// ./lib/debugConsole.js
+// ./lib/debug.js
 
 let logs = [];
 
