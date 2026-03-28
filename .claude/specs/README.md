@@ -38,9 +38,9 @@ Ubiquitous rules that all specifications must follow (where applicable).
 ## Enforceable Rules
 
 - A specification must not violate general rules
-- A bug fix must create a specification(s) for the related elements.
-- A missing specification stops the coding task.
+- A missing specification must stop the coding task.
 - A missing specification must be defined before setting a task 'in-progress'
 - Unit tests must be written if missing
-- New specifications must acknowledge current app architecture and build upon it.
-- specification if must be included in the relevant ticket file.
+- New specifications must acknowledge current app architecture, frameworks and build upon it.
+-The Specification id must be included in the relevant ticket file if missing.
+
