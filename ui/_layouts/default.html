@@ -63,14 +63,5 @@
     if (!valid) { window.location.replace('{{ "/" | relative_url }}'); throw new Error('Auth redirect.'); }
   })();
 </script>
-
-<script src="{{ '/scripts/map.js' | relative_url }}?v={{ site.time | date: '%s' }}"></script>
-
-{% if page.extra_js %}
-{% for js in page.extra_js %}
-<script src="{{ js | relative_url }}?v={{ site.time | date: '%s' }}"></script>
-{% endfor %}
-{% endif %}
-
 </body>
 </html>
