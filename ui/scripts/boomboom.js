@@ -167,6 +167,28 @@ function wireUI(mapModule) {
       Auth.logout();
     };
   }
+  
+  // Handle message links
+  const msgLink = $('pinMessageLink');
+  if (msgLink) {
+    const userId = 'USER_ID';  // Replace with actual user ID
+    const nickname = 'NICKNAME';  // Replace with actual nickname
+    msgLink.href = BASE + '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+    msgLink.classList.add('d-none');
+    
+    // Check if the user can receive messages
+    window.Api.getProfile(userId).then(function(profile) {
+      if (profile.canReceiveMessages === false) return;
+
+      // Check for mutual favourites
+      window.Api.isMutualFavourite(userId).then(function(data) {
+        if (data.mutual) {
+          msgLink.classList.remove('d-none');
+        }
+      }).catch(function() {});
+    }).catch(function() {});
+  }
+
 }
 
 // ------------------ Init App ------------------
