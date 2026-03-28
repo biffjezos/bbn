@@ -224,7 +224,7 @@ function updateMeetingMode(selfPos, users){
                       `<span class="bbm-meet-name">${escHtml(meet.nickname)}</span>`+
                       distHtml+
                       `<button class="bbm-meet-close" title="Cancel meeting">✕</button>`;
-  pillEl.querySelector('.bbm-meet-close').addEventListener('click',()=>{
+  pillEl.querySelector('.bbm-meet-close').addEventListener('click',()=>{ 
     localStorage.removeItem('bbm_meet');
     updateMeetingMode(selfPos, lastNearbyUsers);
   });
@@ -293,7 +293,7 @@ window.addEventListener('storage', e=>{
 });
 
 // Load initial state after auth resolves
-window.__authReady.then(()=>{
+window.__authReady?.then(()=>{
   const tier=window.Auth?.getTier?.()||'guest';
   window.Api.getNearbyRadius(tier).then(data=>{ viewRadius=data.radiusM??0; }).catch(()=>{});
   if(GeoState.pos) initMap(GeoState.pos.lat,GeoState.pos.lng);
