@@ -15,11 +15,11 @@
         You're browsing as a guest.<br>
         Register to message people nearby.
       </p>
-      <button class="btn btn-bbm-primary w-100 mb-2"
+      <button class="btn btn-bbn-primary w-100 mb-2"
         data-bs-toggle="modal" data-bs-target="#registerModal" data-bs-dismiss="offcanvas">
         <i class="bi bi-person-plus me-2"></i>Create Account
       </button>
-      <button class="btn btn-bbm-ghost w-100"
+      <button class="btn btn-bbn-ghost w-100"
         data-bs-toggle="modal" data-bs-target="#loginModal" data-bs-dismiss="offcanvas">
         <i class="bi bi-box-arrow-in-right me-2"></i>Log In
       </button>
@@ -29,7 +29,7 @@
     <div id="userMenu" class="d-none">
  
       <!-- Identity — nickname coloured by sex -->
-      <div class="mb-4 pb-3" style="border-bottom:1px solid var(--bbm-border)">
+      <div class="mb-4 pb-3" style="border-bottom:1px solid var(--bbn-border)">
         <p class="text-faint mb-1" style="font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase">Logged in as</p>
         <p class="offcanvas-menu-nick mb-0" id="menuNickname">—</p>
       </div>
@@ -57,8 +57,8 @@
       </nav>
  
       <!-- Danger zone -->
-      <div class="pt-3" style="border-top:1px solid var(--bbm-border)">
-        <button class="btn btn-bbm-ghost w-100 text-start" id="logoutBtn">
+      <div class="pt-3" style="border-top:1px solid var(--bbn-border)">
+        <button class="btn btn-bbn-ghost w-100 text-start" id="logoutBtn">
           <i class="bi bi-box-arrow-right me-2"></i>Log Out
         </button>
       </div>
@@ -69,24 +69,24 @@
  
     <!-- Chrome / Edge / Samsung Android: button activates on beforeinstallprompt -->
     <div id="installSection" style="display:none" class="mt-3 pt-3">
-      <button id="installBtn" class="btn btn-bbm-primary w-100" disabled>
+      <button id="installBtn" class="btn btn-bbn-primary w-100" disabled>
         <i class="bi bi-download me-2"></i>Install App
       </button>
-      <p class="mb-0 mt-1 small" id="installFallback" style="color:var(--bbm-text-faint,#aaa)">
+      <p class="mb-0 mt-1 small" id="installFallback" style="color:var(--bbn-text-faint,#aaa)">
         <i class="bi bi-three-dots-vertical me-1"></i>Or open your <strong>browser menu</strong> and tap <strong>Install app</strong>
       </p>
     </div>
  
     <!-- iOS Safari -->
     <div id="iosInstallHint" style="display:none" class="mt-3 pt-3">
-      <p class="mb-0 small" style="color:var(--bbm-text-faint,#aaa)">
+      <p class="mb-0 small" style="color:var(--bbn-text-faint,#aaa)">
         <i class="bi bi-box-arrow-up me-1"></i>Tap <strong>Share</strong> &rsaquo; <strong>Add to Home Screen</strong> to install
       </p>
     </div>
  
     <!-- Firefox Android -->
     <div id="firefoxInstallHint" style="display:none" class="mt-3 pt-3">
-      <p class="mb-0 small" style="color:var(--bbm-text-faint,#aaa)">
+      <p class="mb-0 small" style="color:var(--bbn-text-faint,#aaa)">
         <i class="bi bi-three-dots-vertical me-1"></i>Tap the <strong>browser menu</strong> &rsaquo; <strong>Add to Home Screen</strong> to install
       </p>
     </div>
@@ -94,7 +94,7 @@
   </div>
  
   <!-- Build info — bottom of offcanvas -->
-  <div class="px-4 pb-3" style="font-size:0.65rem;color:var(--bbm-text-faint,#555);letter-spacing:0.04em">
+  <div class="px-4 pb-3" style="font-size:0.65rem;color:var(--bbn-text-faint,#555);letter-spacing:0.04em">
     {% if site.github.build_revision %}
       rev {{ site.github.build_revision | slice: 0, 7 }}
     {% else %}

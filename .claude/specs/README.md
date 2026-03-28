@@ -5,7 +5,7 @@
 ## Format, Schema, Storage
 
 - one file per specification
-- stored in folders that reflect the concern (eg. '/ui/', '/services/gateway')
+- stored in folders that reflect the concern (eg. `/ui/`, `/services/gateway`)
 - in machine readable yaml format
 
 ### Schema
@@ -38,6 +38,7 @@ Ubiquitous rules that all specifications must follow (where applicable).
 - update specs on refactoring, specs change, inconsistencies and contradictory specs
 - all incoming data must be validated
 - no shortcuts, stubs
+- All UI modules are ES6 modules, go into `/scripts/lib/` and must be imported by the app script `/scripts/boomboom.js`.
 
 ## Enforceable Rules
 
@@ -46,6 +47,6 @@ A specification:
 - must not violate general rules
 - must be defined for a single ui element, function, state or event
 - if missing, must stop the interrupt the current coding task.
-- if missing, must be defined before setting a task 'in-progress'
+- if missing, must be defined before setting a task `in-progress`
 - must acknowledge the current app architecture, frameworks and build upon it.
 - must be included into a ticket by its unique id.

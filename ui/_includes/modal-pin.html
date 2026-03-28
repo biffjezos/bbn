@@ -34,16 +34,16 @@
 
         <!-- Actions — registered viewer, registered target -->
         <div id="pinActions" class="d-flex flex-column gap-2 d-none">
-          <a href="#" id="pinMessageLink" class="btn btn-bbm-pink w-100">
+          <a href="#" id="pinMessageLink" class="btn btn-bbn-pink w-100">
             <i class="bi bi-chat-dots me-2"></i>Send Message
           </a>
-          <button type="button" id="pinFavBtn" class="btn btn-bbm-ghost w-100">
+          <button type="button" id="pinFavBtn" class="btn btn-bbn-ghost w-100">
             <i class="bi bi-star me-2" id="pinFavIcon"></i><span id="pinFavLabel">Add to Favourites</span>
           </button>
-          <a href="#" id="pinProfileLink" class="btn btn-bbm-outline w-100" style="border-color:var(--bbm-border)">
+          <a href="#" id="pinProfileLink" class="btn btn-bbn-outline w-100" style="border-color:var(--bbn-border)">
             <i class="bi bi-person me-2"></i>View Profile
           </a>
-          <div class="border-top pt-1" style="border-color:var(--bbm-border) !important">
+          <div class="border-top pt-1" style="border-color:var(--bbn-border) !important">
             <button type="button" id="pinBlockBtn"
               class="btn btn-link text-danger w-100 py-1"
               style="font-size:0.8rem;text-decoration:none">
@@ -60,7 +60,7 @@
         <div id="pinGuestPrompt" class="w-100 text-center d-none">
           <p class="text-muted-bb small mb-2">Register to message people nearby.</p>
           <button
-            class="btn btn-bbm-primary btn-sm w-100"
+            class="btn btn-bbn-primary btn-sm w-100"
             data-bs-dismiss="modal"
             data-bs-toggle="modal"
             data-bs-target="#registerModal"
@@ -70,66 +70,6 @@
         </div>
       </div>
 
-    </div>
-  </div>
-</div>
-
-<!-- Block user modal (triggered from map pin, public profile, message thread) -->
-<div class="modal fade" id="blockModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:360px">
-    <div class="modal-content" style="border-color:var(--bbm-danger-border) !important">
-      <div class="modal-header" style="border-bottom-color:var(--bbm-danger-border) !important">
-        <h5 class="modal-title" style="color:var(--bbm-danger-text)">Block User</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted-bb mb-3">
-          Block <strong id="blockTargetName"></strong>?
-          They will no longer see you on the map, cannot message you, and cannot view your profile.
-        </p>
-        <label class="form-label" for="blockReason">Reason</label>
-        <select class="form-select" id="blockReason">
-          <option value="spam">Spam</option>
-          <option value="harassment">Harassment</option>
-          <option value="inappropriate_content">Inappropriate content</option>
-          <option value="fake_profile">Fake profile</option>
-          <option value="other">Other</option>
-        </select>
-        <div id="blockError" class="alert alert-danger mt-3 d-none"></div>
-      </div>
-      <div class="modal-footer" style="border-top-color:var(--bbm-danger-border) !important">
-        <button type="button" class="btn btn-bbm-ghost" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-bbm-danger" id="blockConfirmBtn">
-          <i class="bi bi-slash-circle me-2"></i>Block User
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Delete account confirm (triggered from /profile danger zone) -->
-<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
-    <div class="modal-content" style="border-color:var(--bbm-danger-border) !important">
-      <div class="modal-header" style="border-bottom-color:var(--bbm-danger-border) !important">
-        <h5 class="modal-title" style="-webkit-text-fill-color:var(--bbm-danger-text);background:none;color:var(--bbm-danger-text)">
-          Delete Account
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted-bb mb-3">
-          This will permanently delete your account, messages and favourites.
-          <strong class="text-pink"> This cannot be undone.</strong>
-        </p>
-        <label class="form-label" for="deleteNicknameInput">Type your nickname to confirm</label>
-        <input type="text" class="form-control" id="deleteNicknameInput"
-          autocomplete="off" placeholder="Your nickname" />
-      </div>
-      <div class="modal-footer" style="border-top-color:var(--bbm-danger-border) !important">
-        <button type="button" class="btn btn-bbm-ghost" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-bbm-danger" id="confirmDeleteBtn" disabled>Yes, delete everything</button>
-      </div>
     </div>
   </div>
 </div>

@@ -7,11 +7,11 @@ extra_js:
 ---
 
 <!-- Thread layout — fills remaining height below navbar -->
-<div class="bbm-thread-wrap" id="threadWrap">
+<div class="bbn-thread-wrap" id="threadWrap">
 
   <!-- Header with back + partner name -->
-  <div class="bbm-thread-header px-3 px-md-4 py-3 gap-3">
-    <a href="{{ '/messages/' | relative_url }}" class="btn btn-bbm-ghost btn-sm px-2 py-1">
+  <div class="bbn-thread-header px-3 px-md-4 py-3 gap-3">
+    <a href="{{ '/messages/' | relative_url }}" class="btn btn-bbn-ghost btn-sm px-2 py-1">
       <i class="bi bi-arrow-left"></i>
     </a>
     <div>
@@ -20,7 +20,7 @@ extra_js:
     </div>
     <div class="ms-auto">
       <div class="dropdown">
-        <button class="btn btn-bbm-ghost btn-sm px-2 py-1" type="button"
+        <button class="btn btn-bbn-ghost btn-sm px-2 py-1" type="button"
           id="threadMenuBtn" data-bs-toggle="dropdown" aria-expanded="false">
           <i class="bi bi-three-dots-vertical"></i>
         </button>
@@ -36,21 +36,21 @@ extra_js:
   </div>
 
   <!-- Messages -->
-  <div class="bbm-thread-msgs px-3 px-md-4 py-3" id="threadMsgs">
-    <div class="bbm-loading">Loading messages…</div>
+  <div class="bbn-thread-msgs px-3 px-md-4 py-3" id="threadMsgs">
+    <div class="bbn-loading">Loading messages…</div>
   </div>
 
   <!-- Compose -->
-  <div class="bbm-thread-compose px-3 px-md-4 py-3">
+  <div class="bbn-thread-compose px-3 px-md-4 py-3">
     <div class="d-flex gap-2">
       <textarea
         id="msgInput"
-        class="form-control bbm-compose-input flex-grow-1"
+        class="form-control bbn-compose-input flex-grow-1"
         rows="2"
         maxlength="144"
         placeholder="Say something… · Ctrl+Enter to send"
       ></textarea>
-      <button class="btn btn-bbm-pink px-3 bbm-send-btn" id="sendBtn">
+      <button class="btn btn-bbn-pink px-3 bbn-send-btn" id="sendBtn">
         <i class="bi bi-send-fill"></i>
       </button>
     </div>

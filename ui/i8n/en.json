@@ -1,0 +1,87 @@
+{
+    "site": {
+        "title": "bOOmbOOm.NOW!",
+        "title_split": ["bOOmbOOm", ".NOW!"]
+    },
+    "btn": {
+        "add_to_favourites": "Add to Favourites",
+        "block": "Report & Block",
+        "cancel": "Cancel",
+        "create_one": "Create Account",
+        "login": "Log In",
+        "logout": "Logout",
+        "view_profile": "View Profile",
+        "register": "Register",
+        "send_message": "Send message",
+        "unlock": "Unlock"
+    },
+    "badges": {
+        "locating": "locating...",
+        "support": "Support"
+    },
+    "forms": {
+        "label_age": "Age",
+        "label_sex": "Sex",
+        "label_email": "Email",
+        "label_nickname": "Nickname",
+        "label_nickname_note": "— display name, min 2 chars",
+        "label_password": "Password",
+        "option_sex_m": "Male",
+        "option_sex_f": "Female"
+    },
+    "menu_items": {
+        "admin": "Admin",
+        "conversations": "Conversations",
+        "map": "Map",
+        "profile": "My Profile",
+        "settings": "Settings"
+    },
+    "_includes/conversations": {
+        "title": "Conversations",
+        "title_split": ["Con", "ver", "sations"],
+        "loading": "Loading.."
+    },
+    "_includes/modal-lock": {
+        "title": "Session locked",
+        "body": "Your session was locked. Enter your password to continue.",
+        "tf_password": "Password"
+    },
+    "_includes/modal-login": {
+        "title": "Welcome back",
+        "form_email": "Email",
+        "form_password": "Password",
+        "footer_no_account": "No account?",
+        "footer_no_account_link": "Create One"
+    },
+    "_includes/modal-pin": {
+        "approximate_location_text": "approximate location",
+        "guest_prompt": "Register to message people nearby."
+    },
+    "_includes/modal-block": {
+        "text": "They will no longer see you on the map, cannot message you, and cannot view your profile.",
+        "reason_text": "Reason",
+        "reason_text_spam": "Spam",
+        "reason_text_harassment": "Spam",
+        "reason_text_inappropriate": "Inappropriate Content",
+        "reason_text_fake_profile": "Fake Profile",
+        "reason_text_other": "Other"
+    },
+    "_includes/modal-delete": {
+        "title": "Delete Account",
+        "warning": "This will permanently delete your account, messages and favourites. <strong class=\"text-pink\"> This cannot be undone.</strong>",
+        "tf_nickname_label": "Type your nickname to confirm",
+        "btn_confirm_delete": "Yes, delete everything"
+    },
+    "_includes/modal-register": {
+        "account_already": "Already have an account?"
+    },
+    "_includes/modal-tier-gate": {
+
+    },
+    "_includes/navbar": {
+        "guest_menu": "You're browsing as a guest.<br>Register to message people nearby."
+    },
+    "_includes/offcanvas-menu.html": {
+
+    }
+}

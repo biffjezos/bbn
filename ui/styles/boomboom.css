@@ -10,7 +10,7 @@
    LAYOUT TOKENS (non-colour)
    ============================================================ */
 :root {
-  --bbm-nav-h: 3.75rem;
+  --bbn-nav-h: 3.75rem;
 
   /* Radii */
   --r-sm: 6px;
@@ -27,8 +27,8 @@
 html, body {
   height: 100%;
   margin: 0;
-  background: var(--bbm-black);
-  color: var(--bbm-text);
+  background: var(--bbn-black);
+  color: var(--bbn-text);
   font-family: var(--font-body);
   font-size: 15px;
   font-weight: 400;
@@ -41,11 +41,11 @@ html, body {
 
 /* Navbar */
 .navbar {
-  height: var(--bbm-nav-h);
+  height: var(--bbn-nav-h);
   background: rgba(10,10,15,0.92) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--bbm-border) !important;
+  border-bottom: 1px solid var(--bbn-border) !important;
   padding: 0 1.25rem;
 }
 
@@ -54,7 +54,7 @@ html, body {
   font-family: var(--font-display);
   font-weight: 900;
   font-size: 1.5rem;
-  background: var(--bbm-gradient-text);
+  background: var(--bbn-gradient-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -65,7 +65,7 @@ html, body {
   font-weight: 900;
   font-size: 1.35rem;
   letter-spacing: -0.02em;
-  background: var(--bbm-gradient-text);
+  background: var(--bbn-gradient-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -75,7 +75,7 @@ html, body {
 .navbar-toggler {
   border: none !important;
   padding: 0.25rem;
-  color: var(--bbm-text) !important;
+  color: var(--bbn-text) !important;
 }
 .navbar-toggler:focus { box-shadow: none !important; }
 /* SVG data URI — CSS variables cannot be used inside url(); value stays literal */
@@ -90,29 +90,29 @@ html, body {
   font-size: 0.85rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--bbm-text-muted) !important;
+  color: var(--bbn-text-muted) !important;
   padding: 0.35rem 0.75rem !important;
   transition: color 0.2s;
 }
 .nav-link:hover, .nav-link.active {
-  color: var(--bbm-text) !important;
+  color: var(--bbn-text) !important;
 }
-.nav-link.active { color: var(--bbm-pink-light) !important; }
+.nav-link.active { color: var(--bbn-pink-light) !important; }
 
 /* Offcanvas */
 .offcanvas {
-  background: var(--bbm-surface) !important;
-  border-left: 1px solid var(--bbm-border) !important;
+  background: var(--bbn-surface) !important;
+  border-left: 1px solid var(--bbn-border) !important;
   max-width: 300px;
 }
 .offcanvas-header {
-  border-bottom: 1px solid var(--bbm-border) !important;
+  border-bottom: 1px solid var(--bbn-border) !important;
   padding: 1.25rem 1.5rem;
 }
 .offcanvas-title {
   font-family: var(--font-display);
   font-size: 1.1rem;
-  background: var(--bbm-gradient-text);
+  background: var(--bbn-gradient-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -127,94 +127,94 @@ html, body {
   transition: all 0.2s;
 }
 
-.btn-bbm-primary {
-  background: var(--bbm-gradient);
-  color: var(--bbm-white);
+.btn-bbn-primary {
+  background: var(--bbn-gradient);
+  color: var(--bbn-white);
   border: none;
   padding: 0.65rem 1.75rem;
 }
-.btn-bbm-primary:hover {
+.btn-bbn-primary:hover {
   opacity: 0.9;
   transform: translateY(-1px);
   box-shadow: var(--shadow-pink);
-  color: var(--bbm-white);
+  color: var(--bbn-white);
 }
 
-.btn-bbm-ghost {
+.btn-bbn-ghost {
   background: transparent;
-  color: var(--bbm-text);
-  border: 1px solid var(--bbm-border);
+  color: var(--bbn-text);
+  border: 1px solid var(--bbn-border);
   padding: 0.65rem 1.75rem;
 }
-.btn-bbm-ghost:hover {
-  border-color: var(--bbm-ghost-hover-border);
-  background: var(--bbm-ghost-hover-bg);
-  color: var(--bbm-text);
+.btn-bbn-ghost:hover {
+  border-color: var(--bbn-ghost-hover-border);
+  background: var(--bbn-ghost-hover-bg);
+  color: var(--bbn-text);
 }
 
-.btn-bbm-pink {
-  background: var(--bbm-pink);
-  color: var(--bbm-white);
+.btn-bbn-pink {
+  background: var(--bbn-pink);
+  color: var(--bbn-white);
   border: none;
 }
-.btn-bbm-pink:hover {
-  background: var(--bbm-pink-light);
-  color: var(--bbm-white);
+.btn-bbn-pink:hover {
+  background: var(--bbn-pink-light);
+  color: var(--bbn-white);
   box-shadow: var(--shadow-pink);
   transform: translateY(-1px);
 }
 
-.btn-bbm-blue {
-  background: var(--bbm-blue);
-  color: var(--bbm-black);
+.btn-bbn-blue {
+  background: var(--bbn-blue);
+  color: var(--bbn-black);
   border: none;
   font-weight: 700;
 }
-.btn-bbm-blue:hover {
-  background: var(--bbm-blue-light);
-  color: var(--bbm-black);
+.btn-bbn-blue:hover {
+  background: var(--bbn-blue-light);
+  color: var(--bbn-black);
   box-shadow: var(--shadow-blue);
   transform: translateY(-1px);
 }
 
-.btn-bbm-outline-pink {
+.btn-bbn-outline-pink {
   background: transparent;
-  color: var(--bbm-pink-light);
-  border: 1px solid var(--bbm-pink);
+  color: var(--bbn-pink-light);
+  border: 1px solid var(--bbn-pink);
 }
-.btn-bbm-outline-pink:hover {
-  background: var(--bbm-pink-dim);
-  color: var(--bbm-pink-light);
-  border-color: var(--bbm-pink-light);
+.btn-bbn-outline-pink:hover {
+  background: var(--bbn-pink-dim);
+  color: var(--bbn-pink-light);
+  border-color: var(--bbn-pink-light);
 }
 
-.btn-bbm-outline-blue {
+.btn-bbn-outline-blue {
   background: transparent;
-  color: var(--bbm-blue-light);
-  border: 1px solid var(--bbm-blue);
+  color: var(--bbn-blue-light);
+  border: 1px solid var(--bbn-blue);
 }
-.btn-bbm-outline-blue:hover {
-  background: var(--bbm-blue-dim);
-  color: var(--bbm-blue-light);
-  border-color: var(--bbm-blue-light);
+.btn-bbn-outline-blue:hover {
+  background: var(--bbn-blue-dim);
+  color: var(--bbn-blue-light);
+  border-color: var(--bbn-blue-light);
 }
 
 /* Danger */
-.btn-bbm-danger {
-  background: var(--bbm-danger);
-  color: var(--bbm-white);
+.btn-bbn-danger {
+  background: var(--bbn-danger);
+  color: var(--bbn-white);
   border: none;
 }
-.btn-bbm-danger:hover {
-  background: var(--bbm-danger-light);
-  color: var(--bbm-white);
+.btn-bbn-danger:hover {
+  background: var(--bbn-danger-light);
+  color: var(--bbn-white);
 }
 
 /* Form controls */
 .form-control, .form-select {
-  background: var(--bbm-surface-2) !important;
-  color: var(--bbm-text) !important;
-  border: 1px solid var(--bbm-border) !important;
+  background: var(--bbn-surface-2) !important;
+  color: var(--bbn-text) !important;
+  border: 1px solid var(--bbn-border) !important;
   border-radius: var(--r-sm) !important;
   font-family: var(--font-body);
   font-size: 0.9rem;
@@ -222,42 +222,42 @@ html, body {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .form-control:focus, .form-select:focus {
-  background: var(--bbm-surface-3) !important;
-  border-color: var(--bbm-pink) !important;
-  box-shadow: 0 0 0 3px var(--bbm-focus-ring) !important;
+  background: var(--bbn-surface-3) !important;
+  border-color: var(--bbn-pink) !important;
+  box-shadow: 0 0 0 3px var(--bbn-focus-ring) !important;
   outline: none;
 }
-.form-control::placeholder { color: var(--bbm-text-faint) !important; }
+.form-control::placeholder { color: var(--bbn-text-faint) !important; }
 .form-label {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
   margin-bottom: 0.4rem;
 }
 
 /* Modals */
 .modal-content {
-  background: var(--bbm-surface) !important;
-  border: 1px solid var(--bbm-border) !important;
+  background: var(--bbn-surface) !important;
+  border: 1px solid var(--bbn-border) !important;
   border-radius: var(--r-lg) !important;
   box-shadow: var(--shadow-card);
 }
 .modal-header {
-  border-bottom: 1px solid var(--bbm-border) !important;
+  border-bottom: 1px solid var(--bbn-border) !important;
   padding: 1.5rem 1.75rem 1.25rem;
 }
 .modal-body { padding: 1.5rem 1.75rem; }
 .modal-footer {
-  border-top: 1px solid var(--bbm-border) !important;
+  border-top: 1px solid var(--bbn-border) !important;
   padding: 1.25rem 1.75rem;
 }
 .modal-title {
   font-family: var(--font-display);
   font-size: 1.4rem;
   font-weight: 700;
-  background: var(--bbm-gradient-text);
+  background: var(--bbn-gradient-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -270,16 +270,16 @@ html, body {
 
 /* Alerts */
 .alert-danger {
-  background: var(--bbm-danger-dim) !important;
-  border: 1px solid var(--bbm-danger-border) !important;
-  color: var(--bbm-danger-text) !important;
+  background: var(--bbn-danger-dim) !important;
+  border: 1px solid var(--bbn-danger-border) !important;
+  color: var(--bbn-danger-text) !important;
   border-radius: var(--r-sm) !important;
   font-size: 0.875rem;
 }
 .alert-success {
-  background: var(--bbm-success-dim) !important;
-  border: 1px solid var(--bbm-success-border) !important;
-  color: var(--bbm-success-light) !important;
+  background: var(--bbn-success-dim) !important;
+  border: 1px solid var(--bbn-success-border) !important;
+  color: var(--bbn-success-light) !important;
   border-radius: var(--r-sm) !important;
   font-size: 0.875rem;
 }
@@ -292,27 +292,27 @@ html, body {
   border-radius: 4px;
 }
 .badge-online {
-  background: var(--bbm-success-bg);
-  color: var(--bbm-success-light);
-  border: 1px solid var(--bbm-success-badge-border);
+  background: var(--bbn-success-bg);
+  color: var(--bbn-success-light);
+  border: 1px solid var(--bbn-success-badge-border);
 }
 .badge-offline {
-  background: var(--bbm-badge-offline-bg);
-  color: var(--bbm-text-muted);
-  border: 1px solid var(--bbm-border);
+  background: var(--bbn-badge-offline-bg);
+  color: var(--bbn-text-muted);
+  border: 1px solid var(--bbn-border);
 }
 
 /* ============================================================
    LAYOUT — page sits below fixed navbar
    ============================================================ */
-.bbm-page {
+.bbn-page {
   min-height: 100vh;
-  padding-top: var(--bbm-nav-h);
-  background: var(--bbm-black);
+  padding-top: var(--bbn-nav-h);
+  background: var(--bbn-black);
 }
 
 /* Full-bleed page wrapper */
-.bbm-fullbleed {
+.bbn-fullbleed {
   width: 100%;
 }
 
@@ -321,18 +321,18 @@ html, body {
    ============================================================ */
 #map {
   position: fixed;
-  top: var(--bbm-nav-h);
+  top: var(--bbn-nav-h);
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 1;
 }
 
-.leaflet-container { background: var(--bbm-map-bg) !important; }
-.leaflet-top { top: calc(var(--bbm-nav-h) + 0.6rem) !important; }
+.leaflet-container { background: var(--bbn-map-bg) !important; }
+.leaflet-top { top: calc(var(--bbn-nav-h) + 0.6rem) !important; }
 
 /* Floating action button — centre on me */
-.bbm-fab {
+.bbn-fab {
   position: fixed;
   bottom: 2rem;
   right: 1.25rem;
@@ -340,45 +340,45 @@ html, body {
   width: 3.25rem;
   height: 3.25rem;
   border-radius: 50%;
-  background: var(--bbm-surface);
-  border: 1px solid var(--bbm-border);
-  color: var(--bbm-text);
+  background: var(--bbn-surface);
+  border: 1px solid var(--bbn-border);
+  color: var(--bbn-text);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.1rem;
   cursor: pointer;
-  box-shadow: var(--bbm-fab-shadow);
+  box-shadow: var(--bbn-fab-shadow);
   transition: all 0.2s;
 }
-.bbm-fab:hover {
-  background: var(--bbm-surface-3);
-  border-color: var(--bbm-pink);
-  color: var(--bbm-pink-light);
+.bbn-fab:hover {
+  background: var(--bbn-surface-3);
+  border-color: var(--bbn-pink);
+  color: var(--bbn-pink-light);
   box-shadow: var(--shadow-pink);
   transform: scale(1.05);
 }
 
 /* Status badge in navbar */
-.bbm-status {
+.bbn-status {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.72rem;
   font-weight: 500;
   letter-spacing: 0.04em;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
   text-transform: uppercase;
 }
-.bbm-status-dot {
+.bbn-status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--bbm-text-faint);
+  background: var(--bbn-text-faint);
   transition: background 0.3s;
 }
-.bbm-status-dot.live { background: var(--bbm-status-live); box-shadow: 0 0 6px var(--bbm-status-live); }
-.bbm-status-dot.locating { background: var(--bbm-blue); animation: pulse 1.4s infinite; }
+.bbn-status-dot.live { background: var(--bbn-status-live); box-shadow: 0 0 6px var(--bbn-status-live); }
+.bbn-status-dot.locating { background: var(--bbn-blue); animation: pulse 1.4s infinite; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -388,14 +388,14 @@ html, body {
 /* Guest countdown */
 #guestCountdown {
   font-size: 0.72rem;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
   letter-spacing: 0.03em;
 }
 
 /* ============================================================
    MAP MARKERS
    ============================================================ */
-.bbm-marker {
+.bbn-marker {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -406,30 +406,30 @@ html, body {
   line-height: 1;
   cursor: pointer;
   user-select: none;
-  border: 2px solid var(--bbm-marker-border);
+  border: 2px solid var(--bbn-marker-border);
   transition: transform 0.15s;
   /* Prevent Leaflet from clipping the emoji */
   overflow: visible;
   box-sizing: border-box;
 }
-.bbm-marker:hover { transform: scale(1.15); }
+.bbn-marker:hover { transform: scale(1.15); }
 
 /* 👆 male — blue-tinted emoji, no circle (self overrides below) */
-.bbm-marker.male   {
+.bbn-marker.male   {
   background:   transparent;
   border-color: transparent;
   box-shadow:   none;
   filter: sepia(1) saturate(8) hue-rotate(175deg) brightness(1.3);
 }
 /* 👌 female — pink-tinted emoji, no circle */
-.bbm-marker.female {
+.bbn-marker.female {
   background:   transparent;
   border-color: transparent;
   box-shadow:   none;
   filter: sepia(1) saturate(8) hue-rotate(290deg) brightness(1.1);
 }
 /* 👊 guest/unknown — warm gold tinted emoji, no circle */
-.bbm-marker.guest {
+.bbn-marker.guest {
   background:   transparent;
   border-color: transparent;
   box-shadow:   none;
@@ -437,28 +437,28 @@ html, body {
 }
 
 /* Self marker — larger, keeps circle, uses CSS var for compass rotation */
-.bbm-marker.self {
+.bbn-marker.self {
   width: 3.1rem; height: 3.1rem; font-size: 1.5rem; border-width: 2.5px;
   transform-origin: center;
-  transform: rotate(var(--bbm-bearing, 0deg));
+  transform: rotate(var(--bbn-bearing, 0deg));
   transition: transform 0.45s ease;
 }
-.bbm-marker.self:hover  { transform: rotate(var(--bbm-bearing, 0deg)) scale(1.12); }
-.bbm-marker.self.male   {
-  background:   var(--bbm-blue-self-bg);
-  border-color: var(--bbm-blue-light);
+.bbn-marker.self:hover  { transform: rotate(var(--bbn-bearing, 0deg)) scale(1.12); }
+.bbn-marker.self.male   {
+  background:   var(--bbn-blue-self-bg);
+  border-color: var(--bbn-blue-light);
   box-shadow:   var(--shadow-blue-self);
   filter: none;
 }
-.bbm-marker.self.female {
-  background:   var(--bbm-pink-self-bg);
-  border-color: var(--bbm-pink-light);
+.bbn-marker.self.female {
+  background:   var(--bbn-pink-self-bg);
+  border-color: var(--bbn-pink-light);
   box-shadow:   var(--shadow-pink-self);
   filter: none;
 }
-.bbm-marker.self.guest  {
-  background:   var(--bbm-gold-dim);
-  border-color: var(--bbm-gold-border);
+.bbn-marker.self.guest  {
+  background:   var(--bbn-gold-dim);
+  border-color: var(--bbn-gold-border);
   box-shadow:   var(--shadow-gold-self);
   filter: none;
 }
@@ -466,21 +466,21 @@ html, body {
 /* ============================================================
    PAGE HERO — used on profile, favourites, messages pages
    ============================================================ */
-.bbm-hero {
+.bbn-hero {
   padding: 3rem 0 2rem;
-  border-bottom: 1px solid var(--bbm-border);
+  border-bottom: 1px solid var(--bbn-border);
 }
-.bbm-hero h1 {
+.bbn-hero h1 {
   font-family: var(--font-display);
   font-weight: 900;
   font-size: clamp(2rem, 5vw, 3.5rem);
   line-height: 1.05;
   letter-spacing: -0.02em;
-  color: var(--bbm-text);
+  color: var(--bbn-text);
   margin: 0;
 }
-.bbm-hero h1 span.accent-pink {
-  background: var(--bbm-gradient-text);
+.bbn-hero h1 span.accent-pink {
+  background: var(--bbn-gradient-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -489,11 +489,11 @@ html, body {
 /* ============================================================
    CONTENT SECTIONS — full-bleed rows
    ============================================================ */
-.bbm-section {
+.bbn-section {
   padding: 2rem 0;
-  border-bottom: 1px solid var(--bbm-border-soft);
+  border-bottom: 1px solid var(--bbn-border-soft);
 }
-.bbm-section:last-child { border-bottom: none; }
+.bbn-section:last-child { border-bottom: none; }
 
 /* ============================================================
    CONVERSATION LIST
@@ -503,13 +503,13 @@ html, body {
   align-items: center;
   gap: 1rem;
   padding: 1rem 0;
-  border-bottom: 1px solid var(--bbm-border-soft);
+  border-bottom: 1px solid var(--bbn-border-soft);
   cursor: pointer;
   transition: background 0.15s;
   text-decoration: none;
   color: inherit;
 }
-.conv-item:hover { background: var(--bbm-item-hover-bg); }
+.conv-item:hover { background: var(--bbn-item-hover-bg); }
 .conv-item:last-child { border-bottom: none; }
 
 .conv-avatar {
@@ -522,22 +522,22 @@ html, body {
   font-size: 1.3rem;
   flex-shrink: 0;
 }
-.conv-avatar.male   { background: var(--bbm-blue-dim);  border: 1px solid var(--bbm-blue-avatar-border); }
-.conv-avatar.female { background: var(--bbm-pink-dim);  border: 1px solid var(--bbm-pink-avatar-border); }
-.conv-avatar.unknown { background: var(--bbm-surface-2); border: 1px solid var(--bbm-border); }
+.conv-avatar.male   { background: var(--bbn-blue-dim);  border: 1px solid var(--bbn-blue-avatar-border); }
+.conv-avatar.female { background: var(--bbn-pink-dim);  border: 1px solid var(--bbn-pink-avatar-border); }
+.conv-avatar.unknown { background: var(--bbn-surface-2); border: 1px solid var(--bbn-border); }
 
 .conv-body { flex: 1; min-width: 0; }
 .conv-name {
   font-weight: 600;
   font-size: 0.95rem;
-  color: var(--bbm-text);
+  color: var(--bbn-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .conv-preview {
   font-size: 0.82rem;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -545,7 +545,7 @@ html, body {
 }
 .conv-meta {
   font-size: 0.72rem;
-  color: var(--bbm-text-faint);
+  color: var(--bbn-text-faint);
   white-space: nowrap;
   flex-shrink: 0;
   text-align: right;
@@ -554,23 +554,23 @@ html, body {
 /* ============================================================
    MESSAGE THREAD
    ============================================================ */
-.bbm-thread-wrap {
+.bbn-thread-wrap {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding-top: var(--bbm-nav-h);
+  padding-top: var(--bbn-nav-h);
   overflow: hidden;
 }
 
-.bbm-thread-header {
+.bbn-thread-header {
   flex-shrink: 0;
-  border-bottom: 1px solid var(--bbm-border);
+  border-bottom: 1px solid var(--bbn-border);
   display: flex;
   align-items: center;
-  background: var(--bbm-surface);
+  background: var(--bbn-surface);
 }
 
-.bbm-thread-msgs {
+.bbn-thread-msgs {
   flex: 1;
   overflow-y: auto;
   display: flex;
@@ -578,10 +578,10 @@ html, body {
   gap: 0.75rem;
 }
 
-.bbm-thread-compose {
+.bbn-thread-compose {
   flex-shrink: 0;
-  border-top: 1px solid var(--bbm-border);
-  background: var(--bbm-surface);
+  border-top: 1px solid var(--bbn-border);
+  background: var(--bbn-surface);
 }
 
 /* Message bubbles */
@@ -593,36 +593,36 @@ html, body {
   word-break: break-word;
 }
 .message-bubble.outgoing {
-  background: var(--bbm-pink-dim);
-  border: 1px solid var(--bbm-outgoing-border);
-  color: var(--bbm-text);
+  background: var(--bbn-pink-dim);
+  border: 1px solid var(--bbn-outgoing-border);
+  color: var(--bbn-text);
   border-bottom-right-radius: 4px;
   margin-left: auto;
 }
 .message-bubble.incoming {
-  background: var(--bbm-blue-dim);
-  border: 1px solid var(--bbm-incoming-border);
-  color: var(--bbm-text);
+  background: var(--bbn-blue-dim);
+  border: 1px solid var(--bbn-incoming-border);
+  color: var(--bbn-text);
   border-bottom-left-radius: 4px;
   margin-right: auto;
 }
 .message-expiry {
-  color: var(--bbm-text-faint);
+  color: var(--bbn-text-faint);
 }
 /* Align expiry timestamp to match its bubble side */
-.bbm-thread-msgs .d-flex.justify-content-end > div {
+.bbn-thread-msgs .d-flex.justify-content-end > div {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
 }
-.bbm-thread-msgs .d-flex.justify-content-start > div {
+.bbn-thread-msgs .d-flex.justify-content-start > div {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
 /* Compose textarea */
-.bbm-compose-input {
+.bbn-compose-input {
   resize: none;
   min-height: 2.75rem;
   max-height: 8rem;
@@ -630,7 +630,7 @@ html, body {
 }
 
 /* Send button stretches to match textarea height */
-.bbm-send-btn {
+.bbn-send-btn {
   align-self: stretch;
 }
 
@@ -642,7 +642,7 @@ html, body {
   align-items: center;
   gap: 1rem;
   padding: 1rem 0;
-  border-bottom: 1px solid var(--bbm-border-soft);
+  border-bottom: 1px solid var(--bbn-border-soft);
 }
 .fav-item:last-child { border-bottom: none; }
 
@@ -656,8 +656,8 @@ html, body {
   font-size: 1.2rem;
   flex-shrink: 0;
 }
-.fav-avatar.male   { background: var(--bbm-blue-dim);  border: 1px solid var(--bbm-blue-avatar-border); }
-.fav-avatar.female { background: var(--bbm-pink-dim);  border: 1px solid var(--bbm-pink-avatar-border); }
+.fav-avatar.male   { background: var(--bbn-blue-dim);  border: 1px solid var(--bbn-blue-avatar-border); }
+.fav-avatar.female { background: var(--bbn-pink-dim);  border: 1px solid var(--bbn-pink-avatar-border); }
 
 .fav-info    { flex: 1; min-width: 0; }
 .fav-status  { flex-shrink: 0; }
@@ -684,18 +684,18 @@ html, body {
 /* ============================================================
    PROFILE PAGE (my profile — edit form)
    ============================================================ */
-.bbm-profile-form {
+.bbn-profile-form {
   max-width: 640px;
 }
 
 /* ============================================================
    PUBLIC PROFILE PAGE
    ============================================================ */
-.bbm-pub-profile-hero {
+.bbn-pub-profile-hero {
   padding: 3.5rem 0 2.5rem;
-  border-bottom: 1px solid var(--bbm-border);
+  border-bottom: 1px solid var(--bbn-border);
 }
-.bbm-pub-avatar {
+.bbn-pub-avatar {
   width: 6rem;
   height: 6rem;
   border-radius: 50%;
@@ -705,20 +705,20 @@ html, body {
   font-size: 2.5rem;
   margin-bottom: 1.25rem;
 }
-.bbm-pub-avatar.male   { background: var(--bbm-blue-dim);  border: 2px solid var(--bbm-blue-avatar-border-lg); box-shadow: var(--shadow-blue); }
-.bbm-pub-avatar.female { background: var(--bbm-pink-dim);  border: 2px solid var(--bbm-pink-avatar-border-lg); box-shadow: var(--shadow-pink); }
+.bbn-pub-avatar.male   { background: var(--bbn-blue-dim);  border: 2px solid var(--bbn-blue-avatar-border-lg); box-shadow: var(--shadow-blue); }
+.bbn-pub-avatar.female { background: var(--bbn-pink-dim);  border: 2px solid var(--bbn-pink-avatar-border-lg); box-shadow: var(--shadow-pink); }
 
-.bbm-pub-name {
+.bbn-pub-name {
   font-family: var(--font-display);
   font-size: clamp(1.75rem, 4vw, 2.75rem);
   font-weight: 900;
   letter-spacing: -0.02em;
-  color: var(--bbm-text);
+  color: var(--bbn-text);
   margin-bottom: 0.35rem;
 }
-.bbm-pub-meta {
+.bbn-pub-meta {
   font-size: 0.85rem;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
 }
 
 /* ============================================================
@@ -739,9 +739,9 @@ html, body {
   font-size: 1.9rem;
   margin: 0 auto 1rem;
 }
-#pinModal .pin-avatar.male   { background: var(--bbm-blue-dim);  border: 2px solid var(--bbm-blue-avatar-border-lg); }
-#pinModal .pin-avatar.female { background: var(--bbm-pink-dim);  border: 2px solid var(--bbm-pink-avatar-border-lg); }
-#pinModal .pin-avatar.guest  { background: var(--bbm-surface-2); border: 1px solid var(--bbm-border); }
+#pinModal .pin-avatar.male   { background: var(--bbn-blue-dim);  border: 2px solid var(--bbn-blue-avatar-border-lg); }
+#pinModal .pin-avatar.female { background: var(--bbn-pink-dim);  border: 2px solid var(--bbn-pink-avatar-border-lg); }
+#pinModal .pin-avatar.guest  { background: var(--bbn-surface-2); border: 1px solid var(--bbn-border); }
 
 /* ============================================================
    OFFCANVAS — guest / user menu
@@ -750,7 +750,7 @@ html, body {
   font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 700;
-  background: var(--bbm-gradient-text);
+  background: var(--bbn-gradient-text);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -760,29 +760,29 @@ html, body {
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 0;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
-  border-bottom: 1px solid var(--bbm-border-soft);
+  border-bottom: 1px solid var(--bbn-border-soft);
   transition: color 0.15s;
 }
-.offcanvas-nav-link:hover { color: var(--bbm-text); }
+.offcanvas-nav-link:hover { color: var(--bbn-text); }
 .offcanvas-nav-link i { font-size: 1rem; width: 1.25rem; }
 
 /* ============================================================
    DIVIDERS & UTILITY
    ============================================================ */
-.bbm-divider {
+.bbn-divider {
   border: none;
-  border-top: 1px solid var(--bbm-border);
+  border-top: 1px solid var(--bbn-border);
   margin: 0;
 }
 
-.text-pink     { color: var(--bbm-pink-light) !important; }
-.text-blue     { color: var(--bbm-blue-light) !important; }
-.text-muted-bb { color: var(--bbm-text-muted) !important; }
-.text-faint    { color: var(--bbm-text-faint)  !important; }
+.text-pink     { color: var(--bbn-pink-light) !important; }
+.text-blue     { color: var(--bbn-blue-light) !important; }
+.text-muted-bb { color: var(--bbn-text-muted) !important; }
+.text-faint    { color: var(--bbn-text-faint)  !important; }
 
 .heading-serif {
   font-family: var(--font-display);
@@ -791,79 +791,79 @@ html, body {
 }
 
 /* Empty state */
-.bbm-empty {
+.bbn-empty {
   text-align: center;
   padding: 4rem 1rem;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
 }
-.bbm-empty i {
+.bbn-empty i {
   font-size: 2.5rem;
   margin-bottom: 1rem;
   display: block;
   opacity: 0.3;
 }
-.bbm-empty p { margin: 0; font-size: 0.9rem; }
+.bbn-empty p { margin: 0; font-size: 0.9rem; }
 
 /* Loading state — animated spinner used everywhere */
-.bbm-loading {
+.bbn-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 4rem 1rem;
-  color: var(--bbm-text-faint);
+  color: var(--bbn-text-faint);
   gap: 1rem;
 }
-.bbm-loading::before {
+.bbn-loading::before {
   content: '';
   display: block;
   width: 2rem;
   height: 2rem;
-  border: 2px solid var(--bbm-pink-spinner-bg);
-  border-top-color: var(--bbm-pink);
+  border: 2px solid var(--bbn-pink-spinner-bg);
+  border-top-color: var(--bbn-pink);
   border-radius: 50%;
-  animation: bbm-spin 0.8s linear infinite;
+  animation: bbn-spin 0.8s linear infinite;
 }
-.bbm-loading p, .bbm-loading span {
+.bbn-loading p, .bbn-loading span {
   margin: 0;
   font-size: 0.78rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-@keyframes bbm-spin { to { transform: rotate(360deg); } }
+@keyframes bbn-spin { to { transform: rotate(360deg); } }
 
 /* Bootstrap spinner colour override */
 .spinner-border {
-  color: var(--bbm-pink) !important;
+  color: var(--bbn-pink) !important;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--bbm-border); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--bbm-scrollbar-hover); }
+::-webkit-scrollbar-thumb { background: var(--bbn-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bbn-scrollbar-hover); }
 
 /* Donation badge in navbar */
-.bbm-donate-badge {
+.bbn-donate-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--bbm-pink) !important;
-  background: var(--bbm-donate-bg);
-  border: 1px solid var(--bbm-donate-border);
+  color: var(--bbn-pink) !important;
+  background: var(--bbn-donate-bg);
+  border: 1px solid var(--bbn-donate-border);
   border-radius: 50px;
   padding: 0.3rem 0.75rem;
   text-decoration: none !important;
   transition: background 0.2s, border-color 0.2s;
   white-space: nowrap;
 }
-.bbm-donate-badge:hover {
-  background: var(--bbm-donate-bg-hover);
-  border-color: var(--bbm-donate-border-hover);
+.bbn-donate-badge:hover {
+  background: var(--bbn-donate-bg-hover);
+  border-color: var(--bbn-donate-border-hover);
 }
-.bbm-donate-badge .bi-heart-fill {
+.bbn-donate-badge .bi-heart-fill {
   font-size: 0.7rem;
 }
 
@@ -872,52 +872,52 @@ html, body {
    Animated dashed curved lines from self → favourite pins.
    The class is applied to the Leaflet <g> wrapping the path.
    ============================================================ */
-.bbm-fav-line path {
+.bbn-fav-line path {
   stroke-dashoffset: 0;
-  animation: bbm-fav-flow 1.1s linear infinite;
+  animation: bbn-fav-flow 1.1s linear infinite;
 }
-@keyframes bbm-fav-flow {
+@keyframes bbn-fav-flow {
   to { stroke-dashoffset: -16; }
 }
 
 /* ============================================================
    MEETING MODE PILL (Leaflet control, topright)
    ============================================================ */
-.bbm-meet-pill {
+.bbn-meet-pill {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  background: var(--bbm-surface-2);
-  border: 1px solid var(--bbm-meet-pill-border);
+  background: var(--bbn-surface-2);
+  border: 1px solid var(--bbn-meet-pill-border);
   border-radius: 2rem;
   padding: 0.35rem 0.75rem 0.35rem 0.65rem;
   font-size: 0.78rem;
-  box-shadow: var(--bbm-meet-pill-shadow), 0 0 0 1px var(--bbm-meet-pink-glow);
+  box-shadow: var(--bbn-meet-pill-shadow), 0 0 0 1px var(--bbn-meet-pink-glow);
   max-width: 220px;
   margin-top: 0.6rem;
   margin-right: 0.6rem;
 }
-.bbm-meet-icon { font-size: 1rem; flex-shrink: 0; }
-.bbm-meet-name {
+.bbn-meet-icon { font-size: 1rem; flex-shrink: 0; }
+.bbn-meet-name {
   font-weight: 700;
-  color: var(--bbm-text);
+  color: var(--bbn-text);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.bbm-meet-dist {
-  color: var(--bbm-pink-light);
+.bbn-meet-dist {
+  color: var(--bbn-pink-light);
   font-size: 0.68rem;
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
-.bbm-meet-dist.bbm-meet-absent { color: var(--bbm-text-muted); }
-.bbm-meet-close {
+.bbn-meet-dist.bbn-meet-absent { color: var(--bbn-text-muted); }
+.bbn-meet-close {
   background: none;
   border: none;
-  color: var(--bbm-text-muted);
+  color: var(--bbn-text-muted);
   cursor: pointer;
   padding: 0 0 0 0.2rem;
   font-size: 0.72rem;
@@ -925,10 +925,10 @@ html, body {
   flex-shrink: 0;
   transition: color 0.15s;
 }
-.bbm-meet-close:hover { color: var(--bbm-text); }
+.bbn-meet-close:hover { color: var(--bbn-text); }
 
 /* Meet toggle button in favourites list */
-.fav-meet-btn.active { color: var(--bbm-pink-light) !important; }
+.fav-meet-btn.active { color: var(--bbn-pink-light) !important; }
 
 /* Message button — disabled when out of range */
 .fav-msg--disabled {
@@ -949,34 +949,34 @@ html, body {
 .fav-range-hint {
   display: inline-block;
   font-size: 0.72rem;
-  color: var(--bbm-text-faint, #888);
+  color: var(--bbn-text-faint, #888);
 }
 
 /* ── Meeting pill — sex-specific border ── */
-.bbm-meet-pill.bbm-meet-pill--male {
-  border-color: var(--bbm-meet-pill-border-male);
-  box-shadow: var(--bbm-meet-pill-shadow), 0 0 0 1px var(--bbm-meet-blue-glow);
+.bbn-meet-pill.bbn-meet-pill--male {
+  border-color: var(--bbn-meet-pill-border-male);
+  box-shadow: var(--bbn-meet-pill-shadow), 0 0 0 1px var(--bbn-meet-blue-glow);
 }
-.bbm-meet-pill.bbm-meet-pill--male .bbm-meet-dist { color: var(--bbm-blue-light); }
+.bbn-meet-pill.bbn-meet-pill--male .bbn-meet-dist { color: var(--bbn-blue-light); }
 /* --female already matches the existing pink default */
 
 /* ── Favourites search bar — sex-colour theming ── */
-.bbm-search-icon {
-  background: var(--bbm-surface-2) !important;
-  border-color: var(--bbm-border) !important;
-  color: var(--bbm-text-muted);
+.bbn-search-icon {
+  background: var(--bbn-surface-2) !important;
+  border-color: var(--bbn-border) !important;
+  color: var(--bbn-text-muted);
   transition: color 0.2s, border-color 0.2s;
 }
-#favSearchWrap.bbm-search--male  .bbm-search-icon {
-  color: var(--bbm-blue-light);
-  border-color: var(--bbm-blue-avatar-border) !important;
+#favSearchWrap.bbn-search--male  .bbn-search-icon {
+  color: var(--bbn-blue-light);
+  border-color: var(--bbn-blue-avatar-border) !important;
 }
-#favSearchWrap.bbm-search--female .bbm-search-icon {
-  color: var(--bbm-pink-light);
-  border-color: var(--bbm-pink-avatar-border) !important;
+#favSearchWrap.bbn-search--female .bbn-search-icon {
+  color: var(--bbn-pink-light);
+  border-color: var(--bbn-pink-avatar-border) !important;
 }
-#favSearchWrap.bbm-search--male .form-control:focus {
-  border-color: var(--bbm-blue) !important;
-  box-shadow: 0 0 0 3px var(--bbm-blue-dim) !important;
+#favSearchWrap.bbn-search--male .form-control:focus {
+  border-color: var(--bbn-blue) !important;
+  box-shadow: 0 0 0 3px var(--bbn-blue-dim) !important;
 }
-/* bbm-search--female reuses the existing pink focus from .form-control:focus */
+/* bbn-search--female reuses the existing pink focus from .form-control:focus */

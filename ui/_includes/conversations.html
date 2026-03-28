@@ -4,10 +4,10 @@ title: "Conversations"
 permalink: /messages/
 ---
 
-<div class="bbm-page bbm-fullbleed">
+<div class="bbn-page bbn-fullbleed">
 
   <!-- Hero -->
-  <div class="bbm-hero">
+  <div class="bbn-hero">
     <div class="container-fluid px-4 px-md-5">
       <h1>Con<span class="accent-pink">ver</span>sations</h1>
     </div>
@@ -16,7 +16,7 @@ permalink: /messages/
   <!-- Content -->
   <div class="container-fluid px-4 px-md-5 py-2">
     <div id="convListWrap">
-      <div class="bbm-loading">
+      <div class="bbn-loading">
         <i class="bi bi-arrow-repeat d-block mb-2" style="animation: spin 1s linear infinite; font-size:1.5rem"></i>
         Loading…
       </div>
@@ -31,5 +31,5 @@ permalink: /messages/
 
 <script type="module">
 import { renderConversationList } from '{{ "/scripts/pages/messages.js" | relative_url }}';
-if (window.__bbmReady) { renderConversationList(); } else { document.addEventListener('bbm:ready', () => renderConversationList()); };
+if (window.__bbnReady) { renderConversationList(); } else { document.addEventListener('bbn:ready', () => renderConversationList()); };
 </script>

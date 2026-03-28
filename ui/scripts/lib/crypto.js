@@ -9,7 +9,7 @@
 // for the lifetime of the current page only.
 // ============================================================
 
-const BBMCrypto = (() => {
+const BBNCrypto = (() => {
 
   const BASE      = window.BOOMBOOM_BASE || '';
   const workerUrl = `${BASE}/scripts/crypto-worker.js`;
@@ -109,4 +109,4 @@ const BBMCrypto = (() => {
 
 })();
 
-window.BBMCrypto = BBMCrypto;
+window.BBNCrypto = BBNCrypto;
