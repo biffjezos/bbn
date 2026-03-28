@@ -1,4 +1,4 @@
-// ./lib/geo.js
+// ./lib/geo.js 
 // ============================================================
 // GeoModule — ES6 module version
 // Handles geolocation, location push, and status updates.
@@ -188,27 +188,27 @@ function isVenueAccount() {
 }
 
 export function initGeo() {
-  if (!window.__authReady) {
-    console.warn('[Geo] auth not ready yet');
-    return;
-  }
-  window.__authReady.then(async () => {
-    if (isVenueAccount()) {
-      try {
-        const me = await window.Api.getMe();
-        const { fixedLat: lat, fixedLon: lng } = me;
-        if (typeof lat === 'number' && typeof lng === 'number') {
-          GeoState.accuracy = 'fixed';
-          dispatchPosition(lat, lng);
-          setStatus('fixed location', 'live');
+  if (window.__authReady instanceof Promise) {
+    window.__authReady.then(async () => {
+      if (isVenueAccount()) {
+        try {
+          const me = await window.Api.getMe();
+          const { fixedLat: lat, fixedLon: lng } = me;
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            GeoState.accuracy = 'fixed';
+            dispatchPosition(lat, lng);
+            setStatus('fixed location', 'live');
+          }
+          connectLocWS();
+        } catch {
+          setStatus('location unavailable', 'off');
         }
+      } else {
         connectLocWS();
-      } catch {
-        setStatus('location unavailable', 'off');
+        startWatch();
       }
-    } else {
-      connectLocWS();
-      startWatch();
-    }
-  });
+    });
+  } else {
+    console.warn('[Geo] __authReady is not a promise');
+  }
 }

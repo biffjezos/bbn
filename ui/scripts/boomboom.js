@@ -186,7 +186,7 @@ function wireUI(mapModule) {
         if (data.mutual) {
           msgLink.classList.remove('d-none');
         }
-      }).catch(function() {});
+      }).catch(function() {}); 
     }).catch(function() {});
   }
 
@@ -197,9 +197,11 @@ async function initApp() {
 
   // Service Worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker
-      .register('/service-worker.js', { scope: '/bbn/' })
-      .catch(err => console.error('SW registration failed:', err));
+    try {
+      await navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' });
+    } catch (err) {
+      console.error('SW registration failed:', err);
+    }
   }
 
   // Core systems
@@ -210,10 +212,8 @@ async function initApp() {
   GeoState.connectLocWS = connectLocWS;
   GeoState.closeLocWS = closeLocWS;
 
-  const mapModule = new MapModule();
-
-  // 👇 compatibility bridge (temporary but safe)
-  window.MapModule = mapModule;
+  // Use the imported MapModule directly (no need for 'new')
+  const mapModule = MapModule;
 
   renderFavourites();
   initSearchBar();
