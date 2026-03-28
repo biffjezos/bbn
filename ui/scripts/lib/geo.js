@@ -1,4 +1,4 @@
-// geo.js
+// ./lib/geo.js
 // ============================================================
 // GeoModule — ES6 module version
 // Handles geolocation, location push, and status updates.
@@ -188,6 +188,10 @@ function isVenueAccount() {
 }
 
 export function initGeo() {
+  if (!window.__authReady) {
+    console.warn('[Geo] auth not ready yet');
+    return;
+  }
   window.__authReady.then(async () => {
     if (isVenueAccount()) {
       try {
