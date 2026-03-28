@@ -21,7 +21,7 @@ function getModal() {
 
 // ── Lock ──────────────────────────────────────────────────
 export function lock() {
-  if (!window.Auth.isRegistered()) return;
+  if (window.Auth && !window.Auth.isRegistered()) return;  // Fixed: Check if Auth is defined
   if (_locked) return;
   _locked = true;
   clearInactivityTimer();
@@ -50,9 +50,10 @@ function clearInactivityTimer() {
 }
 
 function resetInactivityTimer() {
-  if (!window.Auth.isRegistered()) return;
-  clearInactivityTimer();
-  _inactivityTimer = setTimeout(lock, INACTIVITY_LOCK_MS);
+  if (window.Auth && window.Auth.isRegistered()) {  // Fixed: Ensure Auth is available
+    clearInactivityTimer();
+    _inactivityTimer = setTimeout(lock, INACTIVITY_LOCK_MS);
+  }
 }
 
 // Reset timer on user activity
@@ -155,7 +156,7 @@ export function requireUnlocked() {
 }
 
 // ── Auth hooks ────────────────────────────────────────────
-let _origOnLogin = window.Auth.onLogin;
+let _origOnLogin = window.Auth?.onLogin;  // Fixed: Check if Auth is defined
 window.Auth.onLogin = function (data) {
   if (_origOnLogin) _origOnLogin(data);
   _locked = false;
@@ -176,7 +177,7 @@ window.Auth.onNeedsUnlock = async function () {
   }
 };
 
-let _origOnLogout = window.Auth.onLogout;
+let _origOnLogout = window.Auth?.onLogout;  // Fixed: Check if Auth is defined
 window.Auth.onLogout = function () {
   if (_origOnLogout) _origOnLogout();
   clearInactivityTimer();
