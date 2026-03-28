@@ -4,7 +4,6 @@
 // ============================================================
 
 const _pubKeyCache = {};
-const _profileCache = {};
 const _CACHE_TTL_MS = 5 * 60 * 1000;
 
 let _msgWs = null;
