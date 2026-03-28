@@ -1,7 +1,9 @@
-// ./lib/lock.js
+// ============================================================
+// lock.js — Inactivity & tab lock with modal
+// ============================================================
 
-const INACTIVITY_LOCK_MS = 3 * 60 * 1000;
-const HIDE_LOCK_MS = 30 * 1000;
+const INACTIVITY_LOCK_MS = 3 * 60 * 1000; // 3 minutes
+const HIDE_LOCK_MS = 30 * 1000;           // 30 seconds
 
 let _inactivityTimer = null;
 let _hiddenTimer = null;
@@ -53,6 +55,7 @@ function resetInactivityTimer() {
   _inactivityTimer = setTimeout(lock, INACTIVITY_LOCK_MS);
 }
 
+// Reset timer on user activity
 ['mousemove', 'keydown', 'pointerdown', 'scroll', 'touchstart'].forEach(function (evt) {
   document.addEventListener(evt, function () {
     if (!_locked) resetInactivityTimer();
@@ -92,7 +95,8 @@ export function initUnlockButton() {
     }
 
     function clearError() {
-      if (errorEl) errorEl.classList.add('d-none');
+      if (!errorEl) return;
+      errorEl.classList.add('d-none');
     }
 
     async function tryUnlock() {
@@ -104,19 +108,20 @@ export function initUnlockButton() {
         if (DEBUG) console.log('[Lock] Fetching encrypted key blob from server…');
         const keys = await window.Api.getMyKeys();
         if (DEBUG) console.log('[Lock] Key blob received, encryptedPrivateKey:', !!keys.encryptedPrivateKey, 'publicKey:', !!keys.publicKey);
+
         if (keys.encryptedPrivateKey && keys.publicKey) {
           if (DEBUG) console.log('[Lock] Decrypting private key with PBKDF2…');
           const ok = await window.BBNCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
           if (!ok) throw new Error('Wrong password.');
           if (DEBUG) console.log('[Lock] Keys unlocked successfully.');
         } else {
-          // No keys on server yet (legacy account) — generate and save now
           if (DEBUG) console.log('[Lock] No keys on server — generating new key pair…');
           const setup = await window.BBNCrypto.setup(password);
           if (DEBUG) console.log('[Lock] Key pair generated, saving to server…');
           await window.Api.saveKeys(setup.publicKeyB64, setup.encBlob);
           if (DEBUG) console.log('[Lock] New keys saved to server.');
         }
+
         if (pwInput) pwInput.value = '';
         unlock();
       } catch (e) {
@@ -134,8 +139,6 @@ export function initUnlockButton() {
       clearError();
       _locked = false;
       window.Auth.logout();
-      // modal will be hidden by Auth.onLogout → clearInactivityTimer path,
-      // but force-hide here too in case logout races with Bootstrap state
       const modal = getModal();
       if (modal) modal.hide();
     });
@@ -152,18 +155,15 @@ export function requireUnlocked() {
 }
 
 // ── Auth hooks ────────────────────────────────────────────
-let _origOnLogin = Auth.onLogin;
-Auth.onLogin = function (data) {
+let _origOnLogin = window.Auth.onLogin;
+window.Auth.onLogin = function (data) {
   if (_origOnLogin) _origOnLogin(data);
   _locked = false;
   resetInactivityTimer();
 };
 
-// On page load with a saved token: ask the crypto worker if the key is already
-// loaded (SharedWorker retains it across navigations). If yes, fire bbn:unlocked
-// silently. If no (new session, Safari regular Worker, or inactivity lock),
-// mark locked so messages.js shows the lock modal.
-Auth.onNeedsUnlock = async function () {
+// On page load with a saved token
+window.Auth.onNeedsUnlock = async function () {
   await window.BBNCrypto?.ready?.();
   if (window.BBNCrypto?.isUnlocked()) {
     _locked = false;
@@ -176,8 +176,8 @@ Auth.onNeedsUnlock = async function () {
   }
 };
 
-let _origOnLogout = Auth.onLogout;
-Auth.onLogout = function () {
+let _origOnLogout = window.Auth.onLogout;
+window.Auth.onLogout = function () {
   if (_origOnLogout) _origOnLogout();
   clearInactivityTimer();
   if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }

@@ -1,10 +1,10 @@
 // ============================================================
-// pwa-install.js — PWA install logic
+// pwa-install.js — PWA install logic (named export version)
 // ============================================================
 
 let deferredPrompt = null;
 
-const PWAInstall = (() => {
+export const PWAInstall = (() => {
   const _isIOS        = /ipad|iphone|ipod/i.test(navigator.userAgent) && !window.MSStream;
   const _isFirefox    = /firefox/i.test(navigator.userAgent);
   const _isMobile     = /android|ipad|iphone|ipod/i.test(navigator.userAgent);
@@ -62,5 +62,3 @@ const PWAInstall = (() => {
 
   return { init };
 })();
-
-export default PWAInstall;
