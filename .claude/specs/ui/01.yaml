@@ -1,0 +1,14 @@
+---
+name: login + registration modal
+status:
+additional_info: tests executed by owner
+sources:
+  - /ui/_includes/modal-register.html
+    - /ui/_includes/modal-login.html
+expected_behaviour: always empty login and registration form after use.
+tests:
+  - register, navigate, logout, register > form shoul be empty
+  - register, logout, register > form shoul be empty
+  - login, navigate, logout, login > form shoul be empty
+  - login, navigate, logout, login > form shoul be empty
+qa_report: 
