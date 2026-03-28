@@ -26,7 +26,7 @@ qa_report: Option<string>
 
 Ubiquitous rules that all specifications must follow (where applicable).
 
-- privacy-by-design approach (eg. service authorization, JWT, OPAQUE, SHA256, ..)
+- privacy-by-design, E2EE approach (eg. ECDH, PBKDF2, service authorization, JWT, OPAQUE, SHA256, ..)
 - data-minimization
 - early drop / deletetion, clearance of confidential or unused data
 - modularization of concerns in all types of scripts (javascript, rust)
