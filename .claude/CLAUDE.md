@@ -123,11 +123,11 @@ without asking for permission:
    (create a stub file there), update the individual ticket file's frontmatter,
    update the TICKETS.md index row, add any new tickets as new files in `.claude/tickets/`.
 4. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
-   compact them into the `Reflection` section summary and **remove them from the Log**. The Log retains only `CHANGE` entries after compaction.
-5. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md`, remove
+   compact them into a 250 words max. summary in the `Reflection` section including the essence of the existing reflections and **remove them from the Log**. The Log retains only `CHANGE` entries after compaction.
+6. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md`, remove
    the oldest entries (by date) until the total counts 15.
-6. Commit all outstanding changes to the session branch, including all updated files.
-7. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
+7. Commit all outstanding changes to the session branch, including all updated files.
+8. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
 
 ---
 
