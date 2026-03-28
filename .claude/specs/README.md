@@ -15,11 +15,11 @@ tests must be either state-driven or event-driven.
 id: unique string
 description: string
 additional_info: Option<String>
-pre_condition: Option<string>
-sources: list
+pre_conditions: Option<OrderedList<string>>
+sources: Option<List>
 expected_behaviour: List<string>
 status: string
-tests: List<string>
+tests: OrderedList<string>
 qa_report: Option<string>
 
 ## General Rules
