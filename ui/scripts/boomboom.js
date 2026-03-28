@@ -197,7 +197,7 @@ async function initApp() {
   // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker
-      .register('/bbn/service-worker.js', { scope: '/bbn/' })
+      .register('/service-worker.js', { scope: '/bbn/' })
       .catch(err => console.error('SW registration failed:', err));
   }
 

@@ -157,30 +157,18 @@ export function requireUnlocked() {
 
 // ── Auth hooks ────────────────────────────────────────────
 let _origOnLogin = window.Auth?.onLogin;  // Fixed: Check if Auth is defined
-window.Auth.onLogin = function (data) {
-  if (_origOnLogin) _origOnLogin(data);
-  _locked = false;
-  resetInactivityTimer();
-};
-
-// On page load with a saved token
-window.Auth.onNeedsUnlock = async function () {
-  await window.BBNCrypto?.ready?.();
-  if (window.BBNCrypto?.isUnlocked()) {
+if (window.Auth) {
+  window.Auth.onLogin = function (data) {
+    if (_origOnLogin) _origOnLogin(data);
     _locked = false;
     resetInactivityTimer();
-    window.dispatchEvent(new CustomEvent('bbn:unlocked'));
-  } else {
-    _locked = true;
-    const modal = getModal();
-    if (modal) modal.show();
-  }
-};
+  };
 
-let _origOnLogout = window.Auth?.onLogout;  // Fixed: Check if Auth is defined
-window.Auth.onLogout = function () {
-  if (_origOnLogout) _origOnLogout();
-  clearInactivityTimer();
-  if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
-  _locked = false;
-};
+  let _origOnLogout = window.Auth?.onLogout;  // Fixed: Check if Auth is defined
+  window.Auth.onLogout = function () {
+    if (_origOnLogout) _origOnLogout();
+    clearInactivityTimer();
+    if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
+    _locked = false;
+  };
+}
