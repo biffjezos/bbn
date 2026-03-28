@@ -14,7 +14,7 @@ import { initUnlockButton } from './lib/lock.js';
 import { MapModule } from './lib/map.js';
 import * as Messages from './lib/messages.js';
 import { initNotifications } from './lib/notifications.js';
-import { initPWAInstall } from './lib/pwa-install.js';
+import { PWAInstall } from './lib/pwa-install.js';
 import { initSettings } from './lib/settings.js';
 import { warmUpBackend } from './lib/warmup.js';
 
