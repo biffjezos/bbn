@@ -195,7 +195,7 @@ async function initApp() {
   renderFavourites();
   initSearchBar();
   initNotifications();
-  initPWAInstall();
+  PWAInstall.init(); 
   initUnlockButton();
   initSettings();
   warmUpBackend();

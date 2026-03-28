@@ -4,7 +4,6 @@
 
 import { Auth } from './auth.js';
 import { Api } from './api.js';
-import { promptBlock } from './blocks.js';
 
 let cachedFavourites = null;
 let cachedBlockedIds = null;
