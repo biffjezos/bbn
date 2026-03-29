@@ -15,6 +15,7 @@
 Keys are mandatory. Values may be optional (empty). Descriptions must be ubiquitous. sources link to relevant files in the codebase.
 tests must be either state-driven or event-driven.
 
+```yaml
 ---
 id: unique string
 description: string
@@ -27,6 +28,7 @@ expected_behaviour: List<string>
 status: string
 tests: OrderedList<string>
 qa_report: Option<string>
+```
 
 ## General Rules
 
