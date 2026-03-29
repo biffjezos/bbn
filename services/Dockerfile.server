@@ -1,0 +1,44 @@
+# ── Build stage ───────────────────────────────────────────────
+FROM rust:latest AS builder
+WORKDIR /build
+COPY services/Cargo.toml services/rust-toolchain.toml ./
+COPY services/common ./common
+# Stub workspace members not being built
+COPY services/authority-service/Cargo.toml ./authority-service/Cargo.toml
+RUN mkdir -p ./authority-service/src && echo 'fn main(){}' > ./authority-service/src/main.rs
+COPY services/location-service/Cargo.toml ./location-service/Cargo.toml
+RUN mkdir -p ./location-service/src && echo 'fn main(){}' > ./location-service/src/main.rs
+COPY services/blocks-service/Cargo.toml ./blocks-service/Cargo.toml
+RUN mkdir -p ./blocks-service/src && echo 'fn main(){}' > ./blocks-service/src/main.rs
+COPY services/favourites-service/Cargo.toml ./favourites-service/Cargo.toml
+RUN mkdir -p ./favourites-service/src && echo 'fn main(){}' > ./favourites-service/src/main.rs
+COPY services/messages-service/Cargo.toml ./messages-service/Cargo.toml
+RUN mkdir -p ./messages-service/src && echo 'fn main(){}' > ./messages-service/src/main.rs
+COPY services/users-service/Cargo.toml ./users-service/Cargo.toml
+RUN mkdir -p ./users-service/src && echo 'fn main(){}' > ./users-service/src/main.rs
+COPY services/migration-service/Cargo.toml ./migration-service/Cargo.toml
+RUN mkdir -p ./migration-service/src && echo 'fn main(){}' > ./migration-service/src/main.rs
+COPY services/gateway/Cargo.toml ./gateway/Cargo.toml
+RUN mkdir -p ./gateway/src && echo 'fn main(){}' > ./gateway/src/main.rs
+# Build target
+COPY services/server ./server
+RUN cargo build --release -p server
+
+# ── Runtime stage ─────────────────────────────────────────────
+FROM debian:bookworm-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /build/target/release/server /usr/local/bin/server
+# Templates (Phase 2+)
+COPY services/server/templates /app/templates
+# Static assets from ui/
+COPY ui/assets    /app/static/assets
+COPY ui/scripts   /app/static/scripts
+COPY ui/styles    /app/static/styles
+COPY ui/service-worker.js /app/static/service-worker.js
+COPY ui/manifest.json     /app/static/manifest.json
+WORKDIR /app
+ENV STATIC_DIR=/app/static
+EXPOSE 8080
+CMD ["/usr/local/bin/server"]

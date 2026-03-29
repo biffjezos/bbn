@@ -7,12 +7,15 @@
 - one file per specification
 - stored in folders that reflect the concern (eg. `/ui/`, `/services/gateway`)
 - in machine readable yaml format
+- file name: `<module-or-feature>.yaml` — descriptive, lowercase, hyphen-separated (e.g. `auth-modal.yaml`, `nearby-search.yaml`). No sequential numbers. The folder provides the concern; the filename identifies the feature.
+- `id` field: `<concern-folder>/<filename-without-extension>` (e.g. `ui/auth-modal`, `services/gateway/routes`)
 
 ### Schema
 
 Keys are mandatory. Values may be optional (empty). Descriptions must be ubiquitous. sources link to relevant files in the codebase.
 tests must be either state-driven or event-driven.
 
+```yaml
 ---
 id: unique string
 description: string
@@ -25,6 +28,7 @@ expected_behaviour: List<string>
 status: string
 tests: OrderedList<string>
 qa_report: Option<string>
+```
 
 ## General Rules
 

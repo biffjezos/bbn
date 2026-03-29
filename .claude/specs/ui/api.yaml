@@ -1,0 +1,33 @@
+---
+id: ui/api
+description: API client module — all HTTP calls to backend services via relative /api/* paths
+additional_info: "Post-refactor contract. No more window.BOOMBOOM_API_URL. All paths are relative. Imports Auth for token."
+related_spec: services/server/proxy
+related_ticket: T-29
+pre_conditions:
+  1: auth.js is loaded and exports Auth
+  2: Server proxies /api/* to gateway (same-origin)
+sources:
+  - /ui/scripts/lib/api.js
+expected_behaviour:
+  - "ES6 module: imports Auth from ./auth.js. Does NOT use window.Auth."
+  - "API_BASE is empty string or /api — all fetch calls go to /api/* (relative, same-origin)"
+  - "Token injection: reads token via Auth.getToken(), adds Authorization Bearer header if token exists"
+  - "On 401 with TOKEN_REVOKED or TOKEN_INVALID: calls Auth.logout()"
+  - "On 403 with data.required: dispatches bbm:tier-gate CustomEvent"
+  - "Retry: one automatic retry on network error (1.5s delay) and on 5xx (1.5s delay)"
+  - "Timeout: 10 seconds per request via AbortSignal"
+  - "No CORS preflight needed — all requests are same-origin"
+  - "OPAQUE flows (register, login, changePassword) use window.OpaqueClient for WASM crypto steps"
+  - "Exports: Api object with all endpoint methods, initApiGlobals function"
+  - "Does NOT set window.Api — consumers import Api directly"
+status: planned
+tests:
+  1: "Api.getMe() sends GET /api/users/me with Authorization header"
+  2: "Api.login() completes OPAQUE two-step flow via /api/auth/login/start and /api/auth/login/finish"
+  3: "Network error triggers one retry after 1.5s"
+  4: "5xx response triggers one retry after 1.5s"
+  5: "401 TOKEN_REVOKED triggers Auth.logout()"
+  6: "403 with required field dispatches bbm:tier-gate event"
+  7: "No requests sent to an absolute URL — all relative /api/*"
+qa_report:

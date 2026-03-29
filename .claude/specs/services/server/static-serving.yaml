@@ -1,0 +1,33 @@
+---
+id: services/server/static-serving
+description: Static file serving and Tera template rendering — replaces Jekyll/GitHub Pages
+additional_info:
+related_spec: services/server/route-guards
+related_ticket: T-28
+pre_conditions:
+  1: Template files exist in services/server/templates/
+  2: Static assets exist in services/server/static/ (copied or symlinked from ui/)
+sources:
+  - /services/server/src/main.rs
+  - /services/server/templates/
+expected_behaviour:
+  - "Tera templates: base.html layout with {% block %} inheritance; partials for navbar, offcanvas, modals"
+  - "Page routes (/, /profile/, /favourites/, /messages/, /messages/thread/, /settings/, /admin/, /donate/, /profile/view/) render the corresponding Tera template"
+  - "Static files (/assets/*, /scripts/*, /styles/*) served directly with correct MIME types and cache headers"
+  - "/service-worker.js and /manifest.json served from static root"
+  - "Base path is / — no /bbn prefix. All internal links and asset references use /"
+  - "Template context always includes: is_logged_in, nickname, tier, role, sex (from route guard), asset_version (cache-bust string from ASSET_VERSION env var)"
+  - "No window.BOOMBOOM_API_URL injected — JS uses relative /api/* paths"
+  - "No window.BOOMBOOM_BASE injected — JS uses / as base"
+  - "No inline route guard script in any template"
+  - "Unknown routes return 404 page (not a proxy pass to gateway)"
+status: planned
+tests:
+  1: "GET / → renders index template with map div and FAB button"
+  2: "GET /profile/ with valid JWT → renders profile page with navbar in logged-in state"
+  3: "GET /assets/icons/icon-192.png → image served with correct content-type"
+  4: "GET /scripts/boomboom.js → served as application/javascript"
+  5: "GET /nonexistent → 404 page, not proxied to gateway"
+  6: "No Liquid/Jekyll syntax ({% include %} with Liquid semantics, {{ site.* }}) in any served HTML"
+  7: "asset_version appears in link/script href query strings for cache busting"
+qa_report:

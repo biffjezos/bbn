@@ -63,6 +63,21 @@ Before writing any code for a ticket:
 
 ---
 
+## Spec Workflow
+
+Behavioral specs live in `.claude/specs/` as YAML files, organized by concern folder (e.g. `specs/ui/`, `specs/services/gateway`). Schema and general rules are defined in `.claude/specs/README.md`.
+
+**Before touching any script or module:**
+
+1. **Check for a spec.** Look in the relevant subfolder of `.claude/specs/` for a YAML file covering the component or behavior you are about to change.
+2. **If a spec exists:** read it. Ensure your changes comply with `expected_behaviour` and `pre_conditions`. Flag any contradiction to the owner before proceeding.
+3. **If no spec exists:** create one before setting the task in-progress. At minimum, define `id`, `description`, and `expected_behaviour` — in collaboration with the owner if behavior is unclear. Fill in `sources`, `pre_conditions`, and `tests` yourself.
+4. **After the work:** update the spec's `status` and `qa_report` to reflect the current state.
+
+Specs are living documents. Update them whenever behavior changes, a refactor alters the contract, or an inconsistency is found — not only when creating new features.
+
+---
+
 ## Before Each Commit / Push
 
 - **Update SESSION.md.** Refresh the "In Progress", "Completed This Session", and "Handoff Notes" sections. This must happen before every commit so the file is never stale when the PreCompact hook checks it.
@@ -71,6 +86,7 @@ Before writing any code for a ticket:
   phases/tickets to `.claude/tickets/done/` (create a stub there), update the TICKETS.md
   index row, add any newly discovered tickets as new files. Do this before every commit,
   not only at wrap-up.
+- **Update specs.** For every module touched this session, ensure the relevant spec file in `.claude/specs/` reflects the current state — update `status`, `qa_report`, or `expected_behaviour` as needed. If no spec existed and one was created, confirm it is committed.
 - **Update audit files.** If any audit item was resolved or its status changed during this
   session, move it to `AUDIT_DONE.md` (leave a stub), update the source concern file, and
   keep the global summary table in `AUDIT.md` in sync. Do this before every commit, not only at wrap-up.
@@ -119,10 +135,11 @@ without asking for permission:
    to `AUDIT_DONE.md`, update existing entries, and **keep the global summary table in
    `AUDIT.md` in sync** (update the status cell for any item that changed). File names
    and their concerns are listed in the Persistent Files section below.
-3. Update ticket files — move completed tickets/phases to `.claude/tickets/done/`
+3. Update spec files — for every module touched this session, ensure its spec in `.claude/specs/` is current (`status`, `qa_report`, `expected_behaviour`). Newly created specs must be committed.
+4. Update ticket files — move completed tickets/phases to `.claude/tickets/done/`
    (create a stub file there), update the individual ticket file's frontmatter,
    update the TICKETS.md index row, add any new tickets as new files in `.claude/tickets/`.
-4. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
+5. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
    compact them into a 250 words max. summary in the `Reflection` section including the essence of the existing reflections and **remove them from the Log**. The Log retains only `CHANGE` entries after compaction.
 6. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md`, remove
    the oldest entries (by date) until the total counts 15.
@@ -203,6 +220,16 @@ Rules for creating and moving:
   ticket file to show the phase as complete; update the TICKETS.md index phase column.
 - Never delete ticket files — archive, don't remove.
 - Read `tickets/done/` only when you need historical context for a specific ticket.
+
+### `.claude/specs/` — Behavioral specifications *(read before touching any module)*
+Contains: one YAML file per feature/component/behavior, organized by concern subfolder (`specs/ui/`, `specs/services/<name>`, etc.). Each file defines `id`, `description`, `expected_behaviour`, `pre_conditions`, `sources`, `tests`, and `status`. Schema and general rules are in `specs/README.md`.
+
+Rules:
+- Read the relevant spec before modifying any module — do not proceed without it.
+- Create a spec if none exists; at minimum define `expected_behaviour` before starting work.
+- Update `status` and `qa_report` after changes are complete.
+- Do not read spec files speculatively — only load the ones relevant to the current task.
+- Specs carry forward across sessions via git — no separate index needed; SESSION.md notes which specs were created or updated.
 
 ### `.claude/CHANGELOG.md` — Change history and reflections
 Append an entry during every wrap-up. Two entry types:
