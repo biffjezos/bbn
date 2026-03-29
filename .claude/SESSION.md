@@ -8,14 +8,13 @@
 
 **Branch:** `claude/add-specs-document-7bxNJ`
 **Session date:** 2026-03-29
-**Last updated:** 2026-03-29T22:00Z
+**Last updated:** 2026-03-29T22:30Z
 
 ---
 
 ## In Progress
 
-Planning complete for T-28/T-29/T-30. Awaiting owner decision on emergency JS hotfix
-before starting T-28 Phase 1 implementation.
+Specs written for T-28/T-29 scope. Ready to start T-28 Phase 1 implementation.
 
 ---
 
@@ -27,6 +26,13 @@ before starting T-28 Phase 1 implementation.
   - T-30: Deployment — Railway, CORS removal, CI/CD migration — 3 phases
   - All three tickets created in `.claude/tickets/`
   - TICKETS.md index updated
+
+- **Specs written** for T-28/T-29 scope (5 files):
+  - `services/server/proxy.yaml` — API/WS reverse proxy contract
+  - `services/server/route-guards.yaml` — server-side JWT cookie validation
+  - `services/server/static-serving.yaml` — Tera template rendering, static files, no /bbn prefix
+  - `ui/auth.yaml` — auth lifecycle, bbn_tok cookie set/clear contract
+  - `ui/api.yaml` — relative /api/* paths, Auth import, no window.BOOMBOOM_API_URL
 
 - **Full JS audit completed** (see T-29 for detail)
   - Site is currently broken: `settings.js` has stub implementations (all functions empty)
@@ -58,9 +64,7 @@ before starting T-28 Phase 1 implementation.
 
 ## Blockers / Parked Items
 
-- **URGENT: Site is currently broken** — `settings.js` has no real code (all stubs); `auth.js`
-  uses `window.Api` (never set). Owner must decide: emergency hotfix now, or accept broken
-  state while T-28 is built?
+- Site is offline (owner aware). JS fixes deferred until after T-28 server migration.
 - `fetch-codeql-alerts.yml` still cannot push to `dev` (protected branch).
 - 18 CodeQL alerts open (fetched 2026-03-25). SSRF alerts in messages-service, location-service,
   favourites-service, gateway.
