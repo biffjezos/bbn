@@ -8,7 +8,7 @@
 
 **Branch:** `claude/add-specs-document-7bxNJ`
 **Session date:** 2026-03-29
-**Last updated:** 2026-03-29T00:00Z
+**Last updated:** 2026-03-29T21:20Z
 
 ---
 
@@ -19,6 +19,11 @@
 ---
 
 ## Completed This Session
+
+- **Renamed `specs/ui/01.yaml` → `specs/ui/auth-modal.yaml`**
+  - Fixed schema: `name` split into `id` (`ui/auth-modal`) + `description`; all schema fields now present
+  - Naming convention added to `specs/README.md`: descriptive hyphen-separated names, no numbers; `id` = `<folder>/<filename>`
+  - `related_ticket` left empty pending owner confirmation
 
 - **Introduced spec workflow into CLAUDE.md**
   - Added "Spec Workflow" section: check for spec before touching any module; create if absent; update after work.

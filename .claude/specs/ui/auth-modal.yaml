@@ -1,0 +1,20 @@
+---
+id: ui/auth-modal
+description: Login and registration modal — form state lifecycle
+additional_info: tests executed by owner
+related_spec:
+related_ticket:
+pre_conditions:
+sources:
+  - /ui/_includes/modal-register.html
+  - /ui/_includes/modal-login.html
+expected_behaviour:
+  - Login and registration forms are always empty after use
+  - Form field values are deleted from memory (not just visually cleared) after submission or dismissal
+status:
+tests:
+  1: register, navigate, logout, register > form should be empty and deleted from memory
+  2: register, logout, register > form should be empty and deleted from memory
+  3: login, navigate, logout, login > form should be empty and deleted from memory
+  4: login, navigate, logout, login > form should be empty and deleted from memory
+qa_report:
