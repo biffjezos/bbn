@@ -1,5 +1,5 @@
 [workspace]
-members  = ["common", "authority-service", "location-service", "blocks-service", "favourites-service", "messages-service", "users-service", "gateway", "migration-service"]
+members  = ["common", "authority-service", "location-service", "blocks-service", "favourites-service", "messages-service", "users-service", "gateway", "migration-service", "server"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -16,6 +16,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 bcrypt             = "0.15"
 reqwest            = { version = "0.12", features = ["json"] }
 tower-http         = { version = "0.6", features = ["cors"] }
+tera               = "1"
+tokio-tungstenite  = "0.26"
+url                = "2"
 opaque-ke          = { version = "4.1.0-pre.1", features = ["ristretto255", "argon2", "std"] }
 sha2               = "0.10"
 hmac               = "0.12"

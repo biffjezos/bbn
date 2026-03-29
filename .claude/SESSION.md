@@ -8,13 +8,13 @@
 
 **Branch:** `claude/add-specs-document-7bxNJ`
 **Session date:** 2026-03-29
-**Last updated:** 2026-03-29T22:30Z
+**Last updated:** 2026-03-29T23:00Z
 
 ---
 
 ## In Progress
 
-Specs written for T-28/T-29 scope. Ready to start T-28 Phase 1 implementation.
+T-28 Phase 1 complete — server crate scaffolded and builds clean.
 
 ---
 
@@ -33,6 +33,14 @@ Specs written for T-28/T-29 scope. Ready to start T-28 Phase 1 implementation.
   - `services/server/static-serving.yaml` — Tera template rendering, static files, no /bbn prefix
   - `ui/auth.yaml` — auth lifecycle, bbn_tok cookie set/clear contract
   - `ui/api.yaml` — relative /api/* paths, Auth import, no window.BOOMBOOM_API_URL
+
+- **T-28 Phase 1 complete — server crate scaffold**
+  - `services/server/` with Axum + Tera + reqwest
+  - `src/main.rs`: routes, static serving (ServeDir/ServeFile), health, GATEWAY_URL validation
+  - `src/proxy.rs`: HTTP proxy (all methods /api/*) + WebSocket tunnel (/ws/*)
+  - `Dockerfile.server`: build + runtime stages, copies ui/ assets into /app/static
+  - Added to workspace: `server` member, `tera`, `tokio-tungstenite`, `url` deps
+  - `cargo build -p server` passes, `cargo check -p server` — zero warnings
 
 - **Full JS audit completed** (see T-29 for detail)
   - Site is currently broken: `settings.js` has stub implementations (all functions empty)
