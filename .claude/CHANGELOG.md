@@ -43,6 +43,7 @@ Structural fixes applied across sessions: pre-commit ticket + audit update steps
 
 ## Log
 
+- 2026-03-30 — CHANGE: Relaxed Spec Workflow in CLAUDE.md — thin UI event handlers (blocks.js, lock.js, prefs.js, debug.js, pwa-install.js) do not require specs; only modules with inter-module contracts or async lifecycles do (api.js, auth.js, geo.js, messages.js, notifications.js).
 - 2026-03-30 — REFLECTION: [Under-reading] Service worker was registering with scope `/bbn/` (Jekyll base path) — not caught during T-28 template migration because the service worker registration path wasn't checked. Fix: when migrating base paths in templates, always grep for `service-worker` and `navigator.serviceWorker.register` to confirm scope/path alignment.
 - 2026-03-29 — CHANGE: T-28/T-29/T-30 planned and T-28 Phase 1 implemented — new `server` Rust crate (Axum + Tera) replaces Jekyll/GitHub Pages; HTTP+WS reverse proxy to gateway; Dockerfile.server; workspace updated.
 - 2026-03-29 — CHANGE: Added Spec Workflow to CLAUDE.md — before touching any module, check for a spec in `.claude/specs/`; create one if absent; update `status` and `qa_report` after work. Added spec update step to Before Each Commit and Session Wrap-Up Checklist. Added `.claude/specs/` entry to Persistent Files. Spec coverage grows incrementally as modules are touched (Option B approach).

@@ -8,93 +8,62 @@
 
 **Branch:** `claude/new-session-wfizk`
 **Session date:** 2026-03-30
-**Last updated:** 2026-03-30T01:00Z
+**Last updated:** 2026-03-30T14:00Z
 
 ---
 
 ## In Progress
 
-Nothing — T-29 complete. T-32 planned (profile.js integration).
+Nothing outstanding. Branch is ready to merge → dev and deploy.
 
 ---
 
 ## Completed This Session
 
-- **T-28 done stub** created: `.claude/tickets/done/T-28.md`
-- **T-31 done stub** created: `.claude/tickets/done/T-31.md`
-- **TICKETS.md** updated: T-28 and T-31 rows now point to `tickets/done/`
-- **T-29 complete (all 3 phases):**
-  - Phase 2: fixed all ES6 module globals and broken paths
-  - `auth.js`: imported `Api` from `./api.js`; replaced all `window.Api.*` with `Api.*`; `window.BBMCrypto` → `window.BBNCrypto`
-  - `api.js`: `API_BASE = '/api'` (was `''`); added `getNotifications`, `dismissNotification`
-  - `warmup.js`: `window.BOOMBOOM_API_URL + '/health'` → `fetch('/api/health')`
-  - `geo.js`: imported `Api`; `locWsUrl()` uses `location.origin`; `window.Api.*` → `Api.*`
-  - `messages.js`: imported `Api`; `msgWsUrl()` uses `location.origin`; `window.Api.*` → `Api.*`
-  - `notifications.js`: `window.BOOMBOOM_BASE || ''` → `''`; `DEBUG` ref removed
-  - `boomboom.js`: imported `OpaqueClient`; `window.Auth/Api/OpaqueClient` set in `initApp()`; SW path fixed to `/service-worker.js` scope `/`; `const BASE = ''`; `initNotifications()` moved after `wireAuth()`; `window.Api.*` stub → `Api.*`
-  - Phase 3: `favourites.js`/`profile.js` BOOMBOOM_BASE removed; `profile.js` BBMCrypto→BBNCrypto; `settings.js` fully restored; `initSettings()` moved after `await window.__authReady` in boomboom.js; T-32 created for profile page wiring
+- **T-28 done stub + T-31 done stub** created; TICKETS.md updated
+- **T-29 Phase 2** — fixed all ES6 module globals, API base path (`/api`), service worker path
+- **T-29 Phase 3 + T-29 done** — restored settings.js; removed BOOMBOOM_BASE refs; crypto.js worker URL fixed; T-32 created and immediately completed
+- **T-32 done** — profile.js converted to ES6 module at `lib/profile.js`; wired into boomboom.js; venue API methods added to api.js
+- **Specs created:** `ui/geo.yaml`, `ui/messages.yaml`, `ui/notifications.yaml`
+- **CLAUDE.md updated:** relaxed UI spec rule (thin handlers don't need specs)
 
 ---
 
 ## Key Decisions Made
 
-- **`fetch_me` URL**: calls `{gateway_url}/api/users/me` (proxy preserves `/api/` prefix)
-- **SSR data strategy**: inject as Tera variables and render HTML on first paint; JS overwrites with interactive form on load
-- **Graceful degradation**: `fetch_me` returns `None` on any error → template falls back to "Loading…" / empty placeholders
+- `API_BASE = '/api'` in api.js — server proxies `/api/*` to gateway which has `/api/` prefix on all routes
+- `window.Auth/Api/OpaqueClient` set in boomboom.js `initApp()` for backward-compat with modules that still do window.* lookups
+- `window.BBNCrypto` retained in profile.js for crypto re-encryption (crypto.js sets it itself)
+- crypto-worker.js URL: `/scripts/lib/crypto-worker.js` (was `/scripts/crypto-worker.js` — wrong path)
+- `initSettings()`, `initMyProfile()`, `initPublicProfile()` all called after `await window.__authReady`
+- profile.js moved to `lib/profile.js`; old `ui/scripts/profile.js` stubbed out
 
 ---
 
 ## Blockers / Parked Items
 
-- Site is live but has JS console errors (all expected T-29 issues).
-- `JWT_SECRET` must be added to Railway env vars for the server service.
-- `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION` also needed in Railway for server.
-- `fetch-codeql-alerts.yml` cannot push to `dev` (protected branch).
-- 18 CodeQL alerts open (fetched 2026-03-25).
-- `claude/fix-pwa-android-install-efOUW` branch pending merge → `dev`.
+- `JWT_SECRET`, `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION` must be set in Railway for the server service (owner action — not yet confirmed done)
+- 18 CodeQL alerts open (fetched 2026-03-25)
+- `fetch-codeql-alerts.yml` cannot push to `dev` (protected branch)
+- `claude/fix-pwa-android-install-efOUW` branch pending merge → `dev`
 
 ---
 
 ## Handoff Notes
 
-### Start here next session
-**T-29 — JS cleanup.** Read T-29 ticket before starting.
+### For the next session (after owner tests the deployment)
 
-### Confirmed browser console errors (user-reported, 2026-03-30)
+Owner will report browser console errors and functional issues found during testing. Likely candidates:
 
-```
-ServiceWorker scope 'https://boom.up.railway.app/bbn/' → 404
-  - service-worker.js still uses /bbn/ base path — stale from Jekyll era
-  - Fix: update service worker registration to scope '/' and path '/service-worker.js'
+1. **Auth flow** — login, register, guest auth — most critical; watch for any remaining `window.*` lookup failures
+2. **Settings page** — account info, blocked users, preferences, danger zone
+3. **Profile pages** — `/profile/` (own) and `/profile/view/` (public) now wired; first real test
+4. **Map / geo** — location WS, nearby users
+5. **Messages** — WS connect, E2EE send/receive
+6. **Service worker** — scope `/` path `/service-worker.js` — check if existing cached SW with `/bbn/` scope causes issues on first load after deploy; may need `navigator.serviceWorker.getRegistrations()` cleanup
 
-geo.js:212 [Geo] __authReady is not a promise
-  - Auth module not exporting __authReady as a promise; geo.js expects it
+### T-30 (Railway deployment config) is still open
+Requires owner to add/verify env vars in Railway for the server service. See T-30.md.
 
-notifications.js:116 Auth is not initialized or missing onLogin handler
-  - notifications.js accessing Auth without proper import
-
-auth.js:146 [Auth] Guest token failed: Cannot read properties of undefined (reading 'guestAuth')
-  - auth.js calls window.Api.guestAuth() — window.Api is never set in ES6 module context
-
-boomboom.js:181 Uncaught TypeError: Cannot read properties of undefined (reading 'getProfile')
-  - boomboom.js calls window.Api.getProfile() — same root cause
-
-/undefined/health (404)
-  - warmup.js: fetch(window.BOOMBOOM_API_URL + '/health') → window.BOOMBOOM_API_URL is undefined
-  - Fix: fetch('/api/health')
-```
-
-### T-29 Phase 2 fix priorities
-
-1. **`auth.js`**: replace `window.Api.*` with `import { Api } from './api.js'` (or `'../lib/api.js'`)
-2. **`warmup.js`**: `fetch(window.BOOMBOOM_API_URL + '/health')` → `fetch('/api/health')`
-3. **`boomboom.js`**: `window.Api.getProfile()` → `Api.getProfile()` (import Api)
-4. **`geo.js`**: replace `window.BOOMBOOM_API_URL` WS URL with relative `/ws/...`; import `Api`/`Auth`
-5. **`messages.js`**: same pattern — `window.Api/Auth/BBNCrypto` → imports
-6. **`notifications.js`**: `window.Api.*`, `window.Auth.*` → imports; remove `window.BOOMBOOM_BASE`
-7. **Service worker**: registration scope/path must change from `/bbn/` to `/`
-
-### Additional notes
-- T-28 and T-31 stubs committed this wrap-up — those were the only outstanding housekeeping items.
-- T-30 deployment ticket is next high-priority after T-29, but requires Railway work by owner.
-- `settings.js` is a total loss (all function bodies are stubs) — needs full restoration; treat as its own sub-task within T-29.
+### admin.js and i8n.js
+Still dead files in `ui/scripts/`. Not loaded by any template. Leave for now — admin panel is a future ticket.

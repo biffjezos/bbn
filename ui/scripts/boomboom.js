@@ -16,6 +16,7 @@ import { MapModule } from './lib/map.js';
 import * as Messages from './lib/messages.js';
 import { initNotifications } from './lib/notifications.js';
 import { OpaqueClient } from './lib/opaque-client.js';
+import { initMyProfile, initPublicProfile } from './lib/profile.js';
 import { PWAInstall } from './lib/pwa-install.js';
 import { initSettings } from './lib/settings.js';
 import { warmUpBackend } from './lib/warmup.js';
@@ -240,8 +241,10 @@ async function initApp() {
   // Apply UI state AFTER auth is ready
   applyAuthState(Auth.isRegistered());
 
-  // Settings requires auth (token for API calls)
+  // Settings and profile pages require auth (token for API calls)
   initSettings();
+  if (document.getElementById('profileFormWrap')) initMyProfile();
+  if (document.getElementById('pubProfilePage'))  initPublicProfile();
 
   // Wire UI last (DOM must exist)
   wireUI(mapModule);

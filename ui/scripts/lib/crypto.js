@@ -3,8 +3,7 @@
 // Thin proxy to crypto-worker.js.
 // ============================================================
 
-const BASE = window.BOOMBOOM_BASE || '';
-const workerUrl = `${BASE}/scripts/crypto-worker.js`;
+const workerUrl = '/scripts/lib/crypto-worker.js';
 
 let port = null;
 

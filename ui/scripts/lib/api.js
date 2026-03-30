@@ -145,6 +145,11 @@ export const Api = {
 
     getNotifications: () => apiFetch('/notifications'),
     dismissNotification: (id) => apiFetch(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    getMyVenues: () => apiFetch('/manager/venues'),
+    createVenue: (fields) => apiFetch('/manager/venues', { method: 'POST', body: JSON.stringify(fields) }),
+    updateVenue: (id, fields) => apiFetch(`/manager/venues/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(fields) }),
+    deleteVenue: (id) => apiFetch(`/manager/venues/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // Optional: global tier-gate modal handler

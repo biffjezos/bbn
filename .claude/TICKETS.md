@@ -12,7 +12,7 @@ This file lists only open, active, planned, and deferred tickets — one row eac
 | [T-28](tickets/done/T-28.md) | done | high | server — Rust Tera HTML server with API/WS proxy facade | 4/4 |
 | [T-31](tickets/done/T-31.md) | done | low | Fix modal scope — move modal-block/modal-delete out of base template | done |
 | [T-29](tickets/done/T-29.md) | done | high | JS cleanup — fix ES6 module refactor, trim to UI-only | 3/3 |
-| [T-32](tickets/T-32.md) | planned | medium | Profile pages — wire profile.js into boomboom.js | 0/2 |
+| [T-32](tickets/done/T-32.md) | done | medium | Profile pages — wire profile.js into boomboom.js | 2/2 |
 | [T-30](tickets/T-30.md) | planned | high | server deployment — Railway, CORS removal, CI/CD migration | 0/3 |
 | [T-27](tickets/T-27.md) | planned | high | App Architecture Specs | - |
 | [T-26](tickets/T-26.md) | planned | high | auth layering violation | - |
