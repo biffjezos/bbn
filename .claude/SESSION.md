@@ -8,53 +8,37 @@
 
 **Branch:** `claude/new-session-wfizk`
 **Session date:** 2026-03-30
-**Last updated:** 2026-03-30T00:00Z
+**Last updated:** 2026-03-30T01:00Z
 
 ---
 
 ## In Progress
 
-T-29 — JS cleanup (next session)
-
-## Recent Hotfix
-
-- **Dockerfile server stub** — all 8 non-server Dockerfiles were missing the `server` stub after T-28 added server to the workspace. Fixed in all: authority, blocks, favourites, gateway, location, messages, migration, users.
+T-29 — JS cleanup (not started this session; confirmed as next task)
 
 ---
 
 ## Completed This Session
 
-- **T-28 Phase 4 — Minimal SSR data injection** ✅ (T-28 complete)
-  - `guards.rs`: `AuthContext.raw_token` added — carries raw JWT string for gateway forwarding
-  - `main.rs`: `MeData` struct (nickname, age, sex, bio, tier, account_type), `fetch_me` (3 s timeout, graceful None on error), `page_profile` and `page_settings` call `fetch_me` and insert `ssr_me` into Tera context
-  - `templates/pages/profile.html`: renders nickname/age/sex/bio on first paint from `ssr_me`
-  - `templates/pages/settings.html`: renders tier/account_type in `accountInfoWrap` from `ssr_me`
-  - `cargo build -p server` — zero errors, zero warnings
+- **T-28 done stub** created: `.claude/tickets/done/T-28.md`
+- **T-31 done stub** created: `.claude/tickets/done/T-31.md`
+- **TICKETS.md** updated: T-28 and T-31 rows now point to `tickets/done/`
 
-- **T-31 — Modal scope fix** ✅
-  - modal-block → index, messages-thread, profile-view via `{% include %}`
-  - modal-delete → settings via `{% include %}`
-  - Removed both from base.html
-
-- **T-28 Phase 3 — Server-side route guards** ✅
-  - guards.rs, JWT_SECRET, bbn_tok cookie in auth.js, client guard script removed
-
-- **T-28 Phase 2 — Tera template migration** ✅
-  - All templates ported, api.js API_BASE fixed
+*All actual code work from this session was already committed in the prior context cycle.*
 
 ---
 
 ## Key Decisions Made
 
 - **`fetch_me` URL**: calls `{gateway_url}/api/users/me` (proxy preserves `/api/` prefix)
-- **SSR data strategy**: inject as Tera variables and render HTML on first paint; JS overwrites with interactive form on load (no `window.__bbnSSR` indirection needed at this stage)
-- **Graceful degradation**: `fetch_me` returns `None` on any error → template falls back to "Loading…" / empty placeholders; page never 500s
+- **SSR data strategy**: inject as Tera variables and render HTML on first paint; JS overwrites with interactive form on load
+- **Graceful degradation**: `fetch_me` returns `None` on any error → template falls back to "Loading…" / empty placeholders
 
 ---
 
 ## Blockers / Parked Items
 
-- Site is offline (owner aware). JS module fixes are T-29.
+- Site is live but has JS console errors (all expected T-29 issues).
 - `JWT_SECRET` must be added to Railway env vars for the server service.
 - `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION` also needed in Railway for server.
 - `fetch-codeql-alerts.yml` cannot push to `dev` (protected branch).
@@ -68,15 +52,41 @@ T-29 — JS cleanup (next session)
 ### Start here next session
 **T-29 — JS cleanup.** Read T-29 ticket before starting.
 
-T-28 is fully done. T-30 (deployment) is next in sequence but requires owner action (Railway provisioning). T-29 JS cleanup can proceed in parallel.
+### Confirmed browser console errors (user-reported, 2026-03-30)
 
-T-29 scope:
-1. Fix `window.Api.*` references in auth.js — `window.Api` is never set in ES6 module context; should import from `api.js`
-2. Fix `window.BOOMBOOM_API_URL` references in geo.js, messages.js, notifications.js, warmup.js — already eliminated in api.js; these files may use the global directly
-3. Fix `settings.js` — function bodies are stubs; this is a total loss, deferred
-4. Review all scripts for `window.BOOMBOOM_BASE` references (eliminated — base is now `/`)
-5. Ensure `boomboom.js` correctly imports Auth and Api modules
+```
+ServiceWorker scope 'https://boom.up.railway.app/bbn/' → 404
+  - service-worker.js still uses /bbn/ base path — stale from Jekyll era
+  - Fix: update service worker registration to scope '/' and path '/service-worker.js'
 
-### Other notes
-- T-28 done ticket stub should be created before next session's commit.
-- T-30 deployment ticket is the next high-priority item after T-29, but requires Railway work by the owner.
+geo.js:212 [Geo] __authReady is not a promise
+  - Auth module not exporting __authReady as a promise; geo.js expects it
+
+notifications.js:116 Auth is not initialized or missing onLogin handler
+  - notifications.js accessing Auth without proper import
+
+auth.js:146 [Auth] Guest token failed: Cannot read properties of undefined (reading 'guestAuth')
+  - auth.js calls window.Api.guestAuth() — window.Api is never set in ES6 module context
+
+boomboom.js:181 Uncaught TypeError: Cannot read properties of undefined (reading 'getProfile')
+  - boomboom.js calls window.Api.getProfile() — same root cause
+
+/undefined/health (404)
+  - warmup.js: fetch(window.BOOMBOOM_API_URL + '/health') → window.BOOMBOOM_API_URL is undefined
+  - Fix: fetch('/api/health')
+```
+
+### T-29 Phase 2 fix priorities
+
+1. **`auth.js`**: replace `window.Api.*` with `import { Api } from './api.js'` (or `'../lib/api.js'`)
+2. **`warmup.js`**: `fetch(window.BOOMBOOM_API_URL + '/health')` → `fetch('/api/health')`
+3. **`boomboom.js`**: `window.Api.getProfile()` → `Api.getProfile()` (import Api)
+4. **`geo.js`**: replace `window.BOOMBOOM_API_URL` WS URL with relative `/ws/...`; import `Api`/`Auth`
+5. **`messages.js`**: same pattern — `window.Api/Auth/BBNCrypto` → imports
+6. **`notifications.js`**: `window.Api.*`, `window.Auth.*` → imports; remove `window.BOOMBOOM_BASE`
+7. **Service worker**: registration scope/path must change from `/bbn/` to `/`
+
+### Additional notes
+- T-28 and T-31 stubs committed this wrap-up — those were the only outstanding housekeeping items.
+- T-30 deployment ticket is next high-priority after T-29, but requires Railway work by owner.
+- `settings.js` is a total loss (all function bodies are stubs) — needs full restoration; treat as its own sub-task within T-29.
