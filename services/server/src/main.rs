@@ -7,6 +7,7 @@
 // Required env vars:
 //   GATEWAY_URL            — full URL of the gateway service
 //   GATEWAY_ALLOWED_HOST   — hostname validation for GATEWAY_URL
+//   JWT_SECRET             — HS256 key (same key used by gateway)
 //
 // Optional env vars:
 //   PORT          — listen port (default 8080)
@@ -15,41 +16,39 @@
 //   ASSET_VERSION — cache-bust string injected into template asset hrefs
 // ============================================================
 
+mod guards;
 mod proxy;
 
 use std::{env, sync::Arc};
 
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{any, get},
     Router,
 };
+use guards::AuthContext;
 use tera::{Context, Tera};
 use tower_http::services::{ServeDir, ServeFile};
 
 pub struct AppState {
-    pub gateway_url: String,
-    pub http_client: reqwest::Client,
-    pub tera: Tera,
+    pub gateway_url:   String,
+    pub http_client:   reqwest::Client,
+    pub tera:          Tera,
     pub asset_version: String,
+    pub jwt_secret:    String,
 }
 
-// ── Template helpers ─────────────────────────────────────────
+// ── Template rendering ────────────────────────────────────────
 
-fn base_context(state: &AppState) -> Context {
-    let mut ctx = Context::new();
-    ctx.insert("asset_version", &state.asset_version);
-    ctx.insert("is_logged_in", &false);
-    ctx.insert("nickname", &Option::<String>::None);
-    ctx.insert("tier", &Option::<String>::None);
-    ctx.insert("role", &Option::<String>::None);
-    ctx
-}
-
-fn render(state: &AppState, template: &str, mut ctx: Context) -> Response {
-    ctx.extend(base_context(state));
+fn render(state: &AppState, template: &str, mut ctx: Context, auth: AuthContext) -> Response {
+    ctx.insert("asset_version",  &state.asset_version);
+    ctx.insert("is_logged_in",   &auth.is_logged_in);
+    ctx.insert("nickname",       &auth.nickname);
+    ctx.insert("tier",           &auth.tier);
+    ctx.insert("role",           &auth.role);
+    ctx.insert("sex",            &auth.sex);
     match state.tera.render(template, &ctx) {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
@@ -59,64 +58,130 @@ fn render(state: &AppState, template: &str, mut ctx: Context) -> Response {
     }
 }
 
-// ── Page handlers ─────────────────────────────────────────────
+// ── Handlers ──────────────────────────────────────────────────
 
 async fn health() -> impl IntoResponse {
     "OK"
 }
 
-async fn page_index(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+// Public pages — guard optional (serves everyone, injects auth context if present)
+
+async fn page_index(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let auth = guards::check_auth(&headers, &state.jwt_secret);
     let mut ctx = Context::new();
     ctx.insert("page_title", "");
-    render(&state, "pages/index.html", ctx)
+    render(&state, "pages/index.html", ctx, auth)
 }
 
-async fn page_messages(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut ctx = Context::new();
-    ctx.insert("page_title", "Conversations");
-    render(&state, "pages/messages.html", ctx)
-}
-
-async fn page_messages_thread(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut ctx = Context::new();
-    ctx.insert("page_title", "Message Thread");
-    render(&state, "pages/messages-thread.html", ctx)
-}
-
-async fn page_profile(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut ctx = Context::new();
-    ctx.insert("page_title", "My Profile");
-    render(&state, "pages/profile.html", ctx)
-}
-
-async fn page_profile_view(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut ctx = Context::new();
-    ctx.insert("page_title", "Profile");
-    render(&state, "pages/profile-view.html", ctx)
-}
-
-async fn page_favourites(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut ctx = Context::new();
-    ctx.insert("page_title", "Favourites");
-    render(&state, "pages/favourites.html", ctx)
-}
-
-async fn page_settings(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut ctx = Context::new();
-    ctx.insert("page_title", "Settings");
-    render(&state, "pages/settings.html", ctx)
-}
-
-async fn page_admin(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let mut ctx = Context::new();
-    ctx.insert("page_title", "Admin");
-    render(&state, "pages/admin.html", ctx)
-}
-
-async fn page_donate(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn page_donate(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let auth = guards::check_auth(&headers, &state.jwt_secret);
     let mut ctx = Context::new();
     ctx.insert("page_title", "Support bOOmbOOm.NOW!");
-    render(&state, "pages/donate.html", ctx)
+    render(&state, "pages/donate.html", ctx, auth)
+}
+
+async fn page_profile_view(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    let auth = guards::check_auth(&headers, &state.jwt_secret);
+    let mut ctx = Context::new();
+    ctx.insert("page_title", "Profile");
+    render(&state, "pages/profile-view.html", ctx, auth)
+}
+
+// Protected pages — require valid user JWT
+
+async fn page_messages(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    match guards::require_user(&headers, &state.jwt_secret) {
+        Ok(auth) => {
+            let mut ctx = Context::new();
+            ctx.insert("page_title", "Conversations");
+            render(&state, "pages/messages.html", ctx, auth)
+        }
+        Err(redirect) => redirect,
+    }
+}
+
+async fn page_messages_thread(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    match guards::require_user(&headers, &state.jwt_secret) {
+        Ok(auth) => {
+            let mut ctx = Context::new();
+            ctx.insert("page_title", "Message Thread");
+            render(&state, "pages/messages-thread.html", ctx, auth)
+        }
+        Err(redirect) => redirect,
+    }
+}
+
+async fn page_profile(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    match guards::require_user(&headers, &state.jwt_secret) {
+        Ok(auth) => {
+            let mut ctx = Context::new();
+            ctx.insert("page_title", "My Profile");
+            render(&state, "pages/profile.html", ctx, auth)
+        }
+        Err(redirect) => redirect,
+    }
+}
+
+async fn page_favourites(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    match guards::require_user(&headers, &state.jwt_secret) {
+        Ok(auth) => {
+            let mut ctx = Context::new();
+            ctx.insert("page_title", "Favourites");
+            render(&state, "pages/favourites.html", ctx, auth)
+        }
+        Err(redirect) => redirect,
+    }
+}
+
+async fn page_settings(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    match guards::require_user(&headers, &state.jwt_secret) {
+        Ok(auth) => {
+            let mut ctx = Context::new();
+            ctx.insert("page_title", "Settings");
+            render(&state, "pages/settings.html", ctx, auth)
+        }
+        Err(redirect) => redirect,
+    }
+}
+
+// Admin-only page
+
+async fn page_admin(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    match guards::require_admin(&headers, &state.jwt_secret) {
+        Ok(auth) => {
+            let mut ctx = Context::new();
+            ctx.insert("page_title", "Admin");
+            render(&state, "pages/admin.html", ctx, auth)
+        }
+        Err(redirect) => redirect,
+    }
 }
 
 // ── Main ──────────────────────────────────────────────────────
@@ -129,11 +194,12 @@ async fn main() {
     let gateway_url = env::var("GATEWAY_URL").expect("GATEWAY_URL is required");
     let gateway_host =
         env::var("GATEWAY_ALLOWED_HOST").expect("GATEWAY_ALLOWED_HOST is required");
+    let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET is required");
     let port: u16 = env::var("PORT")
         .unwrap_or_else(|_| "8080".into())
         .parse()
         .expect("PORT must be a number");
-    let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "./static".into());
+    let static_dir    = env::var("STATIC_DIR").unwrap_or_else(|_| "./static".into());
     let templates_dir = env::var("TEMPLATES_DIR").unwrap_or_else(|_| "./templates".into());
     let asset_version = env::var("ASSET_VERSION").unwrap_or_else(|_| "0".into());
 
@@ -148,6 +214,7 @@ async fn main() {
         http_client: reqwest::Client::new(),
         tera,
         asset_version,
+        jwt_secret,
     });
 
     // ── Routes ───────────────────────────────────────────
@@ -158,16 +225,18 @@ async fn main() {
         .route("/api/{*rest}", any(proxy::proxy_api))
         // WebSocket proxy
         .route("/ws/{*rest}", get(proxy::proxy_ws))
-        // Page routes
+        // Public page routes
         .route("/", get(page_index))
+        .route("/donate/", get(page_donate))
+        .route("/profile/view/", get(page_profile_view))
+        // Protected page routes (user)
         .route("/messages/", get(page_messages))
         .route("/messages/thread/", get(page_messages_thread))
         .route("/profile/", get(page_profile))
-        .route("/profile/view/", get(page_profile_view))
         .route("/favourites/", get(page_favourites))
         .route("/settings/", get(page_settings))
+        // Admin-only page route
         .route("/admin/", get(page_admin))
-        .route("/donate/", get(page_donate))
         // Static assets
         .nest_service("/assets", ServeDir::new(format!("{static_dir}/assets")))
         .nest_service("/scripts", ServeDir::new(format!("{static_dir}/scripts")))

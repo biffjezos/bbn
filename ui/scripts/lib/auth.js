@@ -51,10 +51,19 @@ export const Auth = (() => {
         if (_nickname) sessionStorage.setItem(STORAGE_NICK_KEY, _nickname);
     }
 
+    function setBbnCookie(token) {
+        document.cookie = `bbn_tok=${token}; SameSite=Strict; Secure; Path=/`;
+    }
+
+    function clearBbnCookie() {
+        document.cookie = 'bbn_tok=; Max-Age=0; Path=/';
+    }
+
     function clearUserStorage() {
         sessionStorage.removeItem(STORAGE_TOKEN_KEY);
         sessionStorage.removeItem(STORAGE_NICK_KEY);
         localStorage.removeItem('bbm_meet');
+        clearBbnCookie();
     }
 
     function startCountdown(expiryMs) {
@@ -91,6 +100,7 @@ export const Auth = (() => {
                 _nickname = sessionStorage.getItem(STORAGE_NICK_KEY);
                 _sex = parseJwt(stored)?.sex || null;
                 _isUser = true;
+                setBbnCookie(stored);
                 Auth.onLogin?.({ nickname: _nickname, sex: _sex });
                 await Auth.onNeedsUnlock?.();
                 return;
@@ -146,6 +156,7 @@ export const Auth = (() => {
             _sex = data.sex;
             _isUser = true;
             saveToStorage();
+            setBbnCookie(_token);
             stopCountdown();
             localStorage.removeItem(STORAGE_GUEST_EXP);
             Auth.onLogin?.({ nickname: _nickname, sex: _sex });
@@ -168,6 +179,7 @@ export const Auth = (() => {
             _sex = data.sex;
             _isUser = true;
             saveToStorage();
+            setBbnCookie(_token);
             stopCountdown();
             localStorage.removeItem(STORAGE_GUEST_EXP);
 
@@ -185,7 +197,7 @@ export const Auth = (() => {
             if (fields.nickname !== undefined) { _nickname = fields.nickname; sessionStorage.setItem(STORAGE_NICK_KEY, _nickname); }
         },
 
-        refreshToken(token) { if (token) { _token = token; sessionStorage.setItem(STORAGE_TOKEN_KEY, token); } },
+        refreshToken(token) { if (token) { _token = token; sessionStorage.setItem(STORAGE_TOKEN_KEY, token); setBbnCookie(token); } },
 
         logout() {
             Auth.onLogout?.();

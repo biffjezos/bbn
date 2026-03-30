@@ -20,7 +20,7 @@ expected_behaviour:
   - If JWT is missing or invalid on a public route, inject is_logged_in=false with null values
   - Never expose the raw JWT value in any template or HTML output
   - Never re-validate the JWT against the gateway — local HS256 verification is sufficient
-status: planned
+status: implemented
 tests:
   1: "GET /messages/ without cookie → 302 redirect to /"
   2: "GET /messages/ with valid user JWT cookie → page rendered with is_logged_in=true"
@@ -30,4 +30,11 @@ tests:
   6: "GET / with valid JWT cookie → page rendered with is_logged_in=true, navbar shows logged-in state"
   7: "GET /messages/ with expired JWT cookie → 302 redirect to /"
   8: "JWT claims (sub, role, tier, nickname) correctly injected into template context"
-qa_report:
+qa_report: |
+  2026-03-30 — T-28 Phase 3 complete. guards.rs: extract_cookie,
+  decode_bbn_tok, check_auth, require_user, require_admin.
+  main.rs: JWT_SECRET env var, AppState.jwt_secret, render() accepts
+  AuthContext, all handlers updated. auth.js: setBbnCookie/clearBbnCookie
+  called on init (restore), login, register, refreshToken, logout,
+  deleteAccount. base.html: inline client-side guard script removed.
+  cargo build -p server: zero errors, zero warnings.
