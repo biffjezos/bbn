@@ -16,6 +16,10 @@
 
 T-29 — JS cleanup (next session)
 
+## Recent Hotfix
+
+- **Dockerfile server stub** — all 8 non-server Dockerfiles were missing the `server` stub after T-28 added server to the workspace. Fixed in all: authority, blocks, favourites, gateway, location, messages, migration, users.
+
 ---
 
 ## Completed This Session

@@ -18,6 +18,9 @@ COPY services/migration-service/Cargo.toml ./migration-service/Cargo.toml
 RUN mkdir -p ./migration-service/src && echo 'fn main(){}' > ./migration-service/src/main.rs
 COPY services/authority-service/Cargo.toml ./authority-service/Cargo.toml
 RUN mkdir -p ./authority-service/src && echo 'fn main(){}' > ./authority-service/src/main.rs
+# Stub server
+COPY services/server/Cargo.toml ./server/Cargo.toml
+RUN mkdir -p ./server/src && echo 'fn main(){}' > ./server/src/main.rs
 # Build target
 COPY services/gateway ./gateway
 RUN cargo build --release -p gateway
