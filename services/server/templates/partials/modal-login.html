@@ -10,6 +10,7 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
 
+      <form id="loginForm" autocomplete="on">
       <div class="modal-body pt-2">
         <div id="loginError" class="alert alert-danger d-none mb-3" role="alert"></div>
 
@@ -19,8 +20,10 @@
             type="email"
             class="form-control"
             id="loginEmail"
+            name="email"
             autocomplete="email"
             placeholder="you@example.com"
+            required
           />
         </div>
 
@@ -30,12 +33,14 @@
             type="password"
             class="form-control"
             id="loginPassword"
+            name="password"
             autocomplete="current-password"
             placeholder="••••••••"
+            required
           />
         </div>
 
-        <button type="button" class="btn btn-bbn-primary w-100" id="loginSubmitBtn">
+        <button type="submit" class="btn btn-bbn-primary w-100" id="loginSubmitBtn">
           Log In
         </button>
       </div>
@@ -53,6 +58,7 @@
           >Create one</a>
         </p>
       </div>
+      </form>
 
     </div>
   </div>

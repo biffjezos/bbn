@@ -6,43 +6,41 @@
 
 ---
 
-**Branch:** `claude/new-session-wfizk`
+**Branch:** `claude/fix-path-bugs-HhisD`
 **Session date:** 2026-03-30
-**Last updated:** 2026-03-30T14:00Z
+**Last updated:** 2026-03-30T15:30Z
 
 ---
 
 ## In Progress
 
-Nothing outstanding. Branch is ready to merge → dev and deploy.
+Fixing browser console bugs reported by owner after first live deployment test.
 
 ---
 
 ## Completed This Session
 
-- **T-28 done stub + T-31 done stub** created; TICKETS.md updated
-- **T-29 Phase 2** — fixed all ES6 module globals, API base path (`/api`), service worker path
-- **T-29 Phase 3 + T-29 done** — restored settings.js; removed BOOMBOOM_BASE refs; crypto.js worker URL fixed; T-32 created and immediately completed
-- **T-32 done** — profile.js converted to ES6 module at `lib/profile.js`; wired into boomboom.js; venue API methods added to api.js
-- **Specs created:** `ui/geo.yaml`, `ui/messages.yaml`, `ui/notifications.yaml`
-- **CLAUDE.md updated:** relaxed UI spec rule (thin handlers don't need specs)
+- **manifest.json** — replaced all `/bbn/` paths with `/` (start_url, scope, icon srcs)
+- **service-worker.js ASSETS** — fixed wrong paths: `app.js` → `boomboom.js`; `/scripts/X.js` → `/scripts/lib/X.js` for crypto-worker, crypto, geo, lock, map, opaque-client
+- **Tera base.html** — replaced deprecated `apple-mobile-web-app-capable` with `mobile-web-app-capable`
+- **Tera modal-login.html** — wrapped fields in `<form id="loginForm">`, button changed to `type="submit"`, added `required` attrs and `name` attrs
+- **Tera modal-register.html** — wrapped fields in `<form id="registerForm">`, button changed to `type="submit"`, added `required`/`name`/`autocomplete` attrs
+- **boomboom.js wireUI()** — wired `loginForm` and `registerForm` submit events → call `Auth.login()` / `Auth.register()`, show errors in error divs, clear password field after attempt, close modal on success
 
 ---
 
 ## Key Decisions Made
 
-- `API_BASE = '/api'` in api.js — server proxies `/api/*` to gateway which has `/api/` prefix on all routes
-- `window.Auth/Api/OpaqueClient` set in boomboom.js `initApp()` for backward-compat with modules that still do window.* lookups
-- `window.BBNCrypto` retained in profile.js for crypto re-encryption (crypto.js sets it itself)
-- crypto-worker.js URL: `/scripts/lib/crypto-worker.js` (was `/scripts/crypto-worker.js` — wrong path)
-- `initSettings()`, `initMyProfile()`, `initPublicProfile()` all called after `await window.__authReady`
-- profile.js moved to `lib/profile.js`; old `ui/scripts/profile.js` stubbed out
+- Tera templates are the ones actually served (not Jekyll ui/_includes/ — those are only used if/when Jekyll builds). Always fix both if keeping them in sync.
+- Login/register submit was **completely unwired** before this session — clicking the button did nothing.
+- `GATEWAY_URL` env var in Railway is the root cause of `POST /api/auth/guest 502` — this is an owner action item, not a code fix.
 
 ---
 
 ## Blockers / Parked Items
 
-- `JWT_SECRET`, `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION` must be set in Railway for the server service (owner action — not yet confirmed done)
+- **502 on `/api/auth/guest`** — owner must verify `GATEWAY_URL` is set correctly in Railway for the server service, and that the gateway service is running. The server proxies `/api/*` to `GATEWAY_URL` and returns 502 if it can't reach it. This is the single biggest blocker — everything auth-related fails until this is resolved.
+- `JWT_SECRET`, `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION` must be set in Railway for the server service
 - 18 CodeQL alerts open (fetched 2026-03-25)
 - `fetch-codeql-alerts.yml` cannot push to `dev` (protected branch)
 - `claude/fix-pwa-android-install-efOUW` branch pending merge → `dev`
@@ -51,19 +49,20 @@ Nothing outstanding. Branch is ready to merge → dev and deploy.
 
 ## Handoff Notes
 
-### For the next session (after owner tests the deployment)
+### 502 root cause — owner must check Railway
 
-Owner will report browser console errors and functional issues found during testing. Likely candidates:
+The Rust server (`services/server`) proxies all `/api/*` requests to `GATEWAY_URL`. If that env var is wrong or the gateway service isn't running, every API call returns 502.
 
-1. **Auth flow** — login, register, guest auth — most critical; watch for any remaining `window.*` lookup failures
-2. **Settings page** — account info, blocked users, preferences, danger zone
-3. **Profile pages** — `/profile/` (own) and `/profile/view/` (public) now wired; first real test
-4. **Map / geo** — location WS, nearby users
-5. **Messages** — WS connect, E2EE send/receive
-6. **Service worker** — scope `/` path `/service-worker.js` — check if existing cached SW with `/bbn/` scope causes issues on first load after deploy; may need `navigator.serviceWorker.getRegistrations()` cleanup
+Steps to diagnose:
+1. In Railway, open the **server** service → Settings → Environment variables → confirm `GATEWAY_URL` is set to the gateway service's internal URL (e.g. `http://gateway.railway.internal:PORT` or the public Railway URL of the gateway)
+2. Open the **gateway** service → confirm it's deployed and healthy
+3. Check gateway logs for startup errors (`AUTHORITY_SERVICE_URL` not set = gateway panics)
 
-### T-30 (Railway deployment config) is still open
-Requires owner to add/verify env vars in Railway for the server service. See T-30.md.
+### Template duality — Tera vs Jekyll
+The Rust server serves Tera templates from `services/server/templates/`. The Jekyll files in `ui/_includes/` and `ui/_layouts/` are NOT used by the deployed server. Keep both in sync when making changes, or we'll keep seeing divergence.
 
-### admin.js and i8n.js
-Still dead files in `ui/scripts/`. Not loaded by any template. Leave for now — admin panel is a future ticket.
+### Login/register now wired
+`wireUI()` in `boomboom.js` now handles `loginForm#submit` and `registerForm#submit`. Errors show in `#loginError` / `#registerError`. Password cleared from DOM after every attempt.
+
+### Service worker cache version
+`CACHE_NAME = 'app-v2'` — if paths changed and old cached SW is in user's browser, they may need a hard refresh or cache clear once. Consider bumping to `app-v3` after the fixed SW is live.

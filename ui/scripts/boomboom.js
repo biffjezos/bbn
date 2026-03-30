@@ -171,6 +171,57 @@ function wireUI(mapModule) {
     };
   }
   
+  // Login form
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email    = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const errorEl  = document.getElementById('loginError');
+      const btn      = document.getElementById('loginSubmitBtn');
+      errorEl.classList.add('d-none');
+      btn.disabled = true;
+      try {
+        await Auth.login({ email, password });
+        bootstrap.Modal.getInstance(document.getElementById('loginModal'))?.hide();
+      } catch (err) {
+        errorEl.textContent = err.message || 'Login failed';
+        errorEl.classList.remove('d-none');
+      } finally {
+        document.getElementById('loginPassword').value = '';
+        btn.disabled = false;
+      }
+    });
+  }
+
+  // Register form
+  const registerForm = document.getElementById('registerForm');
+  if (registerForm) {
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email    = document.getElementById('regEmail').value.trim();
+      const nickname = document.getElementById('regNickname').value.trim();
+      const password = document.getElementById('regPassword').value;
+      const age      = document.getElementById('regAge').value;
+      const sex      = document.getElementById('regSex').value;
+      const errorEl  = document.getElementById('registerError');
+      const btn      = document.getElementById('regSubmitBtn');
+      errorEl.classList.add('d-none');
+      btn.disabled = true;
+      try {
+        await Auth.register({ email, nickname, password, age, sex });
+        bootstrap.Modal.getInstance(document.getElementById('registerModal'))?.hide();
+      } catch (err) {
+        errorEl.textContent = err.message || 'Registration failed';
+        errorEl.classList.remove('d-none');
+      } finally {
+        document.getElementById('regPassword').value = '';
+        btn.disabled = false;
+      }
+    });
+  }
+
   // Handle message links
   const msgLink = $('pinMessageLink');
   if (msgLink) {
