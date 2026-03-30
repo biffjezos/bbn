@@ -1,0 +1,59 @@
+<!-- ============================================================
+     MODAL — Log In
+     ============================================================ -->
+<div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+    <div class="modal-content">
+
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Welcome back</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-2">
+        <div id="loginError" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+        <div class="mb-3">
+          <label class="form-label" for="loginEmail">Email</label>
+          <input
+            type="email"
+            class="form-control"
+            id="loginEmail"
+            autocomplete="email"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label" for="loginPassword">Password</label>
+          <input
+            type="password"
+            class="form-control"
+            id="loginPassword"
+            autocomplete="current-password"
+            placeholder="••••••••"
+          />
+        </div>
+
+        <button type="button" class="btn btn-bbn-primary w-100" id="loginSubmitBtn">
+          Log In
+        </button>
+      </div>
+
+      <div class="modal-footer border-0 pt-0 justify-content-center">
+        <p class="text-muted-bb small mb-0">
+          No account?
+          <a
+            href="#"
+            class="text-pink"
+            style="text-decoration:none"
+            data-bs-dismiss="modal"
+            data-bs-toggle="modal"
+            data-bs-target="#registerModal"
+          >Create one</a>
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>

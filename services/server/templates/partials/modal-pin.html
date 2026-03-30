@@ -1,0 +1,75 @@
+<!-- ============================================================
+     MODAL — Map Pin
+     Minimal: nickname · age · sex · link to full profile
+     ============================================================ -->
+<div class="modal fade" id="pinModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:320px">
+    <div class="modal-content">
+
+      <div class="modal-header border-0 pb-0">
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-0 pb-2 text-center">
+
+        <!-- Avatar -->
+        <div class="pin-avatar" id="pinAvatar">
+          <span id="pinAvatarIcon">👤</span>
+        </div>
+
+        <!-- Name -->
+        <h5 class="heading-serif mb-1" id="pinNickname" style="font-size:1.3rem">—</h5>
+
+        <!-- Meta row -->
+        <p class="text-muted-bb mb-1" style="font-size:0.85rem">
+          <span id="pinAge">—</span>
+          <span class="mx-1 text-faint">·</span>
+          <span id="pinSex">—</span>
+          <span class="mx-1 text-faint">·</span>
+          <span id="pinDist">—</span>
+        </p>
+        <p id="pinAccuracyWrap" class="d-none mb-3" style="font-size:0.78rem">
+          <span class="badge bg-secondary"><i class="bi bi-crosshair me-1"></i>approximate location</span>
+        </p>
+
+        <!-- Actions — registered viewer, registered target -->
+        <div id="pinActions" class="d-flex flex-column gap-2 d-none">
+          <a href="#" id="pinMessageLink" class="btn btn-bbn-pink w-100">
+            <i class="bi bi-chat-dots me-2"></i>Send Message
+          </a>
+          <button type="button" id="pinFavBtn" class="btn btn-bbn-ghost w-100">
+            <i class="bi bi-star me-2" id="pinFavIcon"></i><span id="pinFavLabel">Add to Favourites</span>
+          </button>
+          <a href="#" id="pinProfileLink" class="btn btn-bbn-outline w-100" style="border-color:var(--bbn-border)">
+            <i class="bi bi-person me-2"></i>View Profile
+          </a>
+          <div class="border-top pt-1" style="border-color:var(--bbn-border) !important">
+            <button type="button" id="pinBlockBtn"
+              class="btn btn-link text-danger w-100 py-1"
+              style="font-size:0.8rem;text-decoration:none">
+              <i class="bi bi-slash-circle me-1"></i>Report / Block
+            </button>
+          </div>
+        </div>
+
+
+      </div>
+
+      <div class="modal-footer border-0 pt-0">
+        <!-- Guest prompt -->
+        <div id="pinGuestPrompt" class="w-100 text-center d-none">
+          <p class="text-muted-bb small mb-2">Register to message people nearby.</p>
+          <button
+            class="btn btn-bbn-primary btn-sm w-100"
+            data-bs-dismiss="modal"
+            data-bs-toggle="modal"
+            data-bs-target="#registerModal"
+          >
+            Create Account
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

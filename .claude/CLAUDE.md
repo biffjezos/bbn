@@ -71,8 +71,11 @@ Behavioral specs live in `.claude/specs/` as YAML files, organized by concern fo
 
 1. **Check for a spec.** Look in the relevant subfolder of `.claude/specs/` for a YAML file covering the component or behavior you are about to change.
 2. **If a spec exists:** read it. Ensure your changes comply with `expected_behaviour` and `pre_conditions`. Flag any contradiction to the owner before proceeding.
-3. **If no spec exists:** create one before setting the task in-progress. At minimum, define `id`, `description`, and `expected_behaviour` — in collaboration with the owner if behavior is unclear. Fill in `sources`, `pre_conditions`, and `tests` yourself.
+3. **If no spec exists:** create one before setting the task in-progress **only if the module has a meaningful contract** — inter-module dependencies, complex async lifecycle, or behavior that is easy to break silently. Thin UI event handlers (single-purpose click handlers, simple DOM wrappers) do not need specs. At minimum, define `id`, `description`, and `expected_behaviour` — in collaboration with the owner if behavior is unclear.
 4. **After the work:** update the spec's `status` and `qa_report` to reflect the current state.
+
+**UI modules that warrant specs:** `api.js`, `auth.js`, `geo.js`, `messages.js`, `notifications.js` — modules with inter-module contracts or async lifecycles.
+**UI modules that do not need specs:** `blocks.js`, `lock.js`, `prefs.js`, `debug.js`, `pwa-install.js` — thin event handlers with no external contract.
 
 Specs are living documents. Update them whenever behavior changes, a refactor alters the contract, or an inconsistency is found — not only when creating new features.
 

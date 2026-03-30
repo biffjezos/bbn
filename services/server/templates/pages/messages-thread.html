@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Thread layout — fills remaining height below navbar -->
+<div class="bbn-thread-wrap" id="threadWrap">
+
+  <!-- Header with back + partner name -->
+  <div class="bbn-thread-header px-3 px-md-4 py-3 gap-3">
+    <a href="/messages/" class="btn btn-bbn-ghost btn-sm px-2 py-1">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <div class="heading-serif fs-5" id="threadDisplayName">—</div>
+      <div class="text-faint small" id="threadSubtitle"></div>
+    </div>
+    <div class="ms-auto">
+      <div class="dropdown">
+        <button class="btn btn-bbn-ghost btn-sm px-2 py-1" type="button"
+          id="threadMenuBtn" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <button class="dropdown-item text-danger" id="threadBlockBtn">
+              <i class="bi bi-slash-circle me-2"></i>Block User
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="bbn-thread-msgs px-3 px-md-4 py-3" id="threadMsgs">
+    <div class="bbn-loading">Loading messages…</div>
+  </div>
+
+  <!-- Compose -->
+  <div class="bbn-thread-compose px-3 px-md-4 py-3">
+    <div class="d-flex gap-2">
+      <textarea
+        id="msgInput"
+        class="form-control bbn-compose-input flex-grow-1"
+        rows="2"
+        maxlength="144"
+        placeholder="Say something… · Ctrl+Enter to send"
+      ></textarea>
+      <button class="btn btn-bbn-pink px-3 bbn-send-btn" id="sendBtn">
+        <i class="bi bi-send-fill"></i>
+      </button>
+    </div>
+    <div class="d-flex justify-content-between mt-1 px-1">
+      <span id="sendError" class="text-danger small d-none"></span>
+      <span id="charCount" class="ms-auto text-faint small">144</span>
+    </div>
+  </div>
+
+</div>
+{% include "partials/modal-block.html" %}
+{% endblock content %}

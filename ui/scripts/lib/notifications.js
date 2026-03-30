@@ -59,7 +59,7 @@ function showBanners(notifications) {
       const alertEl = link.closest('[data-notif-id]');
       const fromUserId = alertEl && alertEl.dataset.fromUserId;
       dismiss(alertEl);
-      const dest = `${window.BOOMBOOM_BASE || ''}/favourites/`;
+      const dest = '/favourites/';
       if (fromUserId && window.Api) {
         window.Api.addFavourite(fromUserId).catch(() => {}).finally(() => {
           window.location.href = dest;
@@ -79,7 +79,7 @@ function pollNotifications() {
       showBanners(data.notifications || []);
     })
     .catch((e) => {
-      if (DEBUG) console.warn('[Notif] poll failed:', e.message);
+      console.warn('[Notif] poll failed:', e.message);
     });
 }
 

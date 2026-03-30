@@ -101,7 +101,7 @@ function fmtRangeDate(iso){
 }
 
 function favItemHtml(f,isFav,unreadIds=new Set(),blockedIds=new Set()){
-  const _base=window.BOOMBOOM_BASE||'';
+  const _base='';
   const profileHref=`${_base}/profile/view/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
   const threadHref=`${_base}/messages/thread/?uid=${encodeURIComponent(f.userId)}&name=${encodeURIComponent(f.nickname)}`;
   const meetUid=getMeetUid(); const isMeet=meetUid===f.userId;

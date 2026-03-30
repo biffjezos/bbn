@@ -50,7 +50,7 @@ A specification:
 
 - must not violate general rules
 - must be defined for a single ui element, function, state or event
-- if missing, must stop the interrupt the current coding task.
+- if missing, must interrupt the current coding task.
 - if missing, must be defined before setting a task `in-progress`
 - must acknowledge the current app architecture, frameworks and build upon it.
 - must be included into a ticket by its unique id.

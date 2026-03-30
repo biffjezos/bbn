@@ -1,0 +1,21 @@
+---
+id: ui/notifications
+description: Notifications module — favourite notification polling, banner display, dismiss
+related_ticket: T-29
+sources:
+  - /ui/scripts/lib/notifications.js
+pre_conditions:
+  1: initNotifications() called AFTER wireAuth() in boomboom.js so Auth.onLogin is a function
+  2: window.Auth and window.Api are set before any poll fires
+  3: Gateway exposes GET /api/notifications and DELETE /api/notifications/:id
+expected_behaviour:
+  - "initNotifications() wraps Auth.onLogin and Auth.onLogout to start/stop polling"
+  - "startNotifPoll(): polls immediately then every 2 minutes while tab is visible"
+  - "Poll skipped if: tab hidden (_paused), or Auth.isRegistered() is false"
+  - "showBanners(): renders favourite notifications in #notifBanner; shows/hides #notifDot"
+  - "Dismiss: removes banner element, calls Api.dismissNotification(id), hides dot if no remaining banners"
+  - "Tab visibility: pauses polling when hidden, polls immediately on return"
+  - "Logout: clears all banners and stops poll timer"
+  - "Sequencing: initNotifications must run after wireAuth so Auth.onLogin is a function — otherwise logs error and skips"
+status: implemented
+qa_report: "2026-03-30: BOOMBOOM_BASE ref removed; DEBUG ReferenceError removed; initNotifications() moved after wireAuth() in boomboom.js to fix sequencing. window.Auth/Api guards retained (set by boomboom.js)."

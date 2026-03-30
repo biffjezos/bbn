@@ -2,6 +2,8 @@
 // bOOmbOOm.NOW! — Auth State (module version)
 // ============================================================
 
+import { Api } from './api.js';
+
 const STORAGE_TOKEN_KEY = 'bbm_token';
 const STORAGE_GUEST_KEY = 'bbm_guest_id';
 const STORAGE_NICK_KEY  = 'bbm_nickname';
@@ -51,10 +53,19 @@ export const Auth = (() => {
         if (_nickname) sessionStorage.setItem(STORAGE_NICK_KEY, _nickname);
     }
 
+    function setBbnCookie(token) {
+        document.cookie = `bbn_tok=${token}; SameSite=Strict; Secure; Path=/`;
+    }
+
+    function clearBbnCookie() {
+        document.cookie = 'bbn_tok=; Max-Age=0; Path=/';
+    }
+
     function clearUserStorage() {
         sessionStorage.removeItem(STORAGE_TOKEN_KEY);
         sessionStorage.removeItem(STORAGE_NICK_KEY);
         localStorage.removeItem('bbm_meet');
+        clearBbnCookie();
     }
 
     function startCountdown(expiryMs) {
@@ -91,6 +102,7 @@ export const Auth = (() => {
                 _nickname = sessionStorage.getItem(STORAGE_NICK_KEY);
                 _sex = parseJwt(stored)?.sex || null;
                 _isUser = true;
+                setBbnCookie(stored);
                 Auth.onLogin?.({ nickname: _nickname, sex: _sex });
                 await Auth.onNeedsUnlock?.();
                 return;
@@ -116,7 +128,7 @@ export const Auth = (() => {
             }
 
             try {
-                const data = await window.Api.guestAuth(_guestId);
+                const data = await Api.guestAuth(_guestId);
                 _token = data.token;
                 _isUser = false;
 
@@ -140,12 +152,13 @@ export const Auth = (() => {
         },
 
         async login({ email, password }) {
-            const data = await window.Api.login({ email, password, guestId: _guestId });
+            const data = await Api.login({ email, password, guestId: _guestId });
             _token = data.token;
             _nickname = data.nickname;
             _sex = data.sex;
             _isUser = true;
             saveToStorage();
+            setBbnCookie(_token);
             stopCountdown();
             localStorage.removeItem(STORAGE_GUEST_EXP);
             Auth.onLogin?.({ nickname: _nickname, sex: _sex });
@@ -154,25 +167,26 @@ export const Auth = (() => {
 
         async register(fields) {
             let publicKeyB64 = null, encBlob = null;
-            if (window.BBMCrypto) {
+            if (window.BBNCrypto) {
                 try {
-                    ({ publicKeyB64, encBlob } = await window.BBMCrypto.setup(fields.password));
+                    ({ publicKeyB64, encBlob } = await window.BBNCrypto.setup(fields.password));
                 } catch (e) {
                     console.warn('[Auth] Crypto setup failed:', e.message);
                 }
             }
 
-            const data = await window.Api.register({ ...fields, guestId: _guestId });
+            const data = await Api.register({ ...fields, guestId: _guestId });
             _token = data.token;
             _nickname = data.nickname;
             _sex = data.sex;
             _isUser = true;
             saveToStorage();
+            setBbnCookie(_token);
             stopCountdown();
             localStorage.removeItem(STORAGE_GUEST_EXP);
 
             if (publicKeyB64 && encBlob) {
-                try { await window.Api.saveKeys(publicKeyB64, encBlob); } 
+                try { await Api.saveKeys(publicKeyB64, encBlob); }
                 catch (e) { console.warn('[Auth] Failed to save crypto keys:', e.message); }
             }
 
@@ -185,11 +199,11 @@ export const Auth = (() => {
             if (fields.nickname !== undefined) { _nickname = fields.nickname; sessionStorage.setItem(STORAGE_NICK_KEY, _nickname); }
         },
 
-        refreshToken(token) { if (token) { _token = token; sessionStorage.setItem(STORAGE_TOKEN_KEY, token); } },
+        refreshToken(token) { if (token) { _token = token; sessionStorage.setItem(STORAGE_TOKEN_KEY, token); setBbnCookie(token); } },
 
         logout() {
             Auth.onLogout?.();
-            window.BBMCrypto?.lock();
+            window.BBNCrypto?.lock();
             clearUserStorage();
             _token = _nickname = _sex = null;
             _isUser = false;
@@ -197,9 +211,9 @@ export const Auth = (() => {
         },
 
         async deleteAccount() {
-            await window.Api.deleteMe();
+            await Api.deleteMe();
             Auth.onLogout?.();
-            window.BBMCrypto?.lock();
+            window.BBNCrypto?.lock();
             clearUserStorage();
             _token = _nickname = _sex = null;
             _isUser = false;

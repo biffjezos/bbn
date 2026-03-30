@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bbn-page">
+  <div class="container" style="max-width:640px;padding:3rem 1.5rem">
+
+    <div class="text-center mb-5">
+      <div style="font-size:3rem;margin-bottom:1rem">💜</div>
+      <h1 class="heading-serif" style="font-size:2rem;margin-bottom:0.5rem">Support bOOmbOOm.NOW!</h1>
+      <p class="text-muted-bb">Keep spontaneous, private connections alive.</p>
+    </div>
+
+    <div class="bbn-card mb-4" style="border:1px solid var(--bbn-border);border-radius:16px;padding:2rem">
+      <h2 class="heading-serif mb-3" style="font-size:1.3rem">Why we need your support</h2>
+      <p style="color:var(--bbn-text-muted);line-height:1.75">
+        bOOmbOOm.NOW! is an independent, privacy-first project. There are no investors,
+        no advertising, no data brokers. Just a small app built for people who want to
+        connect with whoever happens to be around them — right now, in this moment.
+      </p>
+      <p style="color:var(--bbn-text-muted);line-height:1.75">
+        Running the app costs real money: server infrastructure, databases, bandwidth.
+        Every donation — however small — goes directly to keeping the servers running
+        and the project independent.
+      </p>
+      <p style="color:var(--bbn-text-muted);line-height:1.75">
+        No subscription. No premium tier required to use the app. If you like what
+        we're building and want to help it survive, a one-time contribution means the world.
+      </p>
+    </div>
+
+    <div class="bbn-card mb-4" style="border:1px solid var(--bbn-border);border-radius:16px;padding:2rem">
+      <h2 class="heading-serif mb-3" style="font-size:1.3rem">What your donation covers</h2>
+      <ul style="color:var(--bbn-text-muted);line-height:2;padding-left:1.25rem">
+        <li>Railway backend hosting — microservices running 24/7</li>
+        <li>MongoDB database — location, messages, user data</li>
+        <li>GitLab Pages — static frontend hosting</li>
+        <li>Development time — maintaining and improving the app</li>
+        <li>End-to-end encryption — keeping your messages private, always</li>
+      </ul>
+    </div>
+
+    <div class="text-center">
+      <a
+        href="https://revolut.me/biff_jezos"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-bbn-primary"
+        style="padding:0.85rem 2.5rem;font-size:1.05rem;border-radius:50px"
+      >
+        <i class="bi bi-heart-fill me-2"></i>Donate via Revolut
+      </a>
+      <p class="text-muted-bb mt-3" style="font-size:0.8rem">
+        One-time donation · No account required · Secure payment via Revolut
+      </p>
+    </div>
+
+    <div class="text-center mt-5" style="font-size:0.8rem;color:var(--bbn-text-faint)">
+      <a href="/" style="color:var(--bbn-text-faint);text-decoration:none">
+        ← Back to the map
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock content %}

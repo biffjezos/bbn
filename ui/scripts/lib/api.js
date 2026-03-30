@@ -3,7 +3,7 @@
 // ============================================================
 
 const DEBUG = true;
-const API_BASE = window.BOOMBOOM_API_URL;
+const API_BASE = '/api';
 
 async function apiFetch(path, options = {}, _retries = 1) {
     const token = window.Auth?.getToken?.();
@@ -143,7 +143,13 @@ export const Api = {
     unblockUser: (userId) => apiFetch(`/blocks/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
     getBlocks: () => apiFetch('/blocks'),
 
-    // Manager, Admin, Notifications… add similarly if needed
+    getNotifications: () => apiFetch('/notifications'),
+    dismissNotification: (id) => apiFetch(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    getMyVenues: () => apiFetch('/manager/venues'),
+    createVenue: (fields) => apiFetch('/manager/venues', { method: 'POST', body: JSON.stringify(fields) }),
+    updateVenue: (id, fields) => apiFetch(`/manager/venues/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(fields) }),
+    deleteVenue: (id) => apiFetch(`/manager/venues/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // Optional: global tier-gate modal handler

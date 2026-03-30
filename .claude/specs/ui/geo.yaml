@@ -1,0 +1,23 @@
+---
+id: ui/geo
+description: Geo module — geolocation, location push, WS location stream
+related_ticket: T-29
+sources:
+  - /ui/scripts/lib/geo.js
+pre_conditions:
+  1: window.__authReady is a Promise (set in boomboom.js before initGeo is called)
+  2: window.Auth is set in boomboom.js before initGeo fires
+  3: Server proxies /ws/location to gateway WS endpoint
+expected_behaviour:
+  - "initGeo() waits for window.__authReady before starting geolocation or WS"
+  - "Venue accounts: fetches fixed lat/lon from Api.getMe() and dispatches geo:position; starts location WS for presence"
+  - "Regular accounts: starts GPS watchPosition; falls back to IP geolocation if GPS unavailable; starts location WS"
+  - "IP fallback: tries up to 3 randomised external services; on all failures sets status to 'location unavailable'"
+  - "connectLocWS() builds WS URL from location.origin — no hardcoded host"
+  - "WS auth: sends { type: 'auth', token } immediately on open"
+  - "WS reconnect: exponential backoff starting at 10s, max 30s; only reconnects while Auth token exists"
+  - "pushLocation(): no-op for venue accounts; sends via WS if open, falls back to Api.putLocation over HTTP"
+  - "GeoState.pos updated on every position fix; geo:position and geo:nearby CustomEvents dispatched on window"
+  - "Status dot: 'locating' during acquisition, 'live' when position known, 'off' on failure"
+status: implemented
+qa_report: "2026-03-30: WS URL fixed to location.origin pattern; Api imported directly; window.Auth.* retained (set by boomboom.js). All expected_behaviour items verified by code review."

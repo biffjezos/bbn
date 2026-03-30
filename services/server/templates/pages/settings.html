@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bbm-page bbm-fullbleed">
+
+  <!-- Hero -->
+  <div class="bbm-hero">
+    <div class="container-fluid px-4 px-md-5">
+      <h1><span class="accent-pink">Set</span>tings</h1>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="container-fluid px-4 px-md-5 py-4">
+
+    <!-- Account Info -->
+    <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Account</h2>
+    <div id="accountInfoWrap" class="mb-5">
+      {% if ssr_me %}
+      <p class="small mb-1"><span class="text-muted-bb">Tier:</span> {{ ssr_me.tier | default(value="—") }}</p>
+      <p class="small mb-0"><span class="text-muted-bb">Account type:</span> {{ ssr_me.account_type | default(value="—") }}</p>
+      {% else %}
+      <p class="text-muted-bb small">Loading…</p>
+      {% endif %}
+    </div>
+
+    <!-- App Limits (read-only) -->
+    <div id="appLimitsWrap" class="mb-5" style="display:none">
+      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">App Limits</h2>
+      <div id="appLimitsFields"></div>
+    </div>
+
+    <!-- Preferences (user-editable, stored locally) -->
+    <div id="preferencesWrap" class="mb-5" style="display:none">
+      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Preferences</h2>
+      <div style="max-width:400px">
+
+        <div class="mb-3">
+          <label class="form-label" for="prefMapZoom">Default map zoom <span class="text-muted-bb" style="font-size:0.8rem;font-weight:400">(1 – 19)</span></label>
+          <input type="number" class="form-control" id="prefMapZoom" min="1" max="19">
+        </div>
+
+        <div class="mb-4 d-flex align-items-center gap-3">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="prefFavPins" checked>
+            <label class="form-check-label" for="prefFavPins">Show lines to favourites on map</label>
+          </div>
+        </div>
+
+        <button class="btn btn-bbm-primary" id="prefSaveBtn">Save Preferences</button>
+        <span id="prefStatus" class="ms-3 small"></span>
+      </div>
+    </div>
+
+    <!-- Blocked Users -->
+    <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Blocked Users</h2>
+    <div id="blocksWrap" class="mb-5"></div>
+
+    <!-- Danger Zone -->
+    <div class="mt-5" id="dangerZoneWrap" style="display:none">
+      <h2 class="h5 mb-3" style="color:var(--bbm-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Danger Zone</h2>
+      <div style="border:1px solid var(--bbm-danger,#e05);border-radius:var(--bbm-radius,12px);padding:1.25rem">
+        <p class="text-muted-bb small mb-3">Permanently deletes your account, messages and favourites.</p>
+        <button class="btn btn-bbm-danger" id="deleteAccountBtn">
+          <i class="bi bi-trash3 me-2"></i>Delete Account
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% include "partials/modal-delete.html" %}
+{% endblock content %}
