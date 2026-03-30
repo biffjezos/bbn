@@ -3,6 +3,8 @@
 // bOOmbOOm.NOW! — Messages page ES6 module
 // ============================================================
 
+import { Api } from './api.js';
+
 const _pubKeyCache = {};
 const _CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -56,7 +58,7 @@ export async function getPublicKey(userId) {
   const hit = _pubKeyCache[userId];
   if (hit && hit.exp > Date.now()) return hit.value;
 
-  const profile = await window.Api.getProfile(userId);
+  const profile = await Api.getProfile(userId);
 
   if (profile.accountType === 'venue' && profile.managerId) {
     return getPublicKey(profile.managerId);
@@ -88,8 +90,7 @@ export async function decryptFrom(payload, senderId, recipientId) {
 
 // ── WebSocket ────────────────────────────────────────────
 function msgWsUrl() {
-  const api = window.BOOMBOOM_API_URL || '';
-  return api.replace(/^http/, 'ws') + '/ws/messages';
+  return location.origin.replace(/^http/, 'ws') + '/ws/messages';
 }
 
 function wsSend(obj) {
@@ -146,7 +147,7 @@ export async function handleConversationsUpdate(messages) {
 
   wrap.innerHTML = await Promise.all(
     Object.entries(threads).map(async ([uid, m]) => {
-      const profile = await window.Api.getProfile(uid);
+      const profile = await Api.getProfile(uid);
 
       let text = m.text;
 

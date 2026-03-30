@@ -21,7 +21,7 @@ expected_behaviour:
   - "OPAQUE flows (register, login, changePassword) use window.OpaqueClient for WASM crypto steps"
   - "Exports: Api object with all endpoint methods, initApiGlobals function"
   - "Does NOT set window.Api — consumers import Api directly"
-status: planned
+status: implemented
 tests:
   1: "Api.getMe() sends GET /api/users/me with Authorization header"
   2: "Api.login() completes OPAQUE two-step flow via /api/auth/login/start and /api/auth/login/finish"
@@ -30,4 +30,4 @@ tests:
   5: "401 TOKEN_REVOKED triggers Auth.logout()"
   6: "403 with required field dispatches bbm:tier-gate event"
   7: "No requests sent to an absolute URL — all relative /api/*"
-qa_report:
+qa_report: "2026-03-30: API_BASE set to '/api'; window.Auth?.getToken?.() used for token injection (window.Auth set in boomboom.js initApp before any call); window.OpaqueClient set in boomboom.js for OPAQUE flows. Added getNotifications and dismissNotification methods."

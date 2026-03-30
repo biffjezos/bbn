@@ -14,7 +14,7 @@
 
 ## In Progress
 
-T-29 — JS cleanup (not started this session; confirmed as next task)
+T-29 — JS cleanup — Phase 2 complete (ES6 globals fixed), Phase 3 (dead code) pending
 
 ---
 
@@ -23,8 +23,14 @@ T-29 — JS cleanup (not started this session; confirmed as next task)
 - **T-28 done stub** created: `.claude/tickets/done/T-28.md`
 - **T-31 done stub** created: `.claude/tickets/done/T-31.md`
 - **TICKETS.md** updated: T-28 and T-31 rows now point to `tickets/done/`
-
-*All actual code work from this session was already committed in the prior context cycle.*
+- **T-29 Phase 2** — fixed all ES6 module globals and broken paths:
+  - `auth.js`: imported `Api` from `./api.js`; replaced all `window.Api.*` with `Api.*`; `window.BBMCrypto` → `window.BBNCrypto`
+  - `api.js`: `API_BASE = '/api'` (was `''`); added `getNotifications`, `dismissNotification`
+  - `warmup.js`: `window.BOOMBOOM_API_URL + '/health'` → `fetch('/api/health')`
+  - `geo.js`: imported `Api`; `locWsUrl()` uses `location.origin`; `window.Api.*` → `Api.*`
+  - `messages.js`: imported `Api`; `msgWsUrl()` uses `location.origin`; `window.Api.*` → `Api.*`
+  - `notifications.js`: `window.BOOMBOOM_BASE || ''` → `''`; `DEBUG` ref removed
+  - `boomboom.js`: imported `OpaqueClient`; `window.Auth/Api/OpaqueClient` set in `initApp()`; SW path fixed to `/service-worker.js` scope `/`; `const BASE = ''`; `initNotifications()` moved after `wireAuth()`; `window.Api.*` stub → `Api.*`
 
 ---
 

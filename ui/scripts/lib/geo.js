@@ -1,9 +1,11 @@
-// ./lib/geo.js 
+// ./lib/geo.js
 // ============================================================
 // GeoModule — ES6 module version
 // Handles geolocation, location push, and status updates.
 // Exports: GeoState, initGeo, pushLocation
 // ============================================================
+
+import { Api } from './api.js';
 
 export const GeoState = { pos: null, accuracy: null, lastSent: null };
 
@@ -12,9 +14,7 @@ let _locWsRetry = 10000;
 let _locWsTimer = null;
 
 function locWsUrl() {
-  const api = window.BOOMBOOM_API_URL;
-  const base = api.replace(/^https?:\/\//, 'wss://').replace(/\/api\/?$/, '');
-  return base + '/ws/location';
+  return location.origin.replace(/^http/, 'ws') + '/ws/location';
 }
 
 function sendLocWS(lat, lon, accuracy) {
@@ -74,7 +74,7 @@ export async function pushLocation(lat, lng, accuracy) {
   }
   console.log('[Geo] WS not open, falling back to HTTP PUT:', lat, lng, accuracy);
   try {
-    await window.Api.putLocation(lat, lng, accuracy || 'gps');
+    await Api.putLocation(lat, lng, accuracy || 'gps');
   } catch (e) {
     console.warn('[Geo] HTTP location push failed:', e.message);
   }
@@ -192,7 +192,7 @@ export function initGeo() {
     window.__authReady.then(async () => {
       if (isVenueAccount()) {
         try {
-          const me = await window.Api.getMe();
+          const me = await Api.getMe();
           const { fixedLat: lat, fixedLon: lng } = me;
           if (typeof lat === 'number' && typeof lng === 'number') {
             GeoState.accuracy = 'fixed';

@@ -22,7 +22,7 @@ expected_behaviour:
   - "Expired guest cleanup: if guest expiry passed >1h ago, clear the stored expiry and re-auth"
   - "Never store the JWT in localStorage"
   - "Never expose the raw JWT in any DOM element"
-status: planned
+status: implemented
 tests:
   1: "Guest auth: on fresh load with no stored token, Api.guestAuth is called, countdown starts"
   2: "Login: after successful OPAQUE flow, JWT is in sessionStorage AND bbn_tok cookie is set"
@@ -31,4 +31,4 @@ tests:
   5: "Page reload with expired sessionStorage token: token cleared, guest auth starts"
   6: "Register: crypto keys generated and saved via Api.saveKeys after successful registration"
   7: "Cookie value matches sessionStorage token value exactly"
-qa_report:
+qa_report: "2026-03-30: Auth now imports Api from ./api.js; all window.Api.* calls replaced with Api.*; window.BBMCrypto → window.BBNCrypto (set by crypto.js itself); bbn_tok cookie set/cleared correctly. Complies with all expected_behaviour items."

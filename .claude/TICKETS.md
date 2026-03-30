@@ -11,7 +11,7 @@ This file lists only open, active, planned, and deferred tickets — one row eac
 |---|---|---|---|---|
 | [T-28](tickets/done/T-28.md) | done | high | server — Rust Tera HTML server with API/WS proxy facade | 4/4 |
 | [T-31](tickets/done/T-31.md) | done | low | Fix modal scope — move modal-block/modal-delete out of base template | done |
-| [T-29](tickets/T-29.md) | planned | high | JS cleanup — fix ES6 module refactor, trim to UI-only | 0/3 |
+| [T-29](tickets/T-29.md) | active | high | JS cleanup — fix ES6 module refactor, trim to UI-only | 2/3 |
 | [T-30](tickets/T-30.md) | planned | high | server deployment — Railway, CORS removal, CI/CD migration | 0/3 |
 | [T-27](tickets/T-27.md) | planned | high | App Architecture Specs | - |
 | [T-26](tickets/T-26.md) | planned | high | auth layering violation | - |

@@ -3,7 +3,7 @@
 // ============================================================
 
 const DEBUG = true;
-const API_BASE = '';
+const API_BASE = '/api';
 
 async function apiFetch(path, options = {}, _retries = 1) {
     const token = window.Auth?.getToken?.();
@@ -143,7 +143,8 @@ export const Api = {
     unblockUser: (userId) => apiFetch(`/blocks/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
     getBlocks: () => apiFetch('/blocks'),
 
-    // Manager, Admin, Notifications… add similarly if needed
+    getNotifications: () => apiFetch('/notifications'),
+    dismissNotification: (id) => apiFetch(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // Optional: global tier-gate modal handler

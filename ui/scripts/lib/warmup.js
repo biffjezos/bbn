@@ -7,7 +7,7 @@ export function warmUpBackend() {
   const last = parseInt(sessionStorage.getItem(WARM_KEY) || '0', 10);
   if (Date.now() - last < WARM_TTL) return;
 
-  return fetch(`${window.BOOMBOOM_API_URL}/health`)
+  return fetch('/api/health')  // direct fetch, not through apiFetch
     .then((response) => {
       console.log(
         `[warm-up] ${response.status}${response.status === 503 ? ' (cold-start)' : ' — ready'}`

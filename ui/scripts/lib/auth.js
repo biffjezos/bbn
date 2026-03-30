@@ -2,6 +2,8 @@
 // bOOmbOOm.NOW! — Auth State (module version)
 // ============================================================
 
+import { Api } from './api.js';
+
 const STORAGE_TOKEN_KEY = 'bbm_token';
 const STORAGE_GUEST_KEY = 'bbm_guest_id';
 const STORAGE_NICK_KEY  = 'bbm_nickname';
@@ -126,7 +128,7 @@ export const Auth = (() => {
             }
 
             try {
-                const data = await window.Api.guestAuth(_guestId);
+                const data = await Api.guestAuth(_guestId);
                 _token = data.token;
                 _isUser = false;
 
@@ -150,7 +152,7 @@ export const Auth = (() => {
         },
 
         async login({ email, password }) {
-            const data = await window.Api.login({ email, password, guestId: _guestId });
+            const data = await Api.login({ email, password, guestId: _guestId });
             _token = data.token;
             _nickname = data.nickname;
             _sex = data.sex;
@@ -165,15 +167,15 @@ export const Auth = (() => {
 
         async register(fields) {
             let publicKeyB64 = null, encBlob = null;
-            if (window.BBMCrypto) {
+            if (window.BBNCrypto) {
                 try {
-                    ({ publicKeyB64, encBlob } = await window.BBMCrypto.setup(fields.password));
+                    ({ publicKeyB64, encBlob } = await window.BBNCrypto.setup(fields.password));
                 } catch (e) {
                     console.warn('[Auth] Crypto setup failed:', e.message);
                 }
             }
 
-            const data = await window.Api.register({ ...fields, guestId: _guestId });
+            const data = await Api.register({ ...fields, guestId: _guestId });
             _token = data.token;
             _nickname = data.nickname;
             _sex = data.sex;
@@ -184,7 +186,7 @@ export const Auth = (() => {
             localStorage.removeItem(STORAGE_GUEST_EXP);
 
             if (publicKeyB64 && encBlob) {
-                try { await window.Api.saveKeys(publicKeyB64, encBlob); } 
+                try { await Api.saveKeys(publicKeyB64, encBlob); }
                 catch (e) { console.warn('[Auth] Failed to save crypto keys:', e.message); }
             }
 
@@ -201,7 +203,7 @@ export const Auth = (() => {
 
         logout() {
             Auth.onLogout?.();
-            window.BBMCrypto?.lock();
+            window.BBNCrypto?.lock();
             clearUserStorage();
             _token = _nickname = _sex = null;
             _isUser = false;
@@ -209,9 +211,9 @@ export const Auth = (() => {
         },
 
         async deleteAccount() {
-            await window.Api.deleteMe();
+            await Api.deleteMe();
             Auth.onLogout?.();
-            window.BBMCrypto?.lock();
+            window.BBNCrypto?.lock();
             clearUserStorage();
             _token = _nickname = _sex = null;
             _isUser = false;

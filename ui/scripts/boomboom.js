@@ -15,12 +15,13 @@ import { initUnlockButton } from './lib/lock.js';
 import { MapModule } from './lib/map.js';
 import * as Messages from './lib/messages.js';
 import { initNotifications } from './lib/notifications.js';
+import { OpaqueClient } from './lib/opaque-client.js';
 import { PWAInstall } from './lib/pwa-install.js';
 import { initSettings } from './lib/settings.js';
 import { warmUpBackend } from './lib/warmup.js';
 
 // ------------------ Constants ------------------
-const BASE = window.BOOMBOOM_BASE || '';
+const BASE = '';
 const $ = (id) => document.getElementById(id);
 
 // ------------------ Helpers ------------------
@@ -172,32 +173,39 @@ function wireUI(mapModule) {
   // Handle message links
   const msgLink = $('pinMessageLink');
   if (msgLink) {
-    const userId = 'USER_ID';  // Replace with actual user ID
-    const nickname = 'NICKNAME';  // Replace with actual nickname
-    msgLink.href = BASE + '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
-    msgLink.classList.add('d-none');
-    
-    // Check if the user can receive messages
-    window.Api.getProfile(userId).then(function(profile) {
-      if (profile.canReceiveMessages === false) return;
+    const userId = msgLink.dataset.userId;
+    const nickname = msgLink.dataset.nickname;
+    if (userId) {
+      msgLink.href = '/messages/thread/?uid=' + encodeURIComponent(userId) + '&name=' + encodeURIComponent(nickname || '');
+      msgLink.classList.add('d-none');
 
-      // Check for mutual favourites
-      window.Api.isMutualFavourite(userId).then(function(data) {
-        if (data.mutual) {
-          msgLink.classList.remove('d-none');
-        }
-      }).catch(function() {}); 
-    }).catch(function() {});
+      // Check if the user can receive messages
+      Api.getProfile(userId).then(function(profile) {
+        if (profile.canReceiveMessages === false) return;
+
+        // Check for mutual favourites
+        Api.isMutualFavourite(userId).then(function(data) {
+          if (data.mutual) {
+            msgLink.classList.remove('d-none');
+          }
+        }).catch(function() {});
+      }).catch(function() {});
+    }
   }
 }
 
 // ------------------ Init App ------------------
 async function initApp() {
 
+  // Expose globals for modules that still use window.* lookups
+  window.Auth = Auth;
+  window.Api = Api;
+  window.OpaqueClient = OpaqueClient;
+
   // Service Worker
   if ('serviceWorker' in navigator) {
     try {
-      await navigator.serviceWorker.register('/bbn/service-worker.js', { scope: '/bbn/' });
+      await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
     } catch (err) {
       console.error('SW registration failed:', err);
     }
@@ -216,14 +224,14 @@ async function initApp() {
 
   renderFavourites();
   initSearchBar();
-  initNotifications();
-  PWAInstall.init(); 
+  PWAInstall.init();
   initUnlockButton();
   initSettings();
   warmUpBackend();
 
-  // Auth wiring
+  // Auth wiring — must come before initNotifications so Auth.onLogin is a function
   wireAuth(mapModule);
+  initNotifications();
 
   // Init Auth
   window.__authReady = Auth.init();
