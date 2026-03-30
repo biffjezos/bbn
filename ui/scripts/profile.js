@@ -248,10 +248,10 @@ const editableFields = isVenue ? `
         // Re-encrypt the private key blob locally using the current password before
         // touching the server. curr is only used here — it is never sent over the wire.
         let newPublicKey = null, newEncBlob = null;
-        if (window.BBMCrypto) {
+        if (window.BBNCrypto) {
           const keys = await window.Api.getMyKeys();
           if (keys.encryptedPrivateKey) {
-            newEncBlob   = await window.BBMCrypto.reencrypt(curr, nw, keys.encryptedPrivateKey);
+            newEncBlob   = await window.BBNCrypto.reencrypt(curr, nw, keys.encryptedPrivateKey);
             newPublicKey = keys.publicKey;
           }
         }
@@ -474,7 +474,7 @@ async function renderPublicProfile() {
   const userId      = params.get('uid');
   const displayName = params.get('name') || userId;
 
-  if (!userId) { window.location.href = (window.BOOMBOOM_BASE || '') + '/'; return; }
+  if (!userId) { window.location.href = '/'; return; }
 
   page.innerHTML = loadingHtml('Loading profile…');
 
@@ -486,7 +486,7 @@ async function renderPublicProfile() {
     const isVenue   = profile.accountType === 'venue';
     const cls       = isVenue ? 'venue' : sexClass(profile.sex);
     const avatarInner = isVenue ? '<i class="bi bi-house-fill"></i>' : sexEmoji(profile.sex);
-    const threadHref = `${window.BOOMBOOM_BASE || ''}/messages/thread/?uid=${encodeURIComponent(userId)}&name=${encodeURIComponent(profile.nickname || displayName)}`;
+    const threadHref = `/messages/thread/?uid=${encodeURIComponent(userId)}&name=${encodeURIComponent(profile.nickname || displayName)}`;
 
     let isFav = false;
     if (viewerIsReg) {

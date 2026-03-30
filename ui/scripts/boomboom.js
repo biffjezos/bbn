@@ -226,7 +226,6 @@ async function initApp() {
   initSearchBar();
   PWAInstall.init();
   initUnlockButton();
-  initSettings();
   warmUpBackend();
 
   // Auth wiring — must come before initNotifications so Auth.onLogin is a function
@@ -240,6 +239,9 @@ async function initApp() {
 
   // Apply UI state AFTER auth is ready
   applyAuthState(Auth.isRegistered());
+
+  // Settings requires auth (token for API calls)
+  initSettings();
 
   // Wire UI last (DOM must exist)
   wireUI(mapModule);

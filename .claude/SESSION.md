@@ -14,7 +14,7 @@
 
 ## In Progress
 
-T-29 — JS cleanup — Phase 2 complete (ES6 globals fixed), Phase 3 (dead code) pending
+Nothing — T-29 complete. T-32 planned (profile.js integration).
 
 ---
 
@@ -23,7 +23,8 @@ T-29 — JS cleanup — Phase 2 complete (ES6 globals fixed), Phase 3 (dead code
 - **T-28 done stub** created: `.claude/tickets/done/T-28.md`
 - **T-31 done stub** created: `.claude/tickets/done/T-31.md`
 - **TICKETS.md** updated: T-28 and T-31 rows now point to `tickets/done/`
-- **T-29 Phase 2** — fixed all ES6 module globals and broken paths:
+- **T-29 complete (all 3 phases):**
+  - Phase 2: fixed all ES6 module globals and broken paths
   - `auth.js`: imported `Api` from `./api.js`; replaced all `window.Api.*` with `Api.*`; `window.BBMCrypto` → `window.BBNCrypto`
   - `api.js`: `API_BASE = '/api'` (was `''`); added `getNotifications`, `dismissNotification`
   - `warmup.js`: `window.BOOMBOOM_API_URL + '/health'` → `fetch('/api/health')`
@@ -31,6 +32,7 @@ T-29 — JS cleanup — Phase 2 complete (ES6 globals fixed), Phase 3 (dead code
   - `messages.js`: imported `Api`; `msgWsUrl()` uses `location.origin`; `window.Api.*` → `Api.*`
   - `notifications.js`: `window.BOOMBOOM_BASE || ''` → `''`; `DEBUG` ref removed
   - `boomboom.js`: imported `OpaqueClient`; `window.Auth/Api/OpaqueClient` set in `initApp()`; SW path fixed to `/service-worker.js` scope `/`; `const BASE = ''`; `initNotifications()` moved after `wireAuth()`; `window.Api.*` stub → `Api.*`
+  - Phase 3: `favourites.js`/`profile.js` BOOMBOOM_BASE removed; `profile.js` BBMCrypto→BBNCrypto; `settings.js` fully restored; `initSettings()` moved after `await window.__authReady` in boomboom.js; T-32 created for profile page wiring
 
 ---
 
