@@ -33,6 +33,8 @@ pub struct UserClaims {
 
 /// Auth fields injected into every Tera template context.
 /// Use `AuthContext::guest()` for unauthenticated / public pages.
+/// `raw_token` carries the original JWT string so handlers can forward it
+/// as `Authorization: Bearer <token>` to the gateway for SSR data fetches.
 #[derive(Debug)]
 pub struct AuthContext {
     pub is_logged_in: bool,
@@ -40,6 +42,7 @@ pub struct AuthContext {
     pub tier:         Option<String>,
     pub role:         Option<String>,
     pub sex:          Option<String>,
+    pub raw_token:    Option<String>,
 }
 
 impl AuthContext {
@@ -50,6 +53,7 @@ impl AuthContext {
             tier:         None,
             role:         None,
             sex:          None,
+            raw_token:    None,
         }
     }
 }
@@ -71,18 +75,19 @@ fn extract_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
 }
 
 /// Decode and validate the `bbn_tok` cookie JWT.
-/// Returns None if the cookie is absent, the signature is invalid, or the token is expired.
-fn decode_bbn_tok(headers: &HeaderMap, jwt_secret: &str) -> Option<UserClaims> {
+/// Returns `Some((raw_token, claims))` on success, `None` otherwise.
+fn decode_bbn_tok(headers: &HeaderMap, jwt_secret: &str) -> Option<(String, UserClaims)> {
     let token = extract_cookie(headers, "bbn_tok")?;
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
-    decode::<UserClaims>(
+    let claims = decode::<UserClaims>(
         &token,
         &DecodingKey::from_secret(jwt_secret.as_bytes()),
         &validation,
     )
-    .ok()
-    .map(|td| td.claims)
+    .ok()?
+    .claims;
+    Some((token, claims))
 }
 
 // ── Public API ────────────────────────────────────────────────
@@ -92,12 +97,13 @@ fn decode_bbn_tok(headers: &HeaderMap, jwt_secret: &str) -> Option<UserClaims> {
 /// absent, invalid, or expired.
 pub fn check_auth(headers: &HeaderMap, jwt_secret: &str) -> AuthContext {
     match decode_bbn_tok(headers, jwt_secret) {
-        Some(c) => AuthContext {
+        Some((token, c)) => AuthContext {
             is_logged_in: true,
             nickname:     c.nickname,
             tier:         c.tier,
             role:         Some(c.role),
             sex:          c.sex,
+            raw_token:    Some(token),
         },
         None => AuthContext::guest(),
     }

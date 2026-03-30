@@ -31,6 +31,11 @@ tests:
   6: "No Liquid/Jekyll syntax ({% include %} with Liquid semantics, {{ site.* }}) in any served HTML"
   7: "asset_version appears in link/script href query strings for cache busting"
 qa_report: |
+  2026-03-30 — T-28 Phase 4 complete. MeData struct, fetch_me (3 s timeout,
+  graceful None on any error), profile/settings handlers call fetch_me when
+  auth.raw_token is present. profile.html renders nickname/age/sex/bio on
+  first paint; settings.html renders tier/account_type in accountInfoWrap.
+  JS overwrites on load (JS hydration path unchanged for T-29).
   2026-03-30 — T-28 Phase 2 complete. Templates created:
   base.html (Tera layout), 9 partials (navbar, offcanvas, 7 modals),
   9 page templates (index, messages, messages-thread, profile, profile-view,

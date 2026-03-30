@@ -19,7 +19,7 @@
 mod guards;
 mod proxy;
 
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 
 use axum::{
     extract::State,
@@ -29,8 +29,44 @@ use axum::{
     Router,
 };
 use guards::AuthContext;
+use serde::{Deserialize, Serialize};
 use tera::{Context, Tera};
 use tower_http::services::{ServeDir, ServeFile};
+
+// ── SSR data ──────────────────────────────────────────────────
+
+/// Fields from GET /api/users/me used for SSR pre-population.
+/// All optional so graceful degradation is automatic.
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct MeData {
+    nickname:     Option<String>,
+    age:          Option<u32>,
+    sex:          Option<String>,
+    bio:          Option<String>,
+    tier:         Option<String>,
+    account_type: Option<String>,
+}
+
+/// Call GET {gateway_url}/api/users/me on behalf of the logged-in user.
+/// Returns None on any error (network, timeout, 4xx/5xx, parse failure).
+/// Timeout is 3 s — page still renders if the gateway is slow or down.
+async fn fetch_me(
+    client: &reqwest::Client,
+    gateway_url: &str,
+    token: &str,
+) -> Option<MeData> {
+    let res = client
+        .get(format!("{gateway_url}/api/users/me"))
+        .header("Authorization", format!("Bearer {token}"))
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await
+        .ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    res.json::<MeData>().await.ok()
+}
 
 pub struct AppState {
     pub gateway_url:   String,
@@ -132,8 +168,13 @@ async fn page_profile(
 ) -> impl IntoResponse {
     match guards::require_user(&headers, &state.jwt_secret) {
         Ok(auth) => {
+            let me = match &auth.raw_token {
+                Some(t) => fetch_me(&state.http_client, &state.gateway_url, t).await,
+                None    => None,
+            };
             let mut ctx = Context::new();
             ctx.insert("page_title", "My Profile");
+            ctx.insert("ssr_me", &me);
             render(&state, "pages/profile.html", ctx, auth)
         }
         Err(redirect) => redirect,
@@ -160,8 +201,13 @@ async fn page_settings(
 ) -> impl IntoResponse {
     match guards::require_user(&headers, &state.jwt_secret) {
         Ok(auth) => {
+            let me = match &auth.raw_token {
+                Some(t) => fetch_me(&state.http_client, &state.gateway_url, t).await,
+                None    => None,
+            };
             let mut ctx = Context::new();
             ctx.insert("page_title", "Settings");
+            ctx.insert("ssr_me", &me);
             render(&state, "pages/settings.html", ctx, auth)
         }
         Err(redirect) => redirect,

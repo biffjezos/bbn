@@ -14,49 +14,46 @@
 
 ## In Progress
 
-T-28 Phase 4 — Minimal SSR data injection (next session)
+T-29 — JS cleanup (next session)
 
 ---
 
 ## Completed This Session
 
-- **T-31 — Modal scope fix** ✅ (quick fix, no separate commit)
-  - Removed `modal-block` and `modal-delete` from `base.html`
-  - Added `{% include "partials/modal-block.html" %}` to index, messages-thread, profile-view
-  - Added `{% include "partials/modal-delete.html" %}` to settings
+- **T-28 Phase 4 — Minimal SSR data injection** ✅ (T-28 complete)
+  - `guards.rs`: `AuthContext.raw_token` added — carries raw JWT string for gateway forwarding
+  - `main.rs`: `MeData` struct (nickname, age, sex, bio, tier, account_type), `fetch_me` (3 s timeout, graceful None on error), `page_profile` and `page_settings` call `fetch_me` and insert `ssr_me` into Tera context
+  - `templates/pages/profile.html`: renders nickname/age/sex/bio on first paint from `ssr_me`
+  - `templates/pages/settings.html`: renders tier/account_type in `accountInfoWrap` from `ssr_me`
+  - `cargo build -p server` — zero errors, zero warnings
 
-- **T-28 Phase 2 — Tera template migration** ✅
-  - `services/server/templates/base.html`: Tera layout
-  - `templates/partials/`: 9 partials (navbar, offcanvas, 7 modals)
-  - `templates/pages/`: 9 page templates
-  - `main.rs`: Tera init, page routes
-  - `ui/scripts/lib/api.js`: `API_BASE = ''`
+- **T-31 — Modal scope fix** ✅
+  - modal-block → index, messages-thread, profile-view via `{% include %}`
+  - modal-delete → settings via `{% include %}`
+  - Removed both from base.html
 
 - **T-28 Phase 3 — Server-side route guards** ✅
-  - `services/server/src/guards.rs`: `extract_cookie`, `decode_bbn_tok`, `check_auth`, `require_user`, `require_admin`
-  - `services/server/src/main.rs`: `JWT_SECRET` env var, `AppState.jwt_secret`, `render()` accepts `AuthContext`, all 9 handlers updated (3 public, 5 user-protected, 1 admin)
-  - `services/server/Cargo.toml`: `jsonwebtoken` added
-  - `ui/scripts/lib/auth.js`: `setBbnCookie`/`clearBbnCookie` — cookie set on `init` (restore), `login`, `register`, `refreshToken`; cleared in `clearUserStorage` (logout, deleteAccount)
-  - `services/server/templates/base.html`: inline client-side guard script removed
-  - `cargo build -p server` — zero errors, zero warnings
+  - guards.rs, JWT_SECRET, bbn_tok cookie in auth.js, client guard script removed
+
+- **T-28 Phase 2 — Tera template migration** ✅
+  - All templates ported, api.js API_BASE fixed
 
 ---
 
 ## Key Decisions Made
 
-- **`bbn_tok` cookie**: `SameSite=Strict; Secure; Path=/` — not set for guest sessions
-- **`guards.rs`**: standalone module (no `common` crate dependency — keeps server independent of MongoDB)
-- **`check_auth`**: always succeeds; returns `AuthContext::guest()` on missing/invalid/expired cookie
-- **Cookie set in `init()`**: when restoring an existing sessionStorage token, the cookie is re-set so the next navigation benefits from server-side guards
-- **T-31 modal scoping**: modal-block/modal-delete moved to specific page templates using `{% include %}`, not inlined
+- **`fetch_me` URL**: calls `{gateway_url}/api/users/me` (proxy preserves `/api/` prefix)
+- **SSR data strategy**: inject as Tera variables and render HTML on first paint; JS overwrites with interactive form on load (no `window.__bbnSSR` indirection needed at this stage)
+- **Graceful degradation**: `fetch_me` returns `None` on any error → template falls back to "Loading…" / empty placeholders; page never 500s
 
 ---
 
 ## Blockers / Parked Items
 
-- Site is offline (owner aware). All JS fixes deferred until T-29 (after T-28).
-- `JWT_SECRET` must be added to Railway env vars for the server service before T-30 deploy.
-- `fetch-codeql-alerts.yml` cannot push to `dev` (protected branch). Owner must allow `github-actions[bot]`.
+- Site is offline (owner aware). JS module fixes are T-29.
+- `JWT_SECRET` must be added to Railway env vars for the server service.
+- `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION` also needed in Railway for server.
+- `fetch-codeql-alerts.yml` cannot push to `dev` (protected branch).
 - 18 CodeQL alerts open (fetched 2026-03-25).
 - `claude/fix-pwa-android-install-efOUW` branch pending merge → `dev`.
 
@@ -65,18 +62,17 @@ T-28 Phase 4 — Minimal SSR data injection (next session)
 ## Handoff Notes
 
 ### Start here next session
-**T-28 Phase 4 — Minimal SSR data injection.** Read T-28 ticket Phase 4 section.
+**T-29 — JS cleanup.** Read T-29 ticket before starting.
 
-The work is:
-1. In `page_profile` and `page_settings` handlers: if `auth.is_logged_in`, call `GET GATEWAY_URL/api/users/me` with `Authorization: Bearer <jwt_from_cookie>`
-2. Inject response fields (`nickname`, `age`, `sex`, `bio`, `tier`, `account_type`) into Tera context
-3. On gateway error (timeout, 5xx): render page with empty fields (graceful degradation — JS loads them normally)
-4. Need the raw JWT token accessible in the handler — the cookie value is currently discarded after claims extraction. Thread it through or re-read the cookie in handlers.
+T-28 is fully done. T-30 (deployment) is next in sequence but requires owner action (Railway provisioning). T-29 JS cleanup can proceed in parallel.
 
-**Note on raw JWT access:**
-Currently `decode_bbn_tok` discards the raw token string. For Phase 4, `check_auth`/`require_user` need to also return the raw token string so handlers can forward it as `Authorization: Bearer`. One approach: add `pub raw_token: Option<String>` to `AuthContext`.
+T-29 scope:
+1. Fix `window.Api.*` references in auth.js — `window.Api` is never set in ES6 module context; should import from `api.js`
+2. Fix `window.BOOMBOOM_API_URL` references in geo.js, messages.js, notifications.js, warmup.js — already eliminated in api.js; these files may use the global directly
+3. Fix `settings.js` — function bodies are stubs; this is a total loss, deferred
+4. Review all scripts for `window.BOOMBOOM_BASE` references (eliminated — base is now `/`)
+5. Ensure `boomboom.js` correctly imports Auth and Api modules
 
 ### Other notes
-- T-31 (modal scope fix) was done inline this session without a separate commit — it's included in the Phase 2 commit.
-- The `nearby_m: 0` sentinel is the correct fallback in `GatewayRadii`.
-- `auth.js` `initGuest()` uses `window.Api.guestAuth()` — T-29 fixes this.
+- T-28 done ticket stub should be created before next session's commit.
+- T-30 deployment ticket is the next high-priority item after T-29, but requires Railway work by the owner.
