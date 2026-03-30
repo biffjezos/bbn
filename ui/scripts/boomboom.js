@@ -15,7 +15,7 @@ import { initUnlockButton } from './lib/lock.js';
 import { MapModule } from './lib/map.js';
 import * as Messages from './lib/messages.js';
 import { initNotifications } from './lib/notifications.js';
-import { OpaqueClient } from './lib/opaque-client.js';
+import { OpaqueClient } from './lib/opaque-client/opaque-client.js';
 import { initMyProfile, initPublicProfile } from './lib/profile.js';
 import { PWAInstall } from './lib/pwa-install.js';
 import { initSettings } from './lib/settings.js';
