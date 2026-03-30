@@ -8,7 +8,7 @@
 
 **Branch:** `claude/fix-path-bugs-HhisD`
 **Session date:** 2026-03-30
-**Last updated:** 2026-03-30T15:30Z
+**Last updated:** 2026-03-30T16:15Z
 
 ---
 
@@ -18,7 +18,12 @@ Fixing browser console bugs reported by owner after first live deployment test.
 
 ---
 
-## Completed This Session
+## Completed This Session (round 2)
+
+- **boomboom.js initApp()**: fixed `__authReady` initialization order — `window.__authReady = Auth.init()` now set BEFORE `initGeo()`. geo.js checks `window.__authReady instanceof Promise`; before this fix it was always `undefined` → geo never started → map never rendered.
+- **service-worker.js**: bumped `CACHE_NAME` from `app-v2` to `app-v3` to force browser to evict old SW cache (which had wrong `/bbn/` paths and stale asset list).
+
+## Completed This Session (round 1)
 
 - **manifest.json** — replaced all `/bbn/` paths with `/` (start_url, scope, icon srcs)
 - **service-worker.js ASSETS** — fixed wrong paths: `app.js` → `boomboom.js`; `/scripts/X.js` → `/scripts/lib/X.js` for crypto-worker, crypto, geo, lock, map, opaque-client

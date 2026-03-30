@@ -266,11 +266,6 @@ async function initApp() {
   // Core systems
   initDebugConsole();
 
-  initGeo();
-  GeoState.pushLocation = pushLocation;
-  GeoState.connectLocWS = connectLocWS;
-  GeoState.closeLocWS = closeLocWS;
-
   // Use the imported MapModule directly (no need for 'new')
   const mapModule = MapModule;
 
@@ -280,12 +275,17 @@ async function initApp() {
   initUnlockButton();
   warmUpBackend();
 
-  // Auth wiring — must come before initNotifications so Auth.onLogin is a function
+  // Auth wiring — must come before Auth.init() so hooks are set before auth completes
   wireAuth(mapModule);
   initNotifications();
 
-  // Init Auth
+  // Set __authReady BEFORE initGeo — geo.js checks instanceof Promise
   window.__authReady = Auth.init();
+
+  initGeo();
+  GeoState.pushLocation = pushLocation;
+  GeoState.connectLocWS = connectLocWS;
+  GeoState.closeLocWS = closeLocWS;
 
   await window.__authReady;
 
