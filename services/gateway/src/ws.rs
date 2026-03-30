@@ -32,17 +32,17 @@ fn ws_text(v: Value) -> Message {
     Message::Text(serde_json::to_string(&v).unwrap_or_default().into())
 }
 
-pub fn origin_ok(headers: &HeaderMap) -> bool {
+fn origin_ok(headers: &HeaderMap, allowed: &[String]) -> bool {
     headers.get("origin")
         .and_then(|v| v.to_str().ok())
-        .map(|o| crate::ALLOWED_ORIGINS.contains(&o))
+        .map(|o| allowed.iter().any(|a| a == o))
         .unwrap_or(false)
 }
 
 // ── WebSocket — Location ──────────────────────────────────────────────────────
 
 pub async fn ws_location(ws: WebSocketUpgrade, State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !origin_ok(&headers) { return StatusCode::FORBIDDEN.into_response(); }
+    if !origin_ok(&headers, &state.cors_origins) { return StatusCode::FORBIDDEN.into_response(); }
     ws.on_upgrade(move |socket| handle_loc_socket(socket, state))
 }
 
@@ -181,7 +181,7 @@ async fn handle_loc_socket(socket: WebSocket, state: AppState) {
 // ── WebSocket — Messages ──────────────────────────────────────────────────────
 
 pub async fn ws_messages(ws: WebSocketUpgrade, State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if !origin_ok(&headers) { return StatusCode::FORBIDDEN.into_response(); }
+    if !origin_ok(&headers, &state.cors_origins) { return StatusCode::FORBIDDEN.into_response(); }
     ws.on_upgrade(move |socket| handle_msg_socket(socket, state))
 }
 

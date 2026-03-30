@@ -5,6 +5,8 @@
   <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
     <div class="modal-content">
 
+      <form id="registerForm" autocomplete="off" onsubmit="return false">
+
       <div class="modal-header border-0 pb-0">
         <h5 class="modal-title">Create Account</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -19,8 +21,12 @@
             type="email"
             class="form-control"
             id="regEmail"
-            autocomplete="email"
+            name="email"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
             placeholder="you@example.com"
+            required
           />
         </div>
 
@@ -33,10 +39,12 @@
             type="text"
             class="form-control"
             id="regNickname"
+            name="nickname"
             autocomplete="off"
             minlength="2"
             maxlength="32"
             placeholder="How you appear to others"
+            required
           />
         </div>
 
@@ -48,6 +56,10 @@
             id="regPassword"
             autocomplete="new-password"
             placeholder="At least 8 characters"
+            readonly
+            onfocus="this.removeAttribute('readonly');"
+            minlength="8"
+            required
           />
         </div>
 
@@ -58,21 +70,24 @@
               type="number"
               class="form-control"
               id="regAge"
+              name="age"
               min="18"
               max="120"
               placeholder="18+"
+              autocomplete="off"
+              required
             />
           </div>
           <div class="col-6">
             <label class="form-label" for="regSex">Sex</label>
-            <select class="form-select" id="regSex">
+            <select class="form-select" id="regSex" name="sex" autocomplete="off" required>
               <option value="m">Male</option>
               <option value="f">Female</option>
             </select>
           </div>
         </div>
 
-        <button type="button" class="btn btn-bbn-primary w-100" id="regSubmitBtn">
+        <button type="submit" class="btn btn-bbn-primary w-100" id="regSubmitBtn">
           Create Account
         </button>
       </div>
@@ -90,6 +105,8 @@
           >Log in</a>
         </p>
       </div>
+
+      </form>
 
     </div>
   </div>

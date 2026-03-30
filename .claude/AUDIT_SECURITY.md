@@ -108,6 +108,22 @@ SEC-1.14 ✅ fixed 2026-03-25 — details in AUDIT_DONE.md
 
 ---
 
+### SEC-1.15 ✅ CWE-319 Credentials in URL — login/register form GET race condition
+<!-- ITEM id:SEC-1.15 status:resolved priority:critical concern:security -->
+
+**Files:** `ui/scripts/boomboom.js`, `services/server/templates/partials/modal-login.html`, `services/server/templates/partials/modal-register.html`
+
+**Finding (2026-03-30):** Login and register forms had no `method` attribute so browser defaulted to GET. `wireAuthForms()` was called after `await window.__authReady`, meaning during the auth warm-up window a user who clicked submit had no event listener attached. The browser submitted the form natively, appending `email=...&password=...` to the URL. Plaintext credentials appeared in the address bar, browser history, and server access logs.
+
+**Fix (2026-03-30):** Three-layer defence:
+1. `wireAuthForms()` moved to run **before** `await window.__authReady` — listener always attached before page can be interacted with.
+2. `onsubmit="return false"` added to both form elements in Tera templates — native submission structurally impossible regardless of JS state.
+3. `name="password"` removed from password input fields — even if native submission fired, password value would not appear in URL.
+
+**Priority:** CRITICAL — credentials in URL and browser history; fixed same session as discovery.
+
+---
+
 ## Summary Table
 
 | Status | ID | Severity | Finding |
@@ -126,5 +142,6 @@ SEC-1.14 ✅ fixed 2026-03-25 — details in AUDIT_DONE.md
 | ✅ | SEC-1.12 | HIGH | Auth token stored in `localStorage` persisted after tab close — session takeover risk — switched to `sessionStorage` + `pagehide` DELETE /location (2026-03-23) |
 | ✅ | SEC-1.13 | HIGH | CWE-312 clear-text storage of `sex` field — removed dedicated sessionStorage key; sex now read from JWT — fixed 2026-03-25 |
 | ✅ | SEC-1.14 | HIGH | CWE-312 clear-text storage of sensitive data — removed `sex` from `bbm_meet` localStorage object — fixed 2026-03-25 |
+| ✅ | SEC-1.15 | CRITICAL | CWE-319 Credentials in URL — login form GET race condition (wireAuthForms after await + no onsubmit) — fixed 2026-03-30 |
 
 Resolved items → AUDIT_DONE.md

@@ -104,5 +104,8 @@ When a finding is resolved: update the relevant concern file's summary, move the
 | ✅ | SEC-1.12 | [Security](AUDIT_SECURITY.md) | HIGH | Auth token in `localStorage` — switched to `sessionStorage` + `pagehide` DELETE /location (2026-03-23) |
 | ✅ | SEC-1.13 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of `sex` — removed sessionStorage key, read from JWT instead — fixed 2026-03-25 |
 | ✅ | SEC-1.14 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of sensitive data — removed `sex` from `bbm_meet` localStorage — fixed 2026-03-25 |
+| ✅ | SEC-1.15 | [Security](AUDIT_SECURITY.md) | CRITICAL | CWE-319 Credentials in URL — login form GET race condition — fixed 2026-03-30 |
+| 🔲 | INFRA-1.3 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | HIGH | CORS_ORIGINS now required env var in gateway — owner must set in Railway |
+| 🔲 | INFRA-1.4 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | HIGH | JWT_SECRET must match in server and gateway — mismatch → all protected routes redirect |
 | ⏸️ | PERF-4.1 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Send-rate bucket in-process — not safe for multi-instance gateway (deferred) |
 | 🔲 | PERF-4.2 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Notification poll scales linearly with active users |

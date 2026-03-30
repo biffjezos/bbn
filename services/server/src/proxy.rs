@@ -97,6 +97,7 @@ pub async fn proxy_api(
 pub async fn proxy_ws(
     State(state): State<Arc<AppState>>,
     original_uri: OriginalUri,
+    headers: axum::http::HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
     let path_and_query = original_uri
@@ -113,14 +114,31 @@ pub async fn proxy_ws(
         path_and_query,
     );
 
-    ws.on_upgrade(|socket| tunnel_ws(socket, upstream_url))
+    // Forward the browser's Origin header so the gateway origin check passes
+    let origin = headers
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_owned());
+
+    ws.on_upgrade(move |socket| tunnel_ws(socket, upstream_url, origin))
 }
 
-async fn tunnel_ws(client: axum::extract::ws::WebSocket, upstream_url: String) {
+async fn tunnel_ws(client: axum::extract::ws::WebSocket, upstream_url: String, origin: Option<String>) {
     use axum::extract::ws::Message as AMsg;
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     use tokio_tungstenite::tungstenite::Message as TMsg;
 
-    let upstream = match tokio_tungstenite::connect_async(&upstream_url).await {
+    let upstream_req = {
+        let mut req = upstream_url.into_client_request().unwrap();
+        if let Some(ref o) = origin {
+            if let Ok(val) = o.parse() {
+                req.headers_mut().insert("origin", val);
+            }
+        }
+        req
+    };
+
+    let upstream = match tokio_tungstenite::connect_async(upstream_req).await {
         Ok((ws, _)) => ws,
         Err(e) => {
             tracing::error!("WS upstream connect failed: {e}");

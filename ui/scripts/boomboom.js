@@ -153,6 +153,59 @@ function wireAuth(mapModule) {
   Auth.onGuestExpired = () => {};
 }
 
+// ------------------ Auth Form Wiring ------------------
+// Called immediately at page load — must not wait for auth to complete
+function wireAuthForms() {
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email    = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const errorEl  = document.getElementById('loginError');
+      const btn      = document.getElementById('loginSubmitBtn');
+      errorEl.classList.add('d-none');
+      btn.disabled = true;
+      try {
+        await Auth.login({ email, password });
+        bootstrap.Modal.getInstance(document.getElementById('loginModal'))?.hide();
+      } catch (err) {
+        errorEl.textContent = err.message || 'Login failed';
+        errorEl.classList.remove('d-none');
+      } finally {
+        document.getElementById('loginPassword').value = '';
+        btn.disabled = false;
+      }
+    });
+  }
+
+  const registerForm = document.getElementById('registerForm');
+  if (registerForm) {
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email    = document.getElementById('regEmail').value.trim();
+      const nickname = document.getElementById('regNickname').value.trim();
+      const password = document.getElementById('regPassword').value;
+      const age      = document.getElementById('regAge').value;
+      const sex      = document.getElementById('regSex').value;
+      const errorEl  = document.getElementById('registerError');
+      const btn      = document.getElementById('regSubmitBtn');
+      errorEl.classList.add('d-none');
+      btn.disabled = true;
+      try {
+        await Auth.register({ email, nickname, password, age, sex });
+        bootstrap.Modal.getInstance(document.getElementById('registerModal'))?.hide();
+      } catch (err) {
+        errorEl.textContent = err.message || 'Registration failed';
+        errorEl.classList.remove('d-none');
+      } finally {
+        document.getElementById('regPassword').value = '';
+        btn.disabled = false;
+      }
+    });
+  }
+}
+
 // ------------------ UI Wiring ------------------
 function wireUI(mapModule) {
 
@@ -170,7 +223,7 @@ function wireUI(mapModule) {
       Auth.logout();
     };
   }
-  
+
   // Handle message links
   const msgLink = $('pinMessageLink');
   if (msgLink) {
@@ -215,11 +268,6 @@ async function initApp() {
   // Core systems
   initDebugConsole();
 
-  initGeo();
-  GeoState.pushLocation = pushLocation;
-  GeoState.connectLocWS = connectLocWS;
-  GeoState.closeLocWS = closeLocWS;
-
   // Use the imported MapModule directly (no need for 'new')
   const mapModule = MapModule;
 
@@ -229,12 +277,21 @@ async function initApp() {
   initUnlockButton();
   warmUpBackend();
 
-  // Auth wiring — must come before initNotifications so Auth.onLogin is a function
+  // Auth wiring — must come before Auth.init() so hooks are set before auth completes
   wireAuth(mapModule);
   initNotifications();
 
-  // Init Auth
+  // Wire login/register forms immediately — must not wait for auth,
+  // as guests use these forms before auth completes
+  wireAuthForms();
+
+  // Set __authReady BEFORE initGeo — geo.js checks instanceof Promise
   window.__authReady = Auth.init();
+
+  initGeo();
+  GeoState.pushLocation = pushLocation;
+  GeoState.connectLocWS = connectLocWS;
+  GeoState.closeLocWS = closeLocWS;
 
   await window.__authReady;
 
@@ -246,7 +303,7 @@ async function initApp() {
   if (document.getElementById('profileFormWrap')) initMyProfile();
   if (document.getElementById('pubProfilePage'))  initPublicProfile();
 
-  // Wire UI last (DOM must exist)
+  // Wire remaining UI (logout, message links, etc.)
   wireUI(mapModule);
 }
 

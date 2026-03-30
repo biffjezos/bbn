@@ -247,7 +247,9 @@ async fn main() {
         .expect("PORT must be a number");
     let static_dir    = env::var("STATIC_DIR").unwrap_or_else(|_| "./static".into());
     let templates_dir = env::var("TEMPLATES_DIR").unwrap_or_else(|_| "./templates".into());
-    let asset_version = env::var("ASSET_VERSION").unwrap_or_else(|_| "0".into());
+    let asset_version = env::var("ASSET_VERSION")
+        .or_else(|_| env::var("RAILWAY_GIT_COMMIT_SHA").map(|s| s[..s.len().min(7)].to_string()))
+        .unwrap_or_else(|_| "dev".into());
 
     validate_gateway_url(&gateway_url, &gateway_host);
 
