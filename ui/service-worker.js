@@ -5,33 +5,33 @@
 
 const CACHE_NAME = 'app-v2';
 const ASSETS = [
-    '/bbn/',
-    '/bbn/donate',
-    //'/bbn/messages',
-    //'/bbn/favourites',
-    //'/bbn/profile',
-    //'/bbn/settings',
-    '/bbn/assets/icons/icon-192.png',
-    '/bbn/assets/icons/icon-512.png',
-    '/bbn/assets/icons/icon-1024.png',
-    '/bbn/scripts/app.js',
-    //'/bbn/scripts/api.js',
-    //'/bbn/scripts/auth.js',
-    //'/bbn/scripts/blocks.js',
-    '/bbn/scripts/crypto-worker.js',
-    '/bbn/scripts/crypto.js',
-    //'/bbn/scripts/favourites.js',
-    '/bbn/scripts/geo.js',
-    '/bbn/scripts/lock.js',
-    '/bbn/scripts/map.js',
-    '/bbn/scripts/opaque-client.js',
-    '/bbn/scripts/opaque-client/opaque_client_wasm.js',
-    //'/bbn/scripts/profile.js',
-    //'/bbn/scripts/settings.js',
-    //'/bbn/scripts/warmup.js',
-    '/bbn/styles/app.css',
-    '/bbn/styles/colours.css',
-    '/bbn/styles/fonts.css'
+    '/',
+    '/donate',
+    //'/messages',
+    //'/favourites',
+    //'/profile',
+    //'/settings',
+    '/assets/icons/icon-192.png',
+    '/assets/icons/icon-512.png',
+    '/assets/icons/icon-1024.png',
+    '/scripts/app.js',
+    //'/scripts/api.js',
+    //'/scripts/auth.js',
+    //'/scripts/blocks.js',
+    '/scripts/crypto-worker.js',
+    '/scripts/crypto.js',
+    //'/scripts/favourites.js',
+    '/scripts/geo.js',
+    '/scripts/lock.js',
+    '/scripts/map.js',
+    '/scripts/opaque-client.js',
+    '/scripts/opaque-client/opaque_client_wasm.js',
+    //'/scripts/profile.js',
+    //'/scripts/settings.js',
+    //'/scripts/warmup.js',
+    '/styles/app.css',
+    '/styles/colours.css',
+    '/styles/fonts.css'
 ];
 
 self.addEventListener('install', event => {
@@ -72,7 +72,7 @@ self.addEventListener('fetch', event => {
 
                     // Offline fallback for navigation requests
                     if (event.request.mode === 'navigate') {
-                        return caches.match('/bbn/') || new Response('<h1>Offline</h1>', {
+                        return caches.match('/') || new Response('<h1>Offline</h1>', {
                             headers: { 'Content-Type': 'text/html' }
                         });
                     }
