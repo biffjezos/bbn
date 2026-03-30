@@ -15,7 +15,7 @@
 // ============================================================
 
 import initWasm, { init, register_start, register_finish, login_start, login_finish } 
-  from './opaque-client/opaque_client_wasm.js';
+  from '../opaque-client/opaque_client_wasm.js';
 
 const enc = new TextEncoder();
 
