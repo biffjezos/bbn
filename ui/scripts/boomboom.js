@@ -153,25 +153,9 @@ function wireAuth(mapModule) {
   Auth.onGuestExpired = () => {};
 }
 
-// ------------------ UI Wiring ------------------
-function wireUI(mapModule) {
-
-  // FAB
-  const fab = $('fabCentre');
-  if (fab) {
-    fab.addEventListener('click', () => mapModule.centreOnSelf());
-  }
-
-  // Logout
-  const logoutBtn = $('logoutBtn');
-  if (logoutBtn) {
-    logoutBtn.onclick = () => {
-      bootstrap.Offcanvas.getInstance($('appMenu'))?.hide();
-      Auth.logout();
-    };
-  }
-  
-  // Login form
+// ------------------ Auth Form Wiring ------------------
+// Called immediately at page load — must not wait for auth to complete
+function wireAuthForms() {
   const loginForm = document.getElementById('loginForm');
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
@@ -195,7 +179,6 @@ function wireUI(mapModule) {
     });
   }
 
-  // Register form
   const registerForm = document.getElementById('registerForm');
   if (registerForm) {
     registerForm.addEventListener('submit', async (e) => {
@@ -220,6 +203,25 @@ function wireUI(mapModule) {
         btn.disabled = false;
       }
     });
+  }
+}
+
+// ------------------ UI Wiring ------------------
+function wireUI(mapModule) {
+
+  // FAB
+  const fab = $('fabCentre');
+  if (fab) {
+    fab.addEventListener('click', () => mapModule.centreOnSelf());
+  }
+
+  // Logout
+  const logoutBtn = $('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.onclick = () => {
+      bootstrap.Offcanvas.getInstance($('appMenu'))?.hide();
+      Auth.logout();
+    };
   }
 
   // Handle message links
@@ -279,6 +281,10 @@ async function initApp() {
   wireAuth(mapModule);
   initNotifications();
 
+  // Wire login/register forms immediately — must not wait for auth,
+  // as guests use these forms before auth completes
+  wireAuthForms();
+
   // Set __authReady BEFORE initGeo — geo.js checks instanceof Promise
   window.__authReady = Auth.init();
 
@@ -297,7 +303,7 @@ async function initApp() {
   if (document.getElementById('profileFormWrap')) initMyProfile();
   if (document.getElementById('pubProfilePage'))  initPublicProfile();
 
-  // Wire UI last (DOM must exist)
+  // Wire remaining UI (logout, message links, etc.)
   wireUI(mapModule);
 }
 
