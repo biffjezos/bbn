@@ -107,6 +107,7 @@ function getSelfAccountType() {
 
 function initMap(lat,lng){
   if(map) return;
+  if(!document.getElementById('map')) return;
   map = L.map('map',{center:[lat,lng], zoom:getZoom(), zoomControl:true});
   L.tileLayer(TILE_URL,{attribution:TILE_ATTR,maxZoom:19}).addTo(map);
   canvasRenderer = L.canvas({padding:0.5});

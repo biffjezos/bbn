@@ -39,7 +39,6 @@ use reqwest::Url;
 use serde_json::json;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
-pub const ALLOWED_ORIGINS: &[&str] = &["https://biffjezos.github.io"];
 
 fn parse_service_url(raw: &str, name: &str, allowed_host: &str) -> Result<String, String> {
     let url = Url::parse(raw)
@@ -62,6 +61,7 @@ fn parse_service_url(raw: &str, name: &str, allowed_host: &str) -> Result<String
 
 struct Config {
     port:           u16,
+    cors_origins:   Vec<String>,
     jwt_secret:     String,
     service_secret: String,
     authority_url:  String,
@@ -83,7 +83,7 @@ impl Config {
             "FAV_SERVICE_URL",       "FAV_SERVICE_ALLOWED_HOST",
             "BLOCKS_SERVICE_URL",    "BLOCKS_SERVICE_ALLOWED_HOST",
             "MIGRATION_SERVICE_URL", "MIGRATION_SERVICE_ALLOWED_HOST",
-            "JWT_SECRET", "SERVICE_SECRET",
+            "JWT_SECRET", "SERVICE_SECRET", "CORS_ORIGINS",
         ];
         let missing: Vec<_> = required.iter().filter(|k| env::var(k).is_err()).collect();
         if !missing.is_empty() {
@@ -91,6 +91,8 @@ impl Config {
         }
         Ok(Self {
             port:          env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3000),
+            cors_origins:  env::var("CORS_ORIGINS").unwrap()
+                .split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
             jwt_secret:    env::var("JWT_SECRET").unwrap(),
             service_secret:env::var("SERVICE_SECRET").unwrap(),
             authority_url: parse_service_url(&env::var("AUTHORITY_SERVICE_URL").unwrap(), "AUTHORITY_SERVICE_URL", &env::var("AUTHORITY_SERVICE_ALLOWED_HOST").unwrap())?,
@@ -108,6 +110,7 @@ impl Config {
 
 #[derive(Clone)]
 pub struct AppState {
+    pub cors_origins:    Vec<String>,
     pub jwt_secret:      String,
     pub service_secret:  String,
     pub authority_url:   String,
@@ -175,6 +178,7 @@ async fn main() {
     }
 
     let state = AppState {
+        cors_origins:    cfg.cors_origins.clone(),
         jwt_secret:      cfg.jwt_secret,
         service_secret:  cfg.service_secret,
         authority_url:   cfg.authority_url,
@@ -237,7 +241,7 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(
-            ALLOWED_ORIGINS.iter().map(|o| o.parse().unwrap()).collect::<Vec<_>>()
+            cfg.cors_origins.iter().filter_map(|o| o.parse().ok()).collect::<Vec<_>>()
         ))
         .allow_methods(AllowMethods::list([
             Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::OPTIONS,

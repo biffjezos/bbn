@@ -1,0 +1,28 @@
+---
+id: ui/map
+description: >
+  Map rendering module. Initialises a Leaflet map on #map (index page only),
+  places and updates self/nearby-user markers, draws radius circle.
+  Receives position and nearby-user data exclusively via CustomEvents from geo.js.
+pre_conditions:
+  - Leaflet (L) must be loaded as a global before map.js executes
+  - '#map' div must exist in the DOM before initMap() is called — map.js must guard against missing container
+  - window.Auth must be set before marker icons are created (sex/role-aware colours)
+  - 'geo:position' and 'geo:nearby' CustomEvents are the only inbound data contract from geo.js
+expected_behaviour:
+  - initMap() is a no-op when '#map' is absent from the DOM (non-index pages must not throw)
+  - initMap() is called at most once; subsequent calls on the same map instance are no-ops
+  - Self marker uses sex-aware icon (pink=f, blue=m, yellow=other); updates on sex change
+  - Nearby user markers are refreshed on every 'geo:nearby' event
+  - Radius circle colour matches self sex colour; hides when radius is 0
+  - refreshMarkers() re-renders all markers from last known nearby-user list
+  - refreshRadius() fetches tier radius from API and redraws circle
+  - centreOnSelf() pans map to last known self position
+  - onGuestExpired() / onLogout() clear all markers and radius
+sources:
+  - ui/scripts/lib/map.js
+  - ui/scripts/lib/geo.js
+  - services/server/templates/pages/index.html
+status: needs-review
+qa_report: Map container not found error on non-index pages; guard added 2026-03-30
+---

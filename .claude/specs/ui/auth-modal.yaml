@@ -5,9 +5,14 @@ additional_info: tests executed by owner
 related_spec:
 related_ticket:
 pre_conditions:
+pre_conditions:
+  - Forms must carry onsubmit="return false" at the HTML level — native submission must be impossible regardless of JS state
+  - wireAuthForms() must attach submit listeners before any async auth delay (before await window.__authReady)
+  - Password field must not carry a name= attribute — prevents plaintext password appearing in any URL even if submission somehow fires
 sources:
-  - /ui/_includes/modal-register.html
-  - /ui/_includes/modal-login.html
+  - services/server/templates/partials/modal-login.html
+  - services/server/templates/partials/modal-register.html
+  - ui/scripts/boomboom.js (wireAuthForms)
 expected_behaviour:
   - Login and registration forms are always empty after use
   - Form field values are deleted from memory (not just visually cleared) after submission or dismissal
