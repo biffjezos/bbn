@@ -1,0 +1,96 @@
+<!-- ============================================================
+     MODAL — Create Account
+     ============================================================ -->
+<div class="modal fade" id="registerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+    <div class="modal-content">
+
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title">Create Account</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body pt-2">
+        <div id="registerError" class="alert alert-danger d-none mb-3" role="alert"></div>
+
+        <div class="mb-3">
+          <label class="form-label" for="regEmail">Email</label>
+          <input
+            type="email"
+            class="form-control"
+            id="regEmail"
+            autocomplete="email"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="regNickname">
+            Nickname
+            <span class="text-faint fw-normal ms-1" style="text-transform:none;letter-spacing:0">— display name, min 2 chars</span>
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="regNickname"
+            autocomplete="off"
+            minlength="2"
+            maxlength="32"
+            placeholder="How you appear to others"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="regPassword">Password</label>
+          <input
+            type="password"
+            class="form-control"
+            id="regPassword"
+            autocomplete="new-password"
+            placeholder="At least 8 characters"
+          />
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-6">
+            <label class="form-label" for="regAge">Age</label>
+            <input
+              type="number"
+              class="form-control"
+              id="regAge"
+              min="18"
+              max="120"
+              placeholder="18+"
+            />
+          </div>
+          <div class="col-6">
+            <label class="form-label" for="regSex">Sex</label>
+            <select class="form-select" id="regSex">
+              <option value="m">Male</option>
+              <option value="f">Female</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-bbn-primary w-100" id="regSubmitBtn">
+          Create Account
+        </button>
+      </div>
+
+      <div class="modal-footer border-0 pt-0 justify-content-center">
+        <p class="text-muted-bb small mb-0">
+          Already have an account?
+          <a
+            href="#"
+            class="text-pink"
+            style="text-decoration:none"
+            data-bs-dismiss="modal"
+            data-bs-toggle="modal"
+            data-bs-target="#loginModal"
+          >Log in</a>
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>

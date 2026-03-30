@@ -9,7 +9,7 @@ This file lists only open, active, planned, and deferred tickets — one row eac
 
 | ID | Status | Priority | Title | Phase |
 |---|---|---|---|---|
-| [T-28](tickets/T-28.md) | planned | high | server — Rust Tera HTML server with API/WS proxy facade | 0/4 |
+| [T-28](tickets/T-28.md) | active | high | server — Rust Tera HTML server with API/WS proxy facade | 2/4 |
 | [T-29](tickets/T-29.md) | planned | high | JS cleanup — fix ES6 module refactor, trim to UI-only | 0/3 |
 | [T-30](tickets/T-30.md) | planned | high | server deployment — Railway, CORS removal, CI/CD migration | 0/3 |
 | [T-27](tickets/T-27.md) | planned | high | App Architecture Specs | - |

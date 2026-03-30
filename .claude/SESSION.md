@@ -6,55 +6,36 @@
 
 ---
 
-**Branch:** `claude/add-specs-document-7bxNJ`
-**Session date:** 2026-03-29
-**Last updated:** 2026-03-29T23:30Z
+**Branch:** `claude/new-session-wfizk`
+**Session date:** 2026-03-30
+**Last updated:** 2026-03-30T00:00Z
 
 ---
 
 ## In Progress
 
-T-28 Phase 2 — Tera template migration (next session)
+T-28 Phase 3 — Server-side route guards and auth context injection (next session)
 
 ---
 
 ## Completed This Session
 
-- **T-28 Phase 1 — server crate scaffold** ✅
-  - `services/server/src/main.rs`: Axum routes, static serving (ServeDir/ServeFile), health, gateway URL validation
-  - `services/server/src/proxy.rs`: HTTP proxy all methods `/api/*` + WebSocket tunnel `/ws/*`
-  - `services/Dockerfile.server`: multi-stage build, copies `ui/` assets into `/app/static`
-  - Added to workspace: `server` member, `tera`, `tokio-tungstenite`, `url` deps
-  - `cargo build -p server` and `cargo check` — zero errors, zero warnings
-
-- **5 behavioral specs written** (T-28/T-29 scope)
-  - `services/server/proxy.yaml`, `services/server/route-guards.yaml`, `services/server/static-serving.yaml`
-  - `ui/auth.yaml`, `ui/api.yaml`
-
-- **T-28/T-29/T-30 planned** — tickets created with full phase breakdown
-
-- **Full JS audit** — site is currently offline (owner aware)
-  - `settings.js`: all function bodies are comment stubs — total loss, deferred
-  - `auth.js`: uses `window.Api.*` (never set in ES6 module context)
-  - `geo.js`, `messages.js`, `notifications.js`, `warmup.js`: use `window.BOOMBOOM_API_URL`
-  - `favourites.js`: only correctly modularised file
-  - All JS fixes deferred until after T-28 (T-29)
-
-- **Spec workflow introduced into CLAUDE.md** — specs checked/created before every module touch
-  - `specs/ui/01.yaml` → `specs/ui/auth-modal.yaml`, schema fixed, naming convention added to README
+- **T-28 Phase 2 — Tera template migration** ✅
+  - `services/server/templates/base.html`: Tera layout, drops `window.BOOMBOOM_API_URL`/`BOOMBOOM_BASE` injections, inline guard script cleaned of Liquid, base path `/` throughout
+  - `services/server/templates/partials/`: navbar, offcanvas-menu, modal-login, modal-register, modal-pin, modal-lock, modal-tier-gate, modal-block, modal-delete (9 partials)
+  - `services/server/templates/pages/`: index, messages, messages-thread, profile, profile-view, favourites, settings, admin, donate (9 pages)
+  - `services/server/src/main.rs`: Tera init, `TEMPLATES_DIR`/`ASSET_VERSION` env vars, `AppState` extended with `tera`/`asset_version`, 9 page handlers, all routes added
+  - `ui/scripts/lib/api.js`: `API_BASE = ''` (relative paths, no more `window.BOOMBOOM_API_URL`)
+  - `cargo build -p server` — zero errors, zero warnings
 
 ---
 
 ## Key Decisions Made
 
-- **Service name**: `server` — `services/server/`, `Dockerfile.server`, binary `server`
-- **Template engine**: Tera — Liquid-like syntax, template inheritance, easier Jekyll migration
-- **Architecture**: separate `server` + `gateway` — gateway untouched; server is HTML + proxy only
-- **CORS**: to be removed from gateway once server is sole browser entry point (T-30 Phase 2)
-- **JWT cookie**: `bbn_tok` set by `auth.js` on login, read by server for route guards + SSR context
-- **Base path**: `/bbn` prefix dropped — server serves from `/`
-- **`window.BOOMBOOM_API_URL`**: eliminated — JS uses relative `/api/*`
-- **Spec coverage**: Option B (incremental) — create specs as modules are touched
+- **modal-block and modal-delete** included in `base.html` globally (not in original `default.html` but referenced by boomboom.js — including them fixes the oversight)
+- **Inline route guard** kept in `base.html` for Phase 2 (removed in Phase 3 when server-side guards land)
+- **Build info** in offcanvas simplified to `v{{ asset_version }}` (Liquid `site.github.build_revision` block removed)
+- **`TEMPLATES_DIR`** defaults to `./templates`; `ASSET_VERSION` defaults to `"0"`
 
 ---
 
@@ -70,29 +51,24 @@ T-28 Phase 2 — Tera template migration (next session)
 ## Handoff Notes
 
 ### Start here next session
-**T-28 Phase 2 — Tera template migration.** Read `specs/services/server/static-serving.yaml` before starting.
+**T-28 Phase 3 — Server-side route guards and auth context injection.** Read `specs/services/server/route-guards.yaml` before starting.
 
 The work is:
-1. Port `ui/_layouts/default.html` → `services/server/templates/base.html` (Tera layout with `{% block content %}`)
-2. Port each `ui/_includes/*.html` → `services/server/templates/partials/` (Tera partials, `{% include "partials/navbar.html" %}`)
-3. Port each page HTML → `services/server/templates/pages/` (extend base, fill content block)
-4. Add page routes in `main.rs` (one route per page, render template with base context)
-5. Remove Jekyll frontmatter (`---` blocks) and Liquid syntax from all templates
+1. Add `JWT_SECRET` env var to server
+2. Axum middleware: read `bbn_tok` cookie → decode/verify JWT → extract `sub` (nickname), `role`, `tier`, `exp`
+3. Protected routes: `/messages/`, `/favourites/`, `/profile/`, `/settings/` — redirect to `/` if JWT missing or expired
+4. Admin-only: `/admin/` — redirect to `/` if role ≠ admin
+5. Inject into template context: `is_logged_in: true`, `nickname`, `tier`, `role` when valid JWT present
+6. `auth.js` Phase 3 changes: on login set `bbn_tok` cookie (`SameSite=Strict; Secure; Path=/`); on logout clear it; remove inline guard script from `base.html`
 
-**Liquid → Tera conversion cheatsheet:**
-- `{% include navbar.html %}` → `{% include "partials/navbar.html" %}`
-- `{{ '/' | relative_url }}` → `/`
-- `{{ site.baseurl }}` → `` (empty — base is `/`)
-- `{% if page.title %}{{ page.title }}{% endif %}` → `{% if title %}{{ title }}{% endif %}`
-- Layout: `{{ content }}` → `{% block content %}{% endblock content %}`
-- Pages use `{% extends "base.html" %}` + `{% block content %}...{% endblock %}`
+**Dependencies:**
+- `jsonwebtoken` crate needed for JWT decode/verify — add to workspace + server Cargo.toml
+- Cookie parsing: `axum-extra` with `cookie` feature, or `tower-cookies` — check what's already in workspace
 
-**Client-side changes in Phase 2 (do alongside templates):**
-- `api.js`: change `const API_BASE = window.BOOMBOOM_API_URL` → `const API_BASE = ''` (relative)
-- Remove `window.BOOMBOOM_API_URL` injection from base template
-- Remove `window.BOOMBOOM_BASE` injection from base template
+**Tera template context note:**
+`base_context()` in main.rs already inserts `is_logged_in: false`, `nickname: None`, etc. Phase 3 middleware overrides these from the JWT.
 
 ### Other notes
-- `_includes/` contains JS files (`boomboom.js`, `admin.js`, `i8n.js`, `profile.js`) — pre-module remnants; confirm if still referenced in any template before deleting.
 - The `nearby_m: 0` sentinel is the correct fallback in `GatewayRadii`. Do NOT restore it to 500.
-- `auth.js` `initGuest()` uses `window.Api.guestAuth()` — this will be fixed in T-29, not T-28. Phase 2 template work doesn't require a working site.
+- `auth.js` `initGuest()` uses `window.Api.guestAuth()` — this will be fixed in T-29.
+- Phase 2 templates don't include `modal-block` in original `default.html` but we added it globally — this is intentional (fix for existing omission).
