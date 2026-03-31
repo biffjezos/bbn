@@ -22,6 +22,7 @@ This file lists only open, active, planned, and deferred tickets — one row eac
 | [T-06](tickets/T-06.md) | deferred | medium | Venue Accounts — Phase 2 (venue messaging) | 2/3 |
 | [T-07b](tickets/T-07b.md) | open | medium | Device Notifications | — |
 | [T-09](tickets/T-09.md) | open | medium | Role CRUD with Permissions UI | — |
+| [T-34](tickets/T-34.md) | planned | medium | spec — write specs/ui/opaque-client.yaml | 0/1 |
 | [T-33](tickets/done/T-33.md) | done | medium | Admin panel — /admin page empty (admin.js dead code) | 2/2 |
 | [T-02](tickets/T-02.md) | open | low | Analytics (anal.js / analytics-service) | — |
 | [T-14](tickets/T-14.md) | deferred | low | Manager-tier venue quota | — |
