@@ -8,19 +8,19 @@
 
 **Branch:** `claude/fix-ui-api-issues-ObVYc`
 **Session date:** 2026-03-31
-**Last updated:** 2026-03-31T12:10Z
+**Last updated:** 2026-03-31T12:30Z
 
 ---
 
 ## In Progress
 
-Committing and pushing fix batch.
+Session wrap-up — complete.
 
 ---
 
 ## Completed This Session
 
-### UI/API bug fixes — (pending commit)
+### UI/API bug fixes — commit 70a96d6
 
 All fixes are client-side JS and one server template change.
 
