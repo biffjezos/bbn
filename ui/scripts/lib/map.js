@@ -25,8 +25,8 @@ const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
 const TILE_ATTR = '&copy; OpenStreetMap contributors &copy; CARTO';
 const DEFAULT_ZOOM = 17;
 
-function getZoom() { return window.BbmPrefs?.mapZoom?.() ?? DEFAULT_ZOOM; }
-function showFavPins() { return window.BbmPrefs?.showFavPins?.() ?? true; }
+function getZoom() { return window.BbnPrefs?.mapZoom?.() ?? DEFAULT_ZOOM; }
+function showFavPins() { return window.BbnPrefs?.showFavPins?.() ?? true; }
 
 function markerEmoji(sex) { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
 function markerClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'guest'; }
@@ -293,17 +293,14 @@ window.addEventListener('storage', e=>{
   if(e.key==='bbn_meet' && map && GeoState.pos) updateMeetingMode(GeoState.pos,lastNearbyUsers);
 });
 
-// Load initial state after auth resolves
-window.__authReady?.then(()=>{
-  const tier=window.Auth?.getTier?.()||'guest';
-  window.Api.getNearbyRadius(tier).then(data=>{ viewRadius=data.radiusM??0; }).catch(()=>{});
-  if(GeoState.pos) initMap(GeoState.pos.lat,GeoState.pos.lng);
-  if(window.Auth?.isRegistered()){
-    window.Api.getFavourites().then(data=>{
-      favIds=new Set((data.favourites||[]).map(f=>f.userId));
-      favOnline=new Map((data.favourites||[]).map(f=>[f.userId,f.online]));
-    }).catch(()=>{});
-  }
-});
+// Called by boomboom.js after auth resolves (avoids window.__authReady timing issues)
+function loadFavourites(){
+  if(!window.Auth?.isRegistered()) return;
+  window.Api.getFavourites().then(data=>{
+    favIds=new Set((data.favourites||[]).map(f=>f.userId));
+    favOnline=new Map((data.favourites||[]).map(f=>[f.userId,f.online]));
+    if(map && GeoState.pos && lastNearbyUsers.length) drawFavLines(GeoState.pos,lastNearbyUsers);
+  }).catch(()=>{});
+}
 
-export const MapModule = { centreOnSelf, refreshMarkers, onGuestExpired, onLogout, refreshSelf, refreshRadius };
+export const MapModule = { centreOnSelf, refreshMarkers, onGuestExpired, onLogout, refreshSelf, refreshRadius, loadFavourites };

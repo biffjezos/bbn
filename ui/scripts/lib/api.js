@@ -42,7 +42,7 @@ async function apiFetch(path, options = {}, _retries = 1) {
         err.status = res.status;
         err.data = data;
         if (res.status === 403 && data.required) {
-            document.dispatchEvent(new CustomEvent('bbm:tier-gate', { detail: data }));
+            document.dispatchEvent(new CustomEvent('bbn:tier-gate', { detail: data }));
         }
         if (res.status === 401 && (data.code === 'TOKEN_REVOKED' || data.code === 'TOKEN_INVALID')) {
             window.Auth?.logout?.();
@@ -150,11 +150,36 @@ export const Api = {
     createVenue: (fields) => apiFetch('/manager/venues', { method: 'POST', body: JSON.stringify(fields) }),
     updateVenue: (id, fields) => apiFetch(`/manager/venues/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(fields) }),
     deleteVenue: (id) => apiFetch(`/manager/venues/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    // ── Admin ─────────────────────────────────────────────────
+    adminGetConfig: () => apiFetch('/admin/config'),
+    adminGetSettings: () => apiFetch('/admin/settings'),
+    adminGetLocationConfig: () => apiFetch('/admin/location-config'),
+    adminUpdateSetting: (key, value) => apiFetch(`/admin/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+    adminSearchUsers: ({ q, by, accountType } = {}) => {
+        const qs = new URLSearchParams();
+        if (q)           qs.set('q', q);
+        if (by)          qs.set('by', by);
+        if (accountType) qs.set('accountType', accountType);
+        return apiFetch(`/admin/users?${qs.toString()}`);
+    },
+    adminListVenueManagers: () => {
+        const qs = new URLSearchParams({ by: 'role', q: 'venue_manager' });
+        return apiFetch(`/admin/users?${qs.toString()}`);
+    },
+    adminPatchUser: (userId, changes) => apiFetch(`/admin/users/${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+    adminReassignVenueManager: (venueId, newManagerId) => apiFetch(`/admin/venues/${encodeURIComponent(venueId)}/manager`, { method: 'PATCH', body: JSON.stringify({ managerId: newManagerId }) }),
+    adminListTiers: () => apiFetch('/admin/tiers'),
+    adminCreateTier: (payload) => apiFetch('/admin/tiers', { method: 'POST', body: JSON.stringify(payload) }),
+    adminUpdateTier: (name, payload) => apiFetch(`/admin/tiers/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(payload) }),
+    adminDeleteTier: (name) => apiFetch(`/admin/tiers/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    adminListFeatures: () => apiFetch('/admin/features'),
+    adminUpdateFeature: (name, payload) => apiFetch(`/admin/features/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(payload) }),
 };
 
 // Optional: global tier-gate modal handler
 export function initApiGlobals() {
-    document.addEventListener('bbm:tier-gate', () => {
+    document.addEventListener('bbn:tier-gate', () => {
         const el = document.getElementById('tierGateModal');
         if (el && window.bootstrap) bootstrap.Modal.getOrCreateInstance(el).show();
     });

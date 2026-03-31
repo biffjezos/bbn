@@ -15,13 +15,13 @@ function cache(zoom, showPins) {
   localStorage.setItem(PREF_FAV_PINS, showPins ? 'true' : 'false');
 }
 
-function mapZoom()    { 
+function mapZoom() {
   const v = localStorage.getItem(PREF_MAP_ZOOM);
   return v !== null ? parseInt(v, 10) : 17;
 }
 
-function showFavPins() { 
-  return localStorage.getItem(PREF_FAV_PINS) !== 'false'; 
+function showFavPins() {
+  return localStorage.getItem(PREF_FAV_PINS) !== 'false';
 }
 
 async function sync() {
@@ -32,24 +32,8 @@ async function sync() {
   } catch (_) {}
 }
 
-// Hook into Auth.onLogin (chain pattern used throughout app.js)
-const _orig = window.Auth?.onLogin;
-if (window.Auth) {
-  window.Auth.onLogin = function (data) {
-    if (_orig) _orig(data);
-    sync();
-  };
-}
-
-// Also sync if a valid token is already present on page load
-if (window.__authReady) {
-  window.__authReady.then(function () {
-    sync();
-  });
-}
-
 // Exposed API
-export const BbmPrefs = {
+export const BbnPrefs = {
   mapZoom,
   showFavPins,
   sync,
@@ -57,5 +41,5 @@ export const BbmPrefs = {
   KEYS: { MAP_ZOOM: PREF_MAP_ZOOM, FAV_PINS: PREF_FAV_PINS },
 };
 
-// Optionally, attach BbmPrefs to window for backward compatibility
-window.BbmPrefs = BbmPrefs;
+// Attach to window for modules that reference window.BbnPrefs synchronously
+window.BbnPrefs = BbnPrefs;

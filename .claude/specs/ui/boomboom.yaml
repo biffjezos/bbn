@@ -14,21 +14,25 @@ sources:
   - /services/server/templates/partials/modal-login.html
   - /services/server/templates/partials/modal-register.html
 expected_behaviour:
-  - "window.Auth, window.Api, window.OpaqueClient, window.BbmPrefs are set at the very start of initApp() so synchronous module-level code in lib/* can access them immediately"
+  - "window.Auth, window.Api, window.OpaqueClient, window.BbnPrefs are set at the very start of initApp() so synchronous module-level code in lib/* can access them immediately"
   - "wireAuth(mapModule) is called BEFORE Auth.init() — Auth.onLogin/onLogout must be set before auth completes and fires them"
   - "wireAuthHooks() is called immediately after wireAuth() — wires lock module into Auth.onLogin/onLogout after window.Auth is set"
   - "wireAuthForms() is called BEFORE window.__authReady is assigned — login/register submit listeners attached before any async delay; forms can never submit natively during warm-up"
   - "window.__authReady is set to Auth.init() BEFORE initGeo() is called — geo.js guards on window.__authReady instanceof Promise; undefined → geo never starts"
-  - "applyAuthState() is called only after await window.__authReady — never before"
-  - "After auth resolves: renderFavourites(true) called if favListWrap exists; Messages.initMessagesPage called for convList/thread pages; admin.js injected dynamically if adminPanel exists; initSettings() called"
-  - "Auth.onLogin hook calls renderFavourites(true) and BbmPrefs.sync() — page state refreshed whenever auth changes"
+  - "Route guard runs after await window.__authReady: if not registered and on a PROTECTED_PATH → redirect to /. Handles expired-token page-load case where Auth.init() calls initGuest() without calling onLogout."
+  - "applyAuthState() is called only after await window.__authReady and after the route guard — never before"
+  - "After auth resolves: renderFavourites(true) called if favListWrap exists; Messages.initMessagesPage called for convList/thread pages; admin.js injected dynamically if adminPanel exists; BbnPrefs.sync() awaited then initSettings() called"
+  - "Auth.onLogin hook calls mapModule.loadFavourites(), mapModule.refreshRadius(), renderFavourites(true), BbnPrefs.sync() — map and page state refreshed on every login"
+  - "Auth.onLogout hook calls mapModule.onLogout() (full map clear) and redirects to / if on a PROTECTED_PATH"
+  - "Auth.onGuestExpired hook calls mapModule.onGuestExpired() — clears all markers and lines"
   - "Login/register forms: e.preventDefault() stops native submission; password field cleared immediately after every attempt"
-  - "Forms must not submit natively under any timing condition — Tera templates carry onsubmit=return false as unconditional backstop"
   - "admin.js is loaded as a dynamic <script> element injected after auth resolves — admin.js uses window.Auth/Api/.__authReady which are guaranteed set at that point"
   - "wireUI() (logout, FAB, message links) is called last, after auth resolves"
+  - "window.__authReady is never accessed at ES module import time — all modules that need it must receive it via exported functions called from initApp()"
 status: implemented
 qa_report: >
-  2026-03-31: wireAuthHooks() added; BbmPrefs imported and exposed;
-  renderFavourites/messages/admin init added post-auth. Auth.onLogin
-  hooks refreshFavourites + BbmPrefs.sync. Status updated to implemented.
+  2026-03-31 (second pass): BbmPrefs renamed to BbnPrefs throughout. Route guard
+  added after await window.__authReady. Auth.onLogout uses mapModule.onLogout().
+  Auth.onGuestExpired wired. loadFavourites() called in onLogin. await BbnPrefs.sync()
+  before initSettings(). PROTECTED_PATHS constant shared by guard and onLogout.
 ---

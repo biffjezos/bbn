@@ -40,7 +40,7 @@ async function submitBlock() {
         await window.Api.blockUser(userId, reason);
         const modal = getModal();
         if (modal && window.bootstrap) bootstrap.Modal.getInstance(modal)?.hide();
-        document.dispatchEvent(new CustomEvent('bbm:user-blocked', { detail: { userId } }));
+        document.dispatchEvent(new CustomEvent('bbn:user-blocked', { detail: { userId } }));
     } catch (err) {
         if (errEl) {
             errEl.textContent = err.message || 'Could not block user. Try again.';

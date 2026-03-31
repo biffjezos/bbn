@@ -12,7 +12,7 @@ import { initDebugConsole } from './lib/debug.js';
 import { renderFavourites, initSearchBar } from './lib/favourites.js';
 import { GeoState, initGeo, pushLocation, connectLocWS, closeLocWS } from './lib/geo.js';
 import { initUnlockButton, wireAuthHooks } from './lib/lock.js';
-import { BbmPrefs } from './lib/prefs.js';
+import { BbnPrefs } from './lib/prefs.js';
 import { MapModule } from './lib/map.js';
 import * as Messages from './lib/messages.js';
 import { initNotifications } from './lib/notifications.js';
@@ -25,6 +25,15 @@ import { warmUpBackend } from './lib/warmup.js';
 // ------------------ Constants ------------------
 const BASE = '';
 const $ = (id) => document.getElementById(id);
+
+// Protected routes — guests must not access these
+const PROTECTED_PATHS = [
+  BASE + '/messages',
+  BASE + '/favourites',
+  BASE + '/profile',
+  BASE + '/admin',
+  BASE + '/settings',
+];
 
 // ------------------ Helpers ------------------
 function getRole() {
@@ -53,6 +62,13 @@ function showRateLimitBanner() {
 
   div.querySelector('.btn-close').onclick = () => div.remove();
   container.appendChild(div);
+}
+
+// Redirect to home if on a protected route
+function redirectIfProtected() {
+  if (PROTECTED_PATHS.some(p => location.pathname.startsWith(p))) {
+    window.location.href = BASE + '/';
+  }
 }
 
 // ------------------ UI State ------------------
@@ -127,24 +143,17 @@ function wireAuth(mapModule) {
 
     mapModule.refreshMarkers();
     mapModule.refreshRadius();
+    mapModule.loadFavourites();
     setTimeout(() => mapModule.refreshMarkers(), 1000);
     renderFavourites(true);
-    BbmPrefs.sync();
+    BbnPrefs.sync();
   };
 
   Auth.onLogout = () => {
     applyAuthState(false);
-    mapModule.refreshMarkers();
+    mapModule.onLogout();
 
-    const prot = [
-      BASE + '/messages',
-      BASE + '/favourites',
-      BASE + '/profile',
-      BASE + '/admin',
-      BASE + '/settings'
-    ];
-
-    if (prot.some(p => location.pathname.startsWith(p))) {
+    if (PROTECTED_PATHS.some(p => location.pathname.startsWith(p))) {
       window.location.href = BASE + '/';
     }
   };
@@ -153,7 +162,7 @@ function wireAuth(mapModule) {
 
   // optional (handled elsewhere but kept safe)
   Auth.onGuestReady = () => {};
-  Auth.onGuestExpired = () => {};
+  Auth.onGuestExpired = () => { mapModule.onGuestExpired(); };
 }
 
 // ------------------ Auth Form Wiring ------------------
@@ -258,7 +267,7 @@ async function initApp() {
   window.Auth = Auth;
   window.Api = Api;
   window.OpaqueClient = OpaqueClient;
-  window.BbmPrefs = BbmPrefs;
+  window.BbnPrefs = BbnPrefs;
 
   // Service Worker
   if ('serviceWorker' in navigator) {
@@ -300,6 +309,16 @@ async function initApp() {
 
   await window.__authReady;
 
+  // Route guard — redirect unauthenticated users from protected pages.
+  // Handles expired tokens on page load (Auth.init() falls through to guest
+  // without calling onLogout, so the redirect in onLogout doesn't fire).
+  if (!Auth.isRegistered()) {
+    if (PROTECTED_PATHS.some(p => location.pathname.startsWith(p))) {
+      window.location.href = BASE + '/';
+      return;
+    }
+  }
+
   // Apply UI state AFTER auth is ready
   applyAuthState(Auth.isRegistered());
 
@@ -324,6 +343,8 @@ async function initApp() {
   }
 
   // Settings and profile pages require auth (token for API calls)
+  // Sync preferences first so initPreferences() reads correct values from localStorage
+  if (Auth.isRegistered()) await BbnPrefs.sync();
   initSettings();
   if (document.getElementById('profileFormWrap')) initMyProfile();
   if (document.getElementById('pubProfilePage'))  initPublicProfile();

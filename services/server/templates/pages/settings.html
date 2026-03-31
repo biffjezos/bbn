@@ -17,8 +17,7 @@
     <h2 class="h5 mb-3" style="color:var(--bbn-text-faint);letter-spacing:0.05em;text-transform:uppercase;font-size:0.78rem">Account</h2>
     <div id="accountInfoWrap" class="mb-5">
       {% if ssr_me %}
-      <p class="small mb-1"><span class="text-muted-bb">Tier:</span> {{ ssr_me.tier | default(value="—") }}</p>
-      <p class="small mb-0"><span class="text-muted-bb">Account type:</span> {{ ssr_me.account_type | default(value="—") }}</p>
+      <p class="small mb-0"><span class="text-muted-bb">Tier:</span> {{ ssr_me.tier | default(value="—") }}</p>
       {% else %}
       <p class="text-muted-bb small">Loading…</p>
       {% endif %}
