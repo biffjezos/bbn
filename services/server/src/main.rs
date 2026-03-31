@@ -45,6 +45,7 @@ struct MeData {
     bio:          Option<String>,
     tier:         Option<String>,
     account_type: Option<String>,
+    email:        Option<String>,
 }
 
 /// Call GET {gateway_url}/api/users/me on behalf of the logged-in user.

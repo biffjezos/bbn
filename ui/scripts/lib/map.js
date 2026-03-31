@@ -98,6 +98,13 @@ function makeLeafIcon(sex, isSelf, accountType){
   });
 }
 
+function getSelfId() {
+  try{
+    const t = window.Auth?.getToken?.();
+    return t?JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).sub:null;
+  } catch { return null; }
+}
+
 function getSelfAccountType() {
   try{
     const t = window.Auth?.getToken?.();
@@ -115,38 +122,28 @@ function initMap(lat,lng){
 }
 
 function placeSelfMarker(lat,lng){
-  const isRegistered = window.Auth?.isRegistered?.();
-  const sex = isRegistered ? (window.Auth?.getSex?.() ?? null) : null;
-  const accountType = isRegistered ? getSelfAccountType() : null;
+  const sex = window.Auth?.getSex?.() ?? null;
+  const accountType = getSelfAccountType();
   const isVenue = accountType==='venue';
   const radius = viewRadius;
 
-  // Self marker (sex-aware personal icon) — registered users only.
-  // Guests are not identified on the map — no personal marker.
-  if (!isRegistered) {
-    if (selfMarker) { map?.removeLayer(selfMarker); selfMarker = null; }
-  } else {
-    if(selfMarker){
-      selfMarker.setLatLng([lat,lng]);
-      if(sex!==lastSex){
-        lastSex = sex;
-        selfMarker.setIcon(makeLeafIcon(sex,true,accountType));
-        if(lastBearing!==null) setSelfBearing(lastBearing);
-      }
-    } else {
+  if(selfMarker){
+    selfMarker.setLatLng([lat,lng]);
+    if(sex!==lastSex){
       lastSex = sex;
-      selfMarker = L.marker([lat,lng],{
-        icon: makeLeafIcon(sex,true,accountType),
-        zIndexOffset:-1000
-      }).addTo(map);
+      selfMarker.setIcon(makeLeafIcon(sex,true,accountType));
+      if(lastBearing!==null) setSelfBearing(lastBearing);
     }
+  } else {
+    lastSex = sex;
+    selfMarker = L.marker([lat,lng],{
+      icon: makeLeafIcon(sex,true,accountType),
+      zIndexOffset:-1000
+    }).addTo(map);
   }
 
-  // Radius circle — shown for both guests and registered users when viewRadius > 0.
   if(radius>0){
-    const clr = isRegistered
-      ? (isVenue?'rgba(255,255,255,0.45)':sex==='f'?'#e8186d':sex==='m'?'#0eb8e8':'#ffd200')
-      : '#ffd200'; // guest uses neutral yellow
+    const clr = isVenue?'rgba(255,255,255,0.45)':sex==='f'?'#e8186d':sex==='m'?'#0eb8e8':'#ffd200';
     if(selfCircle){
       selfCircle.setLatLng([lat,lng]);
       selfCircle.setRadius(radius);
@@ -163,10 +160,12 @@ function placeSelfMarker(lat,lng){
 }
 
 function renderMarkers(users){
+  const selfId = getSelfId();
   const seen = new Set();
   users.forEach(u=>{
     const ulat = u.lat, ulng = u.lon ?? u.lng;
     seen.add(u.userId);
+    if(selfId && u.userId === selfId) return; // never render yourself as a nearby-user marker
     if(markers[u.userId]){
       markers[u.userId].setLatLng([ulat,ulng]);
       return;
@@ -268,9 +267,10 @@ function onLogout(){
   if(selfCircle){map?.removeLayer(selfCircle);selfCircle=null;}
   if(meetControl){meetControl.remove();meetControl=null;}
   lastNearbyUsers=[]; favIds=new Set(); favOnline=new Map();
-  lastSex=undefined; viewRadius=0;
+  viewRadius=0;
   setSelfBearing(null);
-  refreshRadius(); // fetch guest tier radius so circle redraws for guest
+  // refreshRadius() is called from Auth.onGuestReady in boomboom.js
+  // after initGuest() completes and _token is the guest token (correct tier).
 }
 function refreshSelf(){ if(map && GeoState.pos) placeSelfMarker(GeoState.pos.lat,GeoState.pos.lng); }
 function refreshRadius(){

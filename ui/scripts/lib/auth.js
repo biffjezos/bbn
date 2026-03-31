@@ -112,6 +112,8 @@ export const Auth = (() => {
         },
 
         async initGuest(_retry = false) {
+            _sex = null;
+            _nickname = null;
             _guestId = getOrCreateGuestId();
             const now = Date.now();
             const storedExp = parseInt(localStorage.getItem(STORAGE_GUEST_EXP) || '0', 10);

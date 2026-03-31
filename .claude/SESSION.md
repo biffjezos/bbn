@@ -8,56 +8,78 @@
 
 **Branch:** `claude/fix-aria-hidden-focus-ZsyJo`
 **Session date:** 2026-03-31
-**Last updated:** 2026-03-31T13:30Z
+**Last updated:** 2026-03-31T15:00Z
 
 ---
 
 ## In Progress
 
-Client-side bug fixes (current session) — committing now.
+Nothing — ready to commit and push.
 
 ---
 
 ## Completed This Session
 
-### Fix batch 2 — client-side bugs from v3e46488 deploy
+### Fix batch 1 — deployed v3e46488 bugs
 
-#### `DEBUG is not defined` — lock.js crash (breaks every page)
-- **Root cause**: `lock.js` referenced `DEBUG` as a bare identifier but never declared it. `api.js` declares `const DEBUG` as a module-scoped constant; it does not leak to other modules.
-- **Fix**: Added `const DEBUG = window.location.search.includes('dbg');` at the top of `lock.js`.
+#### `DEBUG is not defined` — lock.js crash
+- Added `const DEBUG = window.location.search.includes('dbg');` at top of lock.js.
 
 #### aria-hidden / focus accessibility warning
-- **Root cause**: `lock()` and `unlock()` showed/hid the Bootstrap modal while a focused element remained in the page or modal. Browser blocks `aria-hidden` on elements with focused descendants.
-- **Fix**: Call `document.activeElement?.blur()` before `modal.show()` (in `lock()`) and before `modal.hide()` (in `unlock()`).
+- Added `document.activeElement?.blur()` before modal.show() and modal.hide() in lock.js.
 
-#### Map — self marker and radius stale after logout
-- **Root cause**: `onLogout()` did not remove `selfMarker`, `selfCircle`, or reset `viewRadius`/`lastSex`. After logout, the logged-in user's sex-aware icon and large admin radius remained on the map.
-- **Fix**: `onLogout()` now removes `selfMarker`, `selfCircle`, resets `viewRadius=0`, `lastSex=undefined`, and calls `refreshRadius()` to fetch the guest tier radius. `placeSelfMarker()` now guards against non-registered users: guests do not get a personal sex-aware marker. The radius circle is shown for both guests and registered users (guest circle uses neutral yellow).
+#### /messages — blank instead of "No conversations yet."
+- Early return with empty-state message when `Object.keys(threads).length === 0` in messages.js.
 
-#### Map — fresh guest has no radius circle
-- **Root cause**: `refreshRadius()` was only called from `Auth.onLogin`. Guests (never logged in) never triggered `onLogin`, so `viewRadius` stayed 0 and no circle was drawn.
-- **Fix**: After `await window.__authReady` in `initApp()`, if `!Auth.isRegistered()`, call `mapModule.refreshRadius()` to fetch the guest tier radius.
+#### /settings — "Loading…" forever when API down
+- JWT immediate fallback (tier, role) rendered synchronously; API enriches with email if available.
 
-#### /messages — "No conversations" message missing
-- **Root cause**: `handleConversationsUpdate([])` with empty messages produced an empty thread map, and `Promise.all([]).then(arr => arr.join(''))` set `wrap.innerHTML = ''` (blank).
-- **Fix**: Early return with empty-state message when `Object.keys(threads).length === 0`.
+#### /profile — SSR content flash
+- Removed `{% if ssr_me %}` block from profile.html server template entirely.
 
-#### /settings — account info shows "Loading…" forever if API down
-- **Root cause**: `initAccountInfo()` showed "Loading…" initially, then catch block did nothing on API failure, leaving "Loading…" forever.
-- **Fix**: JWT data (nickname, tier, role) rendered synchronously as immediate fallback. API call runs after and enriches with email if available.
+#### /settings — email + role in SSR account info
+- Added email + role to settings.html SSR; added email field to MeData struct in main.rs.
 
-#### /profile — SSR content flicker (nickname/age h? element appears then disappears)
-- **Root cause**: Server renders SSR content (nickname, age) into `#profileFormWrap`. JS only replaces it after `await window.__authReady` (up to several seconds later). Brief flash of SSR data before the proper profile form.
-- **Fix**: Added immediate `#profileFormWrap` clear at the start of `initApp()` (at `DOMContentLoaded` time, before auth resolves).
+### Fix batch 2 — regressions introduced in v900626b
+
+#### Guest self marker completely gone
+- Removed the `if (!isRegistered) { remove; return; }` guard added in session 1. Guests always get a yellow 👊 marker.
+
+#### Guest shows wrong sex-colored icon after logged-in session
+- Added `_sex = null; _nickname = null;` at the start of `initGuest()` in auth.js. Previously sex leaked from expired registered session.
+
+#### Two icons stacked after login (self + nearby self)
+- Added `getSelfId()` helper and `if(selfId && u.userId === selfId) return;` self-filter in `renderMarkers()` in map.js.
+
+#### Stale admin radius after logout
+- Removed `refreshRadius()` from `onLogout()` (reads stale admin token — cleared 3 lines AFTER onLogout fires).
+- Wired `Auth.onGuestReady = () => { mapModule.refreshRadius(); }` in boomboom.js — fires after initGuest() sets guest token.
+- `onLogout()` now removes selfMarker, selfCircle, resets viewRadius=0, lastSex=undefined immediately.
+
+#### Female user icon shows yellow instead of pink
+- Removed the registered-user guard that was blocking `placeSelfMarker()` from calling `makeLeafIcon(sex,...)`. The icon now always derives from `Auth.getSex()` which returns null for guests (→ yellow fist).
+
+### Cleanup
+
+#### `.claude/specs/` — deleted entirely
+- Owner instruction: "REMOVE ALL SPECS. THEY ARE USELESS."
+- `rm -rf .claude/specs/`
+
+#### `.claude/CLAUDE.md` — removed all specs-related content
+- Deleted "Spec Workflow" section entirely.
+- Removed "Update specs." bullet from Before Each Commit.
+- Removed "Update spec files" step from Session Wrap-Up Checklist (renumbered steps 3→7 to 3→6, shifting old 4→3, 5→4, 6→5, 7→6, 8→7).
+- Removed `.claude/specs/` entry from Persistent Files.
 
 ---
 
 ## Key Decisions Made
 
-- Self marker (sex-aware icon) is only for registered users. Guests are not personally identified on the map — only a radius circle shows their coverage area.
-- `placeSelfMarker()` is the enforcement point for this rule, not just `onLogout()`. This prevents the stale-icon bug from reoccurring in any path that calls `placeSelfMarker`.
-- `onLogout()` spec now matches `onGuestExpired()` for clearing — both clear ALL map state including selfMarker, selfCircle, viewRadius.
-- `DEBUG` must be declared in every module that uses it. api.js's `const DEBUG` is module-private; other modules that need debug logging must declare their own.
+- Guests get yellow 👊 self marker. Registered males get blue 👆. Registered females get pink 🤞.
+- `placeSelfMarker()` is never guarded by isRegistered — the icon color derives from `Auth.getSex()` which returns null for guests.
+- `_sex` and `_nickname` cleared at the START of `initGuest()` to prevent leaking from expired sessions.
+- `refreshRadius()` must not be called from `onLogout()` — `_token` is still the registered user's token at that point. Use `Auth.onGuestReady` instead.
+- Specs abolished by owner request.
 
 ---
 
@@ -65,25 +87,26 @@ Client-side bug fixes (current session) — committing now.
 
 - **503 / signal timeout on Railway** — `/api/health`, `/api/favourites`, `/api/location` all timing out. Cold-start or service down. Backend/infra issue.
 - **`/api/admin/location-config` timeout** — admin settings location tab shows "Location config unavailable." Backend.
-- **`/favourites` and other protected routes redirect** — JWT_SECRET mismatch. Both server and gateway must use the same secret.
-- **`adminListVenueManagers`** uses `by=role&q=venue_manager` — confirm server's admin/users handler supports `by=role` filter.
+- **JWT_SECRET mismatch** — protected routes may redirect. Both server and gateway must use the same secret.
 - **Fixed-location venues on map** — if not returned by `GET /location/nearby`, won't appear. Backend concern.
-- **`specs/ui/opaque-client.yaml` missing** — OPAQUE protocol client spec. Medium priority.
-- 18 CodeQL alerts open (fetched 2026-03-25).
+- **18 CodeQL alerts open** (fetched 2026-03-25).
 
 ---
 
 ## Handoff Notes
 
 ### Railway env vars
-No new env vars required. All fixes are client-side JS only.
+No new env vars required.
 
 ### Deploy impact
-- `window.Auth.isRegistered()` now gates the self marker in `placeSelfMarker()`. Any path that triggers `placeSelfMarker` for a guest will correctly show only the radius circle.
-- Self marker is now explicitly removed on logout (not just cleaned up on next `geo:position` event).
+- Guest self marker restored (yellow fist emoji icon).
+- Female icon now correctly pink after login.
+- No stale radius or stacked icons after login/logout cycle.
+- Settings page shows email + tier + role (not nickname).
+- Profile page no longer flashes SSR nickname/age before form renders.
+- Messages page shows "No conversations yet." when inbox is empty.
 
 ### Next session priorities
-1. Verify guest radius circle appears correctly after deploy.
-2. Investigate 503/timeouts on Railway — may need to extend cold-start timeout or check service health.
-3. Write `specs/ui/opaque-client.yaml`.
-4. Check `adminListVenueManagers` backend support for `by=role` filter.
+1. Verify all map fixes on deployed build.
+2. Investigate 503/timeouts on Railway.
+3. Check CodeQL alerts (18 open from 2026-03-25).

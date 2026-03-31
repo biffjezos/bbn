@@ -160,8 +160,9 @@ function wireAuth(mapModule) {
 
   Auth.onRateLimited = showRateLimitBanner;
 
-  // optional (handled elsewhere but kept safe)
-  Auth.onGuestReady = () => {};
+  // Fetch guest tier radius after guest init completes — at this point _token is
+  // the guest token, so getTier() correctly returns 'guest' rather than a stale tier.
+  Auth.onGuestReady = () => { mapModule.refreshRadius(); };
   Auth.onGuestExpired = () => { mapModule.onGuestExpired(); };
 }
 
@@ -268,11 +269,6 @@ async function initApp() {
   window.Api = Api;
   window.OpaqueClient = OpaqueClient;
   window.BbnPrefs = BbnPrefs;
-
-  // Clear any SSR content in #profileFormWrap immediately — prevents a brief
-  // flash of server-rendered nickname/age before JS renders the proper form.
-  const _pfw = document.getElementById('profileFormWrap');
-  if (_pfw) _pfw.innerHTML = '<div class="bbn-loading"><p>Loading…</p></div>';
 
   // Service Worker
   if ('serviceWorker' in navigator) {
