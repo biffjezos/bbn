@@ -1,25 +1,36 @@
 ---
 id: ui/auth-modal
-description: Login and registration modal — form state lifecycle
+description: >
+  Login and registration modal — form state lifecycle and credential safety.
+  Three-layer defence against credentials appearing in URLs (SEC-1.15).
 additional_info: tests executed by owner
-related_spec:
+related_spec: ui/auth
 related_ticket:
 pre_conditions:
-pre_conditions:
-  - Forms must carry onsubmit="return false" at the HTML level — native submission must be impossible regardless of JS state
-  - wireAuthForms() must attach submit listeners before any async auth delay (before await window.__authReady)
-  - Password field must not carry a name= attribute — prevents plaintext password appearing in any URL even if submission somehow fires
+  1: "Forms carry onsubmit='return false' at the HTML level — native submission impossible regardless of JS state"
+  2: wireAuthForms() attaches submit listeners before await window.__authReady — listener always present before user can interact
+  3: Password fields carry no name= attribute — plaintext password cannot appear in any URL even if native submit fires
 sources:
-  - services/server/templates/partials/modal-login.html
-  - services/server/templates/partials/modal-register.html
-  - ui/scripts/boomboom.js (wireAuthForms)
+  - /services/server/templates/partials/modal-login.html
+  - /services/server/templates/partials/modal-register.html
+  - /ui/scripts/boomboom.js
 expected_behaviour:
-  - Login and registration forms are always empty after use
-  - Form field values are deleted from memory (not just visually cleared) after submission or dismissal
-status:
+  - "wireAuthForms() is called synchronously at the start of initApp(), before any await — forms are protected from the very first render"
+  - "Submit handler calls e.preventDefault() as the first action — belt-and-suspenders with onsubmit=return false"
+  - "Password field value is set to empty string immediately after every submit attempt, whether success or failure"
+  - "Email field retains value on failure (usability); cleared on success"
+  - "Error messages shown in dedicated #loginError / #registerError divs — never in the URL or page title"
+  - "Modal closes on success only — stays open on failure so user can correct credentials"
+  - "No credential value is ever stored in localStorage, sessionStorage, or any DOM attribute"
+status: implemented
 tests:
-  1: register, navigate, logout, register > form should be empty and deleted from memory
-  2: register, logout, register > form should be empty and deleted from memory
-  3: login, navigate, logout, login > form should be empty and deleted from memory
-  4: login, navigate, logout, login > form should be empty and deleted from memory
-qa_report:
+  1: "register, navigate, logout, register: form fields empty, password not in DOM"
+  2: "register, logout, register: form fields empty, password not in DOM"
+  3: "login, navigate, logout, login: form fields empty, password not in DOM"
+  4: "login failed: password field cleared, email retained, error shown in error div"
+  5: "Rapid submit before JS ready: onsubmit=return false prevents any native GET/POST"
+  6: "Dev tools: no password value in sessionStorage, localStorage, or any DOM attribute after submit"
+qa_report: >
+  2026-03-30: SEC-1.15 fixed. wireAuthForms() moved before await window.__authReady.
+  onsubmit=return false added to both Tera modal templates. name= attribute removed
+  from all password fields. Password field cleared after every attempt in both handlers.

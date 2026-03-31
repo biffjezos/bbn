@@ -1,0 +1,48 @@
+---
+id: ui/crypto
+description: >
+  BBNCrypto — thin ES6 module proxy to crypto-worker.js. Manages a
+  SharedWorker (or Worker fallback) that holds the ECDH private key.
+  The private key never crosses the worker boundary; only encrypted blobs,
+  public keys (base64), and message ciphertext transit the postMessage channel.
+additional_info: >
+  Exposes window.BBNCrypto for modules that cannot import directly (auth.js,
+  lock.js, messages.js, profile.js). This global is set at module evaluation
+  time, before DOMContentLoaded.
+related_spec: ui/crypto-worker
+related_ticket:
+pre_conditions:
+  1: SharedWorker or Worker is available in the browser
+  2: /scripts/lib/crypto-worker.js is served at that path
+  3: WebCrypto (crypto.subtle) is available in the worker context (requires HTTPS or localhost)
+sources:
+  - /ui/scripts/lib/crypto.js
+  - /ui/scripts/lib/crypto-worker.js
+expected_behaviour:
+  - "Module initialisation: starts SharedWorker (P-256 ECDH key operations isolated in worker). Falls back to regular Worker if SharedWorker unavailable (Safari)."
+  - "All operations are async — each call posts a message with a unique id; the result resolves the corresponding Promise."
+  - "BBNCrypto.setup(password): generates P-256 ECDH keypair in worker, exports private key as PKCS#8, encrypts with PBKDF2+AES-GCM, returns { publicKeyB64, encBlob }. Sets unlocked=true."
+  - "BBNCrypto.unlock(encBlob, password, publicKeyB64): decrypts PKCS#8 blob in worker, re-imports private key as non-extractable. Returns true on success, false on wrong password. Sets unlocked accordingly."
+  - "BBNCrypto.lock(): zeroes _privateKey and _publicKey in worker memory (fire-and-forget). Sets unlocked=false synchronously in the proxy."
+  - "BBNCrypto.isUnlocked(): synchronous check of shadow state — returns true only if the last setup/unlock succeeded and lock() has not been called since."
+  - "BBNCrypto.encryptMessage(plaintext, theirPublicKeyB64): ECDH key agreement → AES-GCM-256 encrypt. Returns { ivB64, cipherB64 }. Requires unlocked private key."
+  - "BBNCrypto.decryptMessage(payload, theirPublicKeyB64): reverse of encrypt. Returns plaintext string. Requires unlocked private key."
+  - "BBNCrypto.reencrypt(oldPw, newPw, encBlob): decrypts blob with old password, re-encrypts with new password. Used on password change. Returns new encBlob."
+  - "BBNCrypto.getPublicKeyB64(): returns the loaded public key as base64, or null if not loaded."
+  - "window.BBNCrypto set at module evaluation time for non-module consumers."
+  - "If worker fails to start, all operations reject with 'Crypto worker unavailable.'"
+  - "Private key is imported with extractable:false — it cannot be exported from the worker by any means."
+status: implemented
+tests:
+  1: "setup(password): returns publicKeyB64 and encBlob; isUnlocked() returns true"
+  2: "lock() then isUnlocked(): returns false"
+  3: "unlock(encBlob, correctPassword, publicKeyB64): returns true, isUnlocked() true"
+  4: "unlock(encBlob, wrongPassword, publicKeyB64): returns false, isUnlocked() false"
+  5: "encryptMessage then decryptMessage with same keypair: plaintext round-trips"
+  6: "encryptMessage without unlock: rejects with error"
+  7: "reencrypt: new encBlob decryptable with newPassword, not with oldPassword"
+  8: "window.BBNCrypto === BBNCrypto after module load"
+qa_report: >
+  2026-03-31: Renamed from BBMCrypto to BBNCrypto throughout. Private key
+  confirmed non-extractable (extractable:false). Worker fallback confirmed
+  for Safari. window.BBNCrypto set at module evaluation.

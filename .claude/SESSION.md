@@ -14,7 +14,7 @@
 
 ## In Progress
 
-Committing fix for multiple UI page regressions.
+Writing and updating security specs.
 
 ---
 
