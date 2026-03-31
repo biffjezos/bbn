@@ -83,66 +83,64 @@ document.addEventListener('visibilitychange', function () {
 
 // ── Unlock button ─────────────────────────────────────────
 export function initUnlockButton() {
-  document.addEventListener('DOMContentLoaded', function () {
-    const unlockBtn = document.getElementById('lockUnlockBtn');
-    const logoutBtn = document.getElementById('lockLogoutBtn');
-    const pwInput = document.getElementById('lockPassword');
-    const errorEl = document.getElementById('lockError');
+  const unlockBtn = document.getElementById('lockUnlockBtn');
+  const logoutBtn = document.getElementById('lockLogoutBtn');
+  const pwInput = document.getElementById('lockPassword');
+  const errorEl = document.getElementById('lockError');
 
-    function showError(msg) {
-      if (!errorEl) return;
-      errorEl.textContent = msg;
-      errorEl.classList.remove('d-none');
-    }
+  function showError(msg) {
+    if (!errorEl) return;
+    errorEl.textContent = msg;
+    errorEl.classList.remove('d-none');
+  }
 
-    function clearError() {
-      if (!errorEl) return;
-      errorEl.classList.add('d-none');
-    }
+  function clearError() {
+    if (!errorEl) return;
+    errorEl.classList.add('d-none');
+  }
 
-    async function tryUnlock() {
-      const password = pwInput ? pwInput.value : '';
-      if (!password) { showError('Please enter your password.'); return; }
-      clearError();
-      if (unlockBtn) { unlockBtn.disabled = true; unlockBtn.textContent = 'Unlocking…'; }
-      try {
-        if (DEBUG) console.log('[Lock] Fetching encrypted key blob from server…');
-        const keys = await window.Api.getMyKeys();
-        if (DEBUG) console.log('[Lock] Key blob received, encryptedPrivateKey:', !!keys.encryptedPrivateKey, 'publicKey:', !!keys.publicKey);
+  async function tryUnlock() {
+    const password = pwInput ? pwInput.value : '';
+    if (!password) { showError('Please enter your password.'); return; }
+    clearError();
+    if (unlockBtn) { unlockBtn.disabled = true; unlockBtn.textContent = 'Unlocking…'; }
+    try {
+      if (DEBUG) console.log('[Lock] Fetching encrypted key blob from server…');
+      const keys = await window.Api.getMyKeys();
+      if (DEBUG) console.log('[Lock] Key blob received, encryptedPrivateKey:', !!keys.encryptedPrivateKey, 'publicKey:', !!keys.publicKey);
 
-        if (keys.encryptedPrivateKey && keys.publicKey) {
-          if (DEBUG) console.log('[Lock] Decrypting private key with PBKDF2…');
-          const ok = await window.BBNCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
-          if (!ok) throw new Error('Wrong password.');
-          if (DEBUG) console.log('[Lock] Keys unlocked successfully.');
-        } else {
-          if (DEBUG) console.log('[Lock] No keys on server — generating new key pair…');
-          const setup = await window.BBNCrypto.setup(password);
-          if (DEBUG) console.log('[Lock] Key pair generated, saving to server…');
-          await window.Api.saveKeys(setup.publicKeyB64, setup.encBlob);
-          if (DEBUG) console.log('[Lock] New keys saved to server.');
-        }
-
-        if (pwInput) pwInput.value = '';
-        unlock();
-      } catch (e) {
-        if (DEBUG) console.warn('[Lock] Unlock failed:', e.message);
-        showError(e.message || 'Unlock failed.');
-      } finally {
-        if (unlockBtn) { unlockBtn.disabled = false; unlockBtn.innerHTML = '<i class="bi bi-unlock me-2"></i>Unlock'; }
+      if (keys.encryptedPrivateKey && keys.publicKey) {
+        if (DEBUG) console.log('[Lock] Decrypting private key with PBKDF2…');
+        const ok = await window.BBNCrypto.unlock(keys.encryptedPrivateKey, password, keys.publicKey);
+        if (!ok) throw new Error('Wrong password.');
+        if (DEBUG) console.log('[Lock] Keys unlocked successfully.');
+      } else {
+        if (DEBUG) console.log('[Lock] No keys on server — generating new key pair…');
+        const setup = await window.BBNCrypto.setup(password);
+        if (DEBUG) console.log('[Lock] Key pair generated, saving to server…');
+        await window.Api.saveKeys(setup.publicKeyB64, setup.encBlob);
+        if (DEBUG) console.log('[Lock] New keys saved to server.');
       }
-    }
 
-    if (unlockBtn) unlockBtn.addEventListener('click', tryUnlock);
-    if (pwInput) pwInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
-    if (logoutBtn) logoutBtn.addEventListener('click', function () {
       if (pwInput) pwInput.value = '';
-      clearError();
-      _locked = false;
-      window.Auth.logout();
-      const modal = getModal();
-      if (modal) modal.hide();
-    });
+      unlock();
+    } catch (e) {
+      if (DEBUG) console.warn('[Lock] Unlock failed:', e.message);
+      showError(e.message || 'Unlock failed.');
+    } finally {
+      if (unlockBtn) { unlockBtn.disabled = false; unlockBtn.innerHTML = '<i class="bi bi-unlock me-2"></i>Unlock'; }
+    }
+  }
+
+  if (unlockBtn) unlockBtn.addEventListener('click', tryUnlock);
+  if (pwInput) pwInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
+  if (logoutBtn) logoutBtn.addEventListener('click', function () {
+    if (pwInput) pwInput.value = '';
+    clearError();
+    _locked = false;
+    window.Auth.logout();
+    const modal = getModal();
+    if (modal) modal.hide();
   });
 }
 
@@ -156,15 +154,16 @@ export function requireUnlocked() {
 }
 
 // ── Auth hooks ────────────────────────────────────────────
-let _origOnLogin = window.Auth?.onLogin;  // Fixed: Check if Auth is defined
-if (window.Auth) {
+// Called from boomboom.js after window.Auth is set, to wire lock into the auth lifecycle.
+export function wireAuthHooks() {
+  if (!window.Auth) return;
+  const _origOnLogin = window.Auth.onLogin;
   window.Auth.onLogin = function (data) {
     if (_origOnLogin) _origOnLogin(data);
     _locked = false;
     resetInactivityTimer();
   };
-
-  let _origOnLogout = window.Auth?.onLogout;  // Fixed: Check if Auth is defined
+  const _origOnLogout = window.Auth.onLogout;
   window.Auth.onLogout = function () {
     if (_origOnLogout) _origOnLogout();
     clearInactivityTimer();

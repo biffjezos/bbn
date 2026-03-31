@@ -3,9 +3,9 @@
 import { Api } from './api.js';
 import { Auth } from './auth.js';
 
-// Preference keys (localStorage)
-const PREF_MAP_ZOOM = 'bbn_pref_map_zoom';
-const PREF_FAV_PINS = 'bbn_pref_show_fav_pins';
+// Preference keys (localStorage) — must match prefs.js
+const PREF_MAP_ZOOM = 'bbm_pref_map_zoom';
+const PREF_FAV_PINS = 'bbm_pref_show_fav_pins';
 
 // ── Utilities ─────────────────────────────────────────────
 function escHtml(str) {

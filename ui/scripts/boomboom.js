@@ -11,7 +11,8 @@ import { BBNCrypto } from './lib/crypto.js';
 import { initDebugConsole } from './lib/debug.js';
 import { renderFavourites, initSearchBar } from './lib/favourites.js';
 import { GeoState, initGeo, pushLocation, connectLocWS, closeLocWS } from './lib/geo.js';
-import { initUnlockButton } from './lib/lock.js';
+import { initUnlockButton, wireAuthHooks } from './lib/lock.js';
+import { BbmPrefs } from './lib/prefs.js';
 import { MapModule } from './lib/map.js';
 import * as Messages from './lib/messages.js';
 import { initNotifications } from './lib/notifications.js';
@@ -127,6 +128,8 @@ function wireAuth(mapModule) {
     mapModule.refreshMarkers();
     mapModule.refreshRadius();
     setTimeout(() => mapModule.refreshMarkers(), 1000);
+    renderFavourites(true);
+    BbmPrefs.sync();
   };
 
   Auth.onLogout = () => {
@@ -255,6 +258,7 @@ async function initApp() {
   window.Auth = Auth;
   window.Api = Api;
   window.OpaqueClient = OpaqueClient;
+  window.BbmPrefs = BbmPrefs;
 
   // Service Worker
   if ('serviceWorker' in navigator) {
@@ -279,6 +283,7 @@ async function initApp() {
 
   // Auth wiring — must come before Auth.init() so hooks are set before auth completes
   wireAuth(mapModule);
+  wireAuthHooks();   // wire lock module into Auth lifecycle
   initNotifications();
 
   // Wire login/register forms immediately — must not wait for auth,
@@ -297,6 +302,26 @@ async function initApp() {
 
   // Apply UI state AFTER auth is ready
   applyAuthState(Auth.isRegistered());
+
+  // Re-render favourites now that auth is known (initial call was before auth)
+  if (document.getElementById('favListWrap')) renderFavourites(true);
+
+  // Messages: conversation list
+  if (document.getElementById('convListWrap')) {
+    Messages.initMessagesPage({ convList: true });
+  }
+
+  // Messages: thread view
+  if (document.getElementById('threadMsgs')) {
+    Messages.initMessagesPage({ thread: true });
+  }
+
+  // Admin: dynamically load admin.js (non-module) after auth is ready
+  if (document.getElementById('adminPanel')) {
+    const s = document.createElement('script');
+    s.src = '/scripts/admin.js';
+    document.body.appendChild(s);
+  }
 
   // Settings and profile pages require auth (token for API calls)
   initSettings();

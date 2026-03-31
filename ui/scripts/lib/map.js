@@ -86,7 +86,7 @@ function bezierCurve(p1, p2, curvature = 0.22, n = 40) {
 
 function makeLeafIcon(sex, isSelf, accountType){
   const isVenue = accountType==='venue';
-  const cls = 'bbm-marker' + (isSelf?' self':'') + (isVenue?' venue':' '+markerClass(sex));
+  const cls = 'bbn-marker' + (isSelf?' self':'') + (isVenue?' venue':' '+markerClass(sex));
   const size = isSelf?46:38;
   const anchor = isSelf?23:19;
   const inner = isVenue?`<i class="bi bi-house-fill"></i>`:markerEmoji(sex);
@@ -235,9 +235,9 @@ function updateMeetingMode(selfPos, users){
 
 function setSelfBearing(deg){
   lastBearing=deg;
-  const inner=selfMarker?.getElement()?.querySelector('.bbm-marker');
+  const inner=selfMarker?.getElement()?.querySelector('.bbn-marker');
   if(!inner) return;
-  inner.style.setProperty('--bbm-bearing',deg!=null?deg+'deg':'0deg');
+  inner.style.setProperty('--bbn-bearing',deg!=null?deg+'deg':'0deg');
 }
 
 // ── Public API ────────────────────────────────────────────────
