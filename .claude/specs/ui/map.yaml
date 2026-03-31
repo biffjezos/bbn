@@ -18,11 +18,17 @@ expected_behaviour:
   - refreshMarkers() re-renders all markers from last known nearby-user list
   - refreshRadius() fetches tier radius from API and redraws circle
   - centreOnSelf() pans map to last known self position
-  - onGuestExpired() / onLogout() clear all markers and radius
+  - onGuestExpired() / onLogout() clear all markers, favour lines, meeting control, and radius
+  - loadFavourites() fetches /favourites, populates favIds and favOnline sets, redraws fav lines if map and position are ready; called by boomboom.js from Auth.onLogin — NOT at module load time
+  - window.BbnPrefs (not BbmPrefs) used for mapZoom and showFavPins
 sources:
   - ui/scripts/lib/map.js
   - ui/scripts/lib/geo.js
   - services/server/templates/pages/index.html
-status: needs-review
-qa_report: Map container not found error on non-index pages; guard added 2026-03-30
+status: implemented
+qa_report: >
+  2026-03-30: map container guard added; non-index pages no longer throw.
+  2026-03-31: Fixed window.__authReady?.then() timing bug (ran at module import time, callback
+  silently discarded). Replaced with loadFavourites() exported from MapModule, driven by
+  boomboom.js Auth.onLogin hook. BbmPrefs → BbnPrefs. MapModule now exports loadFavourites.
 ---

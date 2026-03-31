@@ -14,7 +14,7 @@ expected_behaviour:
   - "API_BASE is empty string or /api — all fetch calls go to /api/* (relative, same-origin)"
   - "Token injection: reads token via Auth.getToken(), adds Authorization Bearer header if token exists"
   - "On 401 with TOKEN_REVOKED or TOKEN_INVALID: calls Auth.logout()"
-  - "On 403 with data.required: dispatches bbm:tier-gate CustomEvent"
+  - "On 403 with data.required: dispatches bbn:tier-gate CustomEvent"
   - "Retry: one automatic retry on network error (1.5s delay) and on 5xx (1.5s delay)"
   - "Timeout: 10 seconds per request via AbortSignal"
   - "No CORS preflight needed — all requests are same-origin"
@@ -28,6 +28,12 @@ tests:
   3: "Network error triggers one retry after 1.5s"
   4: "5xx response triggers one retry after 1.5s"
   5: "401 TOKEN_REVOKED triggers Auth.logout()"
-  6: "403 with required field dispatches bbm:tier-gate event"
+  6: "403 with required field dispatches bbn:tier-gate event"
   7: "No requests sent to an absolute URL — all relative /api/*"
-qa_report: "2026-03-30: API_BASE set to '/api'; window.Auth?.getToken?.() used for token injection (window.Auth set in boomboom.js initApp before any call); window.OpaqueClient set in boomboom.js for OPAQUE flows. Added getNotifications and dismissNotification methods."
+qa_report: >
+  2026-03-30: API_BASE set to '/api'; window.Auth?.getToken?.() used for token injection;
+  window.OpaqueClient set in boomboom.js for OPAQUE flows. Added getNotifications and dismissNotification.
+  2026-03-31: Fixed bbm:tier-gate → bbn:tier-gate event name. Added all admin API methods:
+  adminGetConfig, adminGetSettings, adminGetLocationConfig, adminUpdateSetting, adminSearchUsers,
+  adminListVenueManagers, adminPatchUser, adminReassignVenueManager, adminListTiers,
+  adminCreateTier, adminUpdateTier, adminDeleteTier, adminListFeatures, adminUpdateFeature.
