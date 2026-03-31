@@ -18,7 +18,9 @@ expected_behaviour:
   - refreshMarkers() re-renders all markers from last known nearby-user list
   - refreshRadius() fetches tier radius from API and redraws circle
   - centreOnSelf() pans map to last known self position
-  - onGuestExpired() / onLogout() clear all markers, favour lines, meeting control, and radius
+  - onGuestExpired() / onLogout() clear ALL markers (including selfMarker and selfCircle), favour lines, meeting control, viewRadius (reset to 0), and lastSex (reset to undefined). onLogout() calls refreshRadius() so the guest tier circle is fetched and drawn immediately after clearing.
+  - placeSelfMarker(): self marker (sex-aware personal icon) is only rendered when Auth.isRegistered(). Guests do not get a personal marker. The radius circle is rendered for both guests and registered users when viewRadius > 0 (guest circle uses neutral yellow colour).
+  - refreshRadius() is called on Auth.onLogin (registered) and by boomboom.js after Auth.init() resolves for fresh guests (not registered), ensuring the guest tier radius circle is always drawn.
   - loadFavourites() fetches /favourites, populates favIds and favOnline sets, redraws fav lines if map and position are ready; called by boomboom.js from Auth.onLogin — NOT at module load time
   - window.BbnPrefs (not BbmPrefs) used for mapZoom and showFavPins
 sources:
@@ -31,4 +33,8 @@ qa_report: >
   2026-03-31: Fixed window.__authReady?.then() timing bug (ran at module import time, callback
   silently discarded). Replaced with loadFavourites() exported from MapModule, driven by
   boomboom.js Auth.onLogin hook. BbmPrefs → BbnPrefs. MapModule now exports loadFavourites.
+  2026-03-31 (fix): onLogout() now correctly clears selfMarker, selfCircle, viewRadius, and
+  lastSex (matching spec and onGuestExpired). placeSelfMarker() guards against non-registered
+  users — no self marker or circle is rendered for guests, preventing stale sex-aware icons
+  and wrong radius circles after logout.
 ---
