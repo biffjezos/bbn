@@ -11,7 +11,8 @@ import { BBNCrypto } from './lib/crypto.js';
 import { initDebugConsole } from './lib/debug.js';
 import { renderFavourites, initSearchBar } from './lib/favourites.js';
 import { GeoState, initGeo, pushLocation, connectLocWS, closeLocWS } from './lib/geo.js';
-import { initUnlockButton } from './lib/lock.js';
+import { initUnlockButton, wireAuthHooks } from './lib/lock.js';
+import { BbmPrefs } from './lib/prefs.js';
 import { MapModule } from './lib/map.js';
 import * as Messages from './lib/messages.js';
 import { initNotifications } from './lib/notifications.js';
@@ -38,10 +39,10 @@ function getRole() {
 function showRateLimitBanner() {
   const container = $('notifBanner');
   if (!container) return;
-  if (container.querySelector('.bbm-rate-limit-banner')) return;
+  if (container.querySelector('.bbn-rate-limit-banner')) return;
 
   const div = document.createElement('div');
-  div.className = 'alert alert-warning alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0 bbm-rate-limit-banner';
+  div.className = 'alert alert-warning alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0 bbn-rate-limit-banner';
   div.setAttribute('role', 'alert');
   div.style.cssText = 'border-left:none;border-right:none;border-top:none';
   div.innerHTML =
@@ -63,8 +64,8 @@ function buildDesktopNav(isReg) {
 
   if (!isReg) {
     el.innerHTML =
-      '<button class="btn btn-bbm-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>' +
-      '<button class="btn btn-bbm-primary btn-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Sign Up</button>';
+      '<button class="btn btn-bbn-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>' +
+      '<button class="btn btn-bbn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Sign Up</button>';
   } else {
     el.innerHTML = `
       <a href="${BASE}/messages/" class="nav-link ${p.startsWith(BASE + '/messages/') ? 'active' : ''}">
@@ -98,9 +99,9 @@ function syncOffcanvas(isReg) {
       nickEl.textContent = profile.nickname || '—';
 
       const color =
-        profile.sex === 'f' ? 'var(--bbm-pink-light)' :
-        profile.sex === 'm' ? 'var(--bbm-blue-light)' :
-        'var(--bbm-text)';
+        profile.sex === 'f' ? 'var(--bbn-pink-light)' :
+        profile.sex === 'm' ? 'var(--bbn-blue-light)' :
+        'var(--bbn-text)';
 
       nickEl.style.cssText = `-webkit-text-fill-color:${color}; color:${color}`;
     }
@@ -127,6 +128,8 @@ function wireAuth(mapModule) {
     mapModule.refreshMarkers();
     mapModule.refreshRadius();
     setTimeout(() => mapModule.refreshMarkers(), 1000);
+    renderFavourites(true);
+    BbmPrefs.sync();
   };
 
   Auth.onLogout = () => {
@@ -255,6 +258,7 @@ async function initApp() {
   window.Auth = Auth;
   window.Api = Api;
   window.OpaqueClient = OpaqueClient;
+  window.BbmPrefs = BbmPrefs;
 
   // Service Worker
   if ('serviceWorker' in navigator) {
@@ -279,6 +283,7 @@ async function initApp() {
 
   // Auth wiring — must come before Auth.init() so hooks are set before auth completes
   wireAuth(mapModule);
+  wireAuthHooks();   // wire lock module into Auth lifecycle
   initNotifications();
 
   // Wire login/register forms immediately — must not wait for auth,
@@ -297,6 +302,26 @@ async function initApp() {
 
   // Apply UI state AFTER auth is ready
   applyAuthState(Auth.isRegistered());
+
+  // Re-render favourites now that auth is known (initial call was before auth)
+  if (document.getElementById('favListWrap')) renderFavourites(true);
+
+  // Messages: conversation list
+  if (document.getElementById('convListWrap')) {
+    Messages.initMessagesPage({ convList: true });
+  }
+
+  // Messages: thread view
+  if (document.getElementById('threadMsgs')) {
+    Messages.initMessagesPage({ thread: true });
+  }
+
+  // Admin: dynamically load admin.js (non-module) after auth is ready
+  if (document.getElementById('adminPanel')) {
+    const s = document.createElement('script');
+    s.src = '/scripts/admin.js';
+    document.body.appendChild(s);
+  }
 
   // Settings and profile pages require auth (token for API calls)
   initSettings();

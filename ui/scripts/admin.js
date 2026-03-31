@@ -136,7 +136,7 @@ async function renderUsersTab() {
     '        <option value="nickname">Nickname</option>',
     '        <option value="id">User ID</option>',
     '      </select>',
-    '      <button class="btn btn-bbm-primary" id="adminSearchBtn"><i class="bi bi-search me-1"></i>Search</button>',
+    '      <button class="btn btn-bbn-primary" id="adminSearchBtn"><i class="bi bi-search me-1"></i>Search</button>',
     '    </div>',
     '  </div>',
     '</div>',
@@ -212,7 +212,7 @@ function renderUserCard(u) {
   var isVenue = u.accountType === 'venue';
   var isSelf  = _selfPromotionGuard && u.userId === getAdminSub();
   var selfNote = isSelf
-    ? '<div class="small mt-2" style="color:var(--bbm-muted,#888)">'
+    ? '<div class="small mt-2" style="color:var(--bbn-muted,#888)">'
       + '<i class="bi bi-lock me-1"></i>You cannot modify your own tier or role.</div>'
     : '';
 
@@ -223,7 +223,7 @@ function renderUserCard(u) {
     '        <div class="small text-muted-bb mb-1">Venue ID</div>',
     '        <div class="d-flex align-items-center gap-1">',
     '          <code style="font-size:0.72rem;word-break:break-all">' + escHtml(u.userId) + '</code>',
-    '          <button class="btn btn-bbm-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.userId) + '" title="Copy ID" style="line-height:1">',
+    '          <button class="btn btn-bbn-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.userId) + '" title="Copy ID" style="line-height:1">',
     '            <i class="bi bi-clipboard" style="font-size:0.72rem"></i>',
     '          </button>',
     '        </div>',
@@ -232,7 +232,7 @@ function renderUserCard(u) {
     '        <div class="small text-muted-bb mb-1">Current Manager ID</div>',
     '        <div class="d-flex align-items-center gap-1">',
     '          <code style="font-size:0.72rem;word-break:break-all" id="mgr-current-' + escHtml(u.userId) + '">' + escHtml(u.managerId || '—') + '</code>',
-    '          ' + (u.managerId ? '<button class="btn btn-bbm-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.managerId) + '" title="Copy Manager ID" style="line-height:1"><i class="bi bi-clipboard" style="font-size:0.72rem"></i></button>' : ''),
+    '          ' + (u.managerId ? '<button class="btn btn-bbn-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.managerId) + '" title="Copy Manager ID" style="line-height:1"><i class="bi bi-clipboard" style="font-size:0.72rem"></i></button>' : ''),
     '        </div>',
     '      </div>',
     '      <div class="col-6 col-md-2">',
@@ -250,10 +250,10 @@ function renderUserCard(u) {
     '      </div>',
     '    </div>',
     '    <div class="d-flex align-items-center gap-3 flex-wrap">',
-    '      <button class="btn btn-bbm-primary btn-sm" data-save-user="' + escHtml(u.userId) + '">',
+    '      <button class="btn btn-bbn-primary btn-sm" data-save-user="' + escHtml(u.userId) + '">',
     '        <i class="bi bi-check2 me-1"></i>Save Tier',
     '      </button>',
-    '      <button class="btn btn-bbm-ghost btn-sm" data-reassign-venue="' + escHtml(u.userId) + '">',
+    '      <button class="btn btn-bbn-ghost btn-sm" data-reassign-venue="' + escHtml(u.userId) + '">',
     '        <i class="bi bi-person-fill-gear me-1"></i>Reassign Manager',
     '      </button>',
     '      <span id="save-status-' + escHtml(u.userId) + '" style="font-size:0.8rem"></span>',
@@ -264,7 +264,7 @@ function renderUserCard(u) {
     '        <div class="small text-muted-bb mb-1">User ID</div>',
     '        <div class="d-flex align-items-center gap-1">',
     '          <code style="font-size:0.72rem;word-break:break-all">' + escHtml(u.userId) + '</code>',
-    '          <button class="btn btn-bbm-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.userId) + '" title="Copy ID" style="line-height:1">',
+    '          <button class="btn btn-bbn-ghost btn-sm p-0 px-1" data-copy-id="' + escHtml(u.userId) + '" title="Copy ID" style="line-height:1">',
     '            <i class="bi bi-clipboard" style="font-size:0.72rem"></i>',
     '          </button>',
     '        </div>',
@@ -292,7 +292,7 @@ function renderUserCard(u) {
     '    </div>',
     isSelf ? selfNote : '',
     '    <div class="d-flex align-items-center gap-3">',
-    '      <button class="btn btn-bbm-primary btn-sm" data-save-user="' + escHtml(u.userId) + '">',
+    '      <button class="btn btn-bbn-primary btn-sm" data-save-user="' + escHtml(u.userId) + '">',
     '        <i class="bi bi-check2 me-1"></i>Save Changes',
     '      </button>',
     '      <span id="save-status-' + escHtml(u.userId) + '" style="font-size:0.8rem"></span>',
@@ -300,7 +300,7 @@ function renderUserCard(u) {
   ].join('');
 
   return [
-    '<div class="bbm-section mb-3" id="ucard-' + escHtml(u.userId) + '">',
+    '<div class="bbn-section mb-3" id="ucard-' + escHtml(u.userId) + '">',
     '  <div class="d-flex align-items-center justify-content-between gap-3"',
     '       style="cursor:pointer" data-toggle-card="' + escHtml(u.userId) + '">',
     '    <div class="text-truncate">',
@@ -310,7 +310,7 @@ function renderUserCard(u) {
     '    </div>',
     '    <i class="bi bi-chevron-down text-muted flex-shrink-0"></i>',
     '  </div>',
-    '  <div class="d-none mt-3 pt-3" style="border-top:1px solid var(--bbm-border)"',
+    '  <div class="d-none mt-3 pt-3" style="border-top:1px solid var(--bbn-border)"',
     '       id="uexpand-' + escHtml(u.userId) + '">',
     expandedBody,
     '  </div>',
@@ -440,7 +440,7 @@ function _renderTiersList(tiers) {
 
   content.innerHTML = [
     '<div class="d-flex justify-content-end mb-3">',
-    '  <button class="btn btn-bbm-primary btn-sm" id="addTierBtn">',
+    '  <button class="btn btn-bbn-primary btn-sm" id="addTierBtn">',
     '    <i class="bi bi-plus-lg me-1"></i>New Tier',
     '  </button>',
     '</div>',
@@ -469,7 +469,7 @@ function renderTierRow(t) {
   var nearby  = t.nearbyRadiusM  != null ? t.nearbyRadiusM  : (t.nearby_radius_m  != null ? t.nearby_radius_m  : '—');
   var message = t.messageRadiusM != null ? t.messageRadiusM : (t.message_radius_m != null ? t.message_radius_m : '—');
   return [
-    '<div class="bbm-section mb-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">',
+    '<div class="bbn-section mb-3 d-flex align-items-center justify-content-between gap-3 flex-wrap">',
     '  <div>',
     '    <span class="badge bg-' + escHtml(t.cls || 'secondary') + ' me-2">' + escHtml(t.label) + '</span>',
     '    <code style="font-size:0.8rem">' + escHtml(t.name) + '</code>',
@@ -480,10 +480,10 @@ function renderTierRow(t) {
     '    </span>',
     '  </div>',
     '  <div class="d-flex gap-2 flex-shrink-0">',
-    '    <button class="btn btn-bbm-ghost btn-sm" data-edit-tier="' + escHtml(t.name) + '">',
+    '    <button class="btn btn-bbn-ghost btn-sm" data-edit-tier="' + escHtml(t.name) + '">',
     '      <i class="bi bi-pencil me-1"></i>Edit',
     '    </button>',
-    '    <button class="btn btn-bbm-danger btn-sm" data-delete-tier="' + escHtml(t.name) + '">',
+    '    <button class="btn btn-bbn-danger btn-sm" data-delete-tier="' + escHtml(t.name) + '">',
     '      <i class="bi bi-trash3"></i>',
     '    </button>',
     '  </div>',
@@ -533,7 +533,7 @@ function showTierForm(existing, allTiers) {
 
   wrap.classList.remove('d-none');
   wrap.innerHTML = [
-    '<div class="bbm-section">',
+    '<div class="bbn-section">',
     heading,
     '  <div id="tierFormAlert" class="d-none mb-3"></div>',
     '  <div class="row g-3">',
@@ -566,10 +566,10 @@ function showTierForm(existing, allTiers) {
     '    </div>',
     '  </div>',
     '  <div class="d-flex gap-2 mt-3">',
-    '    <button class="btn btn-bbm-primary btn-sm" id="saveTierBtn">',
+    '    <button class="btn btn-bbn-primary btn-sm" id="saveTierBtn">',
     '      <i class="bi bi-check2 me-1"></i>' + (isEdit ? 'Update Tier' : 'Create Tier'),
     '    </button>',
-    '    <button class="btn btn-bbm-ghost btn-sm" id="cancelTierBtn">Cancel</button>',
+    '    <button class="btn btn-bbn-ghost btn-sm" id="cancelTierBtn">Cancel</button>',
     '  </div>',
     '</div>',
   ].join('');
@@ -647,7 +647,7 @@ function renderRolesTab() {
     '  Roles define what actions a user can perform. Tier controls feature access.',
     '  Role and tier are orthogonal — a user can be <code>tier: premium, role: admin</code>.',
     '</p>',
-    '<div class="bbm-section mb-3">',
+    '<div class="bbn-section mb-3">',
     '  <div class="d-flex align-items-center justify-content-between mb-2">',
     '    <div><strong>user</strong> <span class="badge bg-secondary ms-2">default</span></div>',
     '  </div>',
@@ -656,7 +656,7 @@ function renderRolesTab() {
     '    <li>Cannot access the admin panel or modify other users.</li>',
     '  </ul>',
     '</div>',
-    '<div class="bbm-section mb-3">',
+    '<div class="bbn-section mb-3">',
     '  <div class="d-flex align-items-center justify-content-between mb-2">',
     '    <div><strong>admin</strong> <span class="badge bg-danger ms-2">elevated</span></div>',
     '  </div>',
@@ -665,12 +665,12 @@ function renderRolesTab() {
     '    <li>Cannot be self-assigned — must be granted by another admin.</li>',
     '    <li>Changing a user\'s tier or role invalidates their active session (tokenVersion bump).</li>',
     '  </ul>',
-    '  <div class="small" style="color:var(--bbm-muted,#888)">',
+    '  <div class="small" style="color:var(--bbn-muted,#888)">',
     '    <i class="bi bi-lock me-1"></i>',
     '    Self-modification of tier or role is blocked in the admin UI. Server-side enforcement is controlled by the <code>SELF_PROMOTION_GUARD</code> env var.',
     '  </div>',
     '</div>',
-    '<div class="bbm-section mb-3">',
+    '<div class="bbn-section mb-3">',
     '  <div class="d-flex align-items-center justify-content-between mb-2">',
     '    <div><strong>venue_manager</strong> <span class="badge bg-info ms-2">elevated</span></div>',
     '  </div>',
@@ -698,7 +698,7 @@ async function renderFeaturesTab() {
     });
 
     var html = ['<div id="featuresContainer">'];
-    html.push('<div class="bbm-section mb-4">');
+    html.push('<div class="bbn-section mb-4">');
     html.push('  <p class="small text-muted-bb mb-3">Set the minimum tier required to access each feature. Changes take effect within 60 seconds.</p>');
     if (features.length === 0) {
       html.push('  <p class="text-muted-bb small">No features found.</p>');
@@ -706,7 +706,7 @@ async function renderFeaturesTab() {
       html.push('  <div class="row g-3">');
       features.forEach(function (f) {
         html.push('    <div class="col-12 col-sm-6 col-md-4">');
-        html.push('      <div class="bbm-section p-3">');
+        html.push('      <div class="bbn-section p-3">');
         html.push('        <div class="fw-semibold mb-1" style="font-size:0.9rem">' + escHtml(f.label) + '</div>');
         html.push('        <code class="small text-muted-bb d-block mb-1">' + escHtml(f.name) + '</code>');
         html.push('        <div class="small text-muted-bb mb-2" style="font-size:0.75rem">' + escHtml(f.description) + '</div>');
@@ -717,7 +717,7 @@ async function renderFeaturesTab() {
           html.push('            <option value="' + t + '"' + sel + '>' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>');
         });
         html.push('          </select>');
-        html.push('          <button class="btn btn-bbm-primary btn-sm flex-shrink-0"'
+        html.push('          <button class="btn btn-bbn-primary btn-sm flex-shrink-0"'
           + ' data-save-feature="' + escHtml(f.name) + '"'
           + ' data-feature-label="' + escHtml(f.label) + '"'
           + ' data-feature-desc="' + escHtml(f.description) + '"'
@@ -755,11 +755,11 @@ async function saveFeatureMinTier(name) {
       description: btn ? btn.dataset.featureDesc  : '',
       minTier:     minTier,
     });
-    msg.style.color = 'var(--bbm-success, #00e5a0)';
+    msg.style.color = 'var(--bbn-success, #00e5a0)';
     msg.textContent = 'Saved.';
     setTimeout(function () { if (msg.textContent === 'Saved.') msg.textContent = ''; }, 2000);
   } catch (err) {
-    msg.style.color = 'var(--bbm-danger, #e74c3c)';
+    msg.style.color = 'var(--bbn-danger, #e74c3c)';
     msg.textContent = err.message || 'Error saving.';
   }
 }
@@ -821,7 +821,7 @@ async function renderSettingsTab() {
       if (!sections[sec]) return;
       var icon  = SETTING_SECTION_ICONS[sec] || 'bi-gear';
       var label = SETTING_SECTION_LABELS[sec] || sec;
-      html.push('<div class="bbm-section mb-4">');
+      html.push('<div class="bbn-section mb-4">');
       html.push('  <h6 class="mb-3"><i class="bi ' + icon + ' me-2"></i>' + escHtml(label) + '</h6>');
       html.push('  <div class="row g-3">');
       sections[sec].forEach(function (s) {
@@ -837,7 +837,7 @@ async function renderSettingsTab() {
         html.push('        <input type="number" class="form-control" id="setting-' + escHtml(s.key) + '"');
         html.push('               data-setting-key="' + escHtml(s.key) + '"');
         html.push('               value="' + escHtml(String(s.value)) + '" min="0" />');
-        html.push('        <button class="btn btn-bbm-primary btn-sm" data-save-setting="' + escHtml(s.key) + '">Save</button>');
+        html.push('        <button class="btn btn-bbn-primary btn-sm" data-save-setting="' + escHtml(s.key) + '">Save</button>');
         html.push('      </div>');
         html.push('      <div id="setting-msg-' + escHtml(s.key) + '" class="small mt-1" style="min-height:1em"></div>');
         html.push('    </div>');
@@ -847,7 +847,7 @@ async function renderSettingsTab() {
     });
 
     // Read-only Location section
-    html.push('<div class="bbm-section mb-4">');
+    html.push('<div class="bbn-section mb-4">');
     html.push('  <h6 class="mb-3"><i class="bi bi-geo-alt me-2"></i>Location</h6>');
     if (locData) {
       html.push('  <div class="row g-3">');
@@ -857,7 +857,7 @@ async function renderSettingsTab() {
         html.push('    <div class="col-12 col-sm-6 col-md-4">');
         html.push('      <div class="form-label small mb-1">' + escHtml(field.label) + '</div>');
         html.push('      <div class="small text-muted-bb mb-1" style="font-size:0.7rem">' + escHtml(field.description) + '</div>');
-        html.push('      <div class="form-control form-control-sm text-muted-bb" style="background:var(--bbm-input-bg,#1a1a2e);cursor:default">' + escHtml(String(val)) + '</div>');
+        html.push('      <div class="form-control form-control-sm text-muted-bb" style="background:var(--bbn-input-bg,#1a1a2e);cursor:default">' + escHtml(String(val)) + '</div>');
         html.push('    </div>');
       });
       html.push('  </div>');
@@ -888,7 +888,7 @@ async function saveSettingValue(key) {
   if (!inp || !msg) return;
   var val = parseInt(inp.value, 10);
   if (isNaN(val) || val < 0) {
-    msg.style.color = 'var(--bbm-danger, #e74c3c)';
+    msg.style.color = 'var(--bbn-danger, #e74c3c)';
     msg.textContent = 'Must be a non-negative integer.';
     return;
   }
@@ -896,11 +896,11 @@ async function saveSettingValue(key) {
   msg.textContent = 'Saving…';
   try {
     await window.Api.adminUpdateSetting(key, val);
-    msg.style.color = 'var(--bbm-success, #00e5a0)';
+    msg.style.color = 'var(--bbn-success, #00e5a0)';
     msg.textContent = 'Saved.';
     setTimeout(function () { if (msg.textContent === 'Saved.') msg.textContent = ''; }, 2000);
   } catch (err) {
-    msg.style.color = 'var(--bbm-danger, #e74c3c)';
+    msg.style.color = 'var(--bbn-danger, #e74c3c)';
     msg.textContent = err.message || 'Error saving.';
   }
 }

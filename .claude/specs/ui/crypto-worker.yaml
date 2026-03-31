@@ -1,0 +1,51 @@
+---
+id: ui/crypto-worker
+description: >
+  Crypto worker — runs as a SharedWorker (Worker fallback). Holds the ECDH
+  P-256 private key in isolated worker memory. Implements all cryptographic
+  operations. The private key is imported with extractable:false and is never
+  sent across any message boundary.
+additional_info: >
+  This is the security boundary. All key material lives only here.
+  The only data that crosses the postMessage channel: passwords (during
+  setup/unlock/reencrypt — cleared after use), encrypted blobs (opaque bytes),
+  public keys (base64, public by definition), IVs, and message ciphertext.
+related_spec: ui/crypto
+related_ticket:
+pre_conditions:
+  1: WebCrypto (crypto.subtle) available in worker context (HTTPS or localhost required)
+  2: TextEncoder/TextDecoder available in worker context
+sources:
+  - /ui/scripts/lib/crypto-worker.js
+expected_behaviour:
+  - "Key algorithm: ECDH P-256 (ECDH_PARAMS = { name: ECDH, namedCurve: P-256 })"
+  - "Symmetric encryption: AES-GCM-256 (AES_PARAMS = { name: AES-GCM, length: 256 })"
+  - "Key derivation: PBKDF2-SHA-256 with 200,000 iterations, 16-byte random salt per encryption"
+  - "setup: generates P-256 keypair (extractable:true for export), exports PKCS#8, encrypts with PBKDF2+AES-GCM using random 16-byte salt and 12-byte IV, re-imports private key as extractable:false. Returns { publicKeyB64, encBlob: { saltB64, ivB64, encryptedB64 } }."
+  - "unlock: decrypts PKCS#8 blob with PBKDF2+AES-GCM, imports private key as extractable:false, imports public key. Returns { ok: true } on success, { ok: false } on any failure (wrong password, corrupt blob). On failure, _privateKey and _publicKey are set to null."
+  - "lock: sets _privateKey=null, _publicKey=null. Returns {}."
+  - "reencrypt: decrypts PKCS#8 with old password, re-encrypts with new password using fresh salt and IV. Re-imports key. Returns { encBlob }."
+  - "encryptMessage: ECDH key agreement (own private key + their public key) → shared AES-GCM-256 key → encrypt plaintext with random 12-byte IV. Returns { ivB64, cipherB64 }. Throws if no private key loaded."
+  - "decryptMessage: same ECDH agreement → decrypt. Returns { plaintext }. Throws if no private key loaded."
+  - "getPublicKeyB64: returns { publicKeyB64 } if loaded, { publicKeyB64: null } if not."
+  - "isUnlocked: returns { unlocked: _privateKey !== null }."
+  - "Message dispatch: each incoming { id, cmd, args } resolves to { id, ok: true, result } or { id, ok: false, error: message }. Unknown commands reject with error."
+  - "SharedWorker: multiple tabs share one worker instance and one key in memory."
+  - "Worker fallback: if SharedWorker unavailable, falls back to regular Worker (one instance per tab)."
+  - "Passwords are never stored — only used transiently during PBKDF2 key derivation then discarded."
+status: implemented
+tests:
+  1: "setup + isUnlocked: worker reports unlocked=true"
+  2: "lock + isUnlocked: worker reports unlocked=false, _privateKey null"
+  3: "unlock with correct password: ok=true, isUnlocked=true"
+  4: "unlock with wrong password: ok=false, isUnlocked=false"
+  5: "encryptMessage + decryptMessage same keypair: plaintext round-trips exactly"
+  6: "encryptMessage locked: throws 'No private key loaded'"
+  7: "reencrypt: old encBlob decryptable with newPassword"
+  8: "Each encryption uses a fresh random IV — same plaintext produces different ciphertext"
+  9: "PBKDF2 salt is random per setup/reencrypt — same password produces different encBlob"
+  10: "Unknown command: responds with ok=false, descriptive error"
+qa_report: >
+  2026-03-31: Reviewed. PBKDF2_ITER=200_000, ECDH P-256, AES-GCM-256.
+  Private key extractable:false confirmed. No plaintext key material
+  crosses worker boundary. Password used only in PBKDF2 derivation, not stored.

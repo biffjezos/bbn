@@ -86,7 +86,7 @@ function bezierCurve(p1, p2, curvature = 0.22, n = 40) {
 
 function makeLeafIcon(sex, isSelf, accountType){
   const isVenue = accountType==='venue';
-  const cls = 'bbm-marker' + (isSelf?' self':'') + (isVenue?' venue':' '+markerClass(sex));
+  const cls = 'bbn-marker' + (isSelf?' self':'') + (isVenue?' venue':' '+markerClass(sex));
   const size = isSelf?46:38;
   const anchor = isSelf?23:19;
   const inner = isVenue?`<i class="bi bi-house-fill"></i>`:markerEmoji(sex);
@@ -186,7 +186,7 @@ function drawFavLines(selfPos, users){
     activeIds.add(u.userId);
     if(favLines[u.userId]){ favLines[u.userId].polyline.setLatLngs(pts); }
     else {
-      const polyline = L.polyline(pts,{color:favColor,weight:2,dashArray:'8 8',className:'bbm-fav-line',interactive:false}).addTo(map);
+      const polyline = L.polyline(pts,{color:favColor,weight:2,dashArray:'8 8',className:'bbn-fav-line',interactive:false}).addTo(map);
       favLines[u.userId]={polyline};
     }
   });
@@ -196,7 +196,7 @@ function drawFavLines(selfPos, users){
 }
 
 function getMeetingState(){
-  try { return JSON.parse(localStorage.getItem('bbm_meet')||'null'); } catch { return null; }
+  try { return JSON.parse(localStorage.getItem('bbn_meet')||'null'); } catch { return null; }
 }
 
 function updateMeetingMode(selfPos, users){
@@ -207,26 +207,26 @@ function updateMeetingMode(selfPos, users){
   if(!meetControl){
     meetControl = L.control({position:'topright'});
     meetControl.onAdd=function(){
-      const div=L.DomUtil.create('div','bbm-meet-pill');
+      const div=L.DomUtil.create('div','bbn-meet-pill');
       L.DomEvent.disableClickPropagation(div);
       return div;
     };
     meetControl.addTo(map);
   }
   const pillEl = meetControl.getContainer();
-  pillEl.classList.remove('bbm-meet-pill--male','bbm-meet-pill--female');
-  if(targetSex==='m') pillEl.classList.add('bbm-meet-pill--male');
-  else if(targetSex==='f') pillEl.classList.add('bbm-meet-pill--female');
+  pillEl.classList.remove('bbn-meet-pill--male','bbn-meet-pill--female');
+  if(targetSex==='m') pillEl.classList.add('bbn-meet-pill--male');
+  else if(targetSex==='f') pillEl.classList.add('bbn-meet-pill--female');
 
   const distHtml = partner
-    ? `<span class="bbm-meet-dist">${fmtDist(haversineM(selfPos.lat,selfPos.lng,partner.lat,partner.lon??partner.lng))}</span>`
-    : `<span class="bbm-meet-dist bbm-meet-absent">${favOnline.get(meet.uid)===false?'offline':'out of range'}</span>`;
-  pillEl.innerHTML = `<span class="bbm-meet-icon">🧭</span>`+
-                      `<span class="bbm-meet-name">${escHtml(meet.nickname)}</span>`+
+    ? `<span class="bbn-meet-dist">${fmtDist(haversineM(selfPos.lat,selfPos.lng,partner.lat,partner.lon??partner.lng))}</span>`
+    : `<span class="bbn-meet-dist bbn-meet-absent">${favOnline.get(meet.uid)===false?'offline':'out of range'}</span>`;
+  pillEl.innerHTML = `<span class="bbn-meet-icon">🧭</span>`+
+                      `<span class="bbn-meet-name">${escHtml(meet.nickname)}</span>`+
                       distHtml+
-                      `<button class="bbm-meet-close" title="Cancel meeting">✕</button>`;
-  pillEl.querySelector('.bbm-meet-close').addEventListener('click',()=>{ 
-    localStorage.removeItem('bbm_meet');
+                      `<button class="bbn-meet-close" title="Cancel meeting">✕</button>`;
+  pillEl.querySelector('.bbn-meet-close').addEventListener('click',()=>{ 
+    localStorage.removeItem('bbn_meet');
     updateMeetingMode(selfPos, lastNearbyUsers);
   });
   if(partner){ setSelfBearing(getBearing(selfPos.lat,selfPos.lng,partner.lat,partner.lon??partner.lng)); }
@@ -235,9 +235,9 @@ function updateMeetingMode(selfPos, users){
 
 function setSelfBearing(deg){
   lastBearing=deg;
-  const inner=selfMarker?.getElement()?.querySelector('.bbm-marker');
+  const inner=selfMarker?.getElement()?.querySelector('.bbn-marker');
   if(!inner) return;
-  inner.style.setProperty('--bbm-bearing',deg!=null?deg+'deg':'0deg');
+  inner.style.setProperty('--bbn-bearing',deg!=null?deg+'deg':'0deg');
 }
 
 // ── Public API ────────────────────────────────────────────────
@@ -290,7 +290,7 @@ window.addEventListener('geo:position', e=>{
 });
 
 window.addEventListener('storage', e=>{
-  if(e.key==='bbm_meet' && map && GeoState.pos) updateMeetingMode(GeoState.pos,lastNearbyUsers);
+  if(e.key==='bbn_meet' && map && GeoState.pos) updateMeetingMode(GeoState.pos,lastNearbyUsers);
 });
 
 // Load initial state after auth resolves

@@ -7,8 +7,8 @@
 // read preferences synchronously without an async API call.
 // ============================================================
 
-const PREF_MAP_ZOOM  = 'bbm_pref_map_zoom';
-const PREF_FAV_PINS  = 'bbm_pref_show_fav_pins';
+const PREF_MAP_ZOOM  = 'bbn_pref_map_zoom';
+const PREF_FAV_PINS  = 'bbn_pref_show_fav_pins';
 
 function cache(zoom, showPins) {
   localStorage.setItem(PREF_MAP_ZOOM, zoom);

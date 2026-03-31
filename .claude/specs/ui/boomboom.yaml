@@ -7,29 +7,28 @@ pre_conditions:
   - DOMContentLoaded must have fired before initApp() runs
   - All lib/* modules must be importable as ES6 modules
   - Bootstrap must be loaded as a global before wireUI() wires offcanvas/modal calls
-expected_behaviour:
-  - window.Auth, window.Api, window.OpaqueClient are set at the very start of initApp()
-    so that synchronous module-level code in lib/* can access them immediately
-  - wireAuthForms() is called BEFORE window.__authReady is assigned — login/register
-    submit listeners must be attached before any async auth delay, so the forms can
-    never submit natively during the auth warm-up window
-  - window.__authReady is set to Auth.init() BEFORE initGeo() is called — geo.js
-    guards on window.__authReady instanceof Promise; undefined → geo never starts
-  - wireAuth(mapModule) is called BEFORE Auth.init() — Auth.onLogin/onLogout must
-    be set before the auth flow can complete and fire them
-  - applyAuthState() is called only after await window.__authReady — never before
-  - wireUI() (logout, FAB, message links) is called last, after auth resolves
-  - Login/register forms: e.preventDefault() stops native submission; password field
-    is cleared from the DOM immediately after every attempt (success or failure)
-  - Forms must not submit natively under any timing condition — Tera templates include
-    onsubmit="return false" as an unconditional backstop
+  - Leaflet must be loaded as a global before initMap() can render markers
 sources:
-  - ui/scripts/boomboom.js
-  - services/server/templates/base.html
-  - services/server/templates/partials/modal-login.html
-  - services/server/templates/partials/modal-register.html
-status: needs-review
+  - /ui/scripts/boomboom.js
+  - /services/server/templates/base.html
+  - /services/server/templates/partials/modal-login.html
+  - /services/server/templates/partials/modal-register.html
+expected_behaviour:
+  - "window.Auth, window.Api, window.OpaqueClient, window.BbmPrefs are set at the very start of initApp() so synchronous module-level code in lib/* can access them immediately"
+  - "wireAuth(mapModule) is called BEFORE Auth.init() — Auth.onLogin/onLogout must be set before auth completes and fires them"
+  - "wireAuthHooks() is called immediately after wireAuth() — wires lock module into Auth.onLogin/onLogout after window.Auth is set"
+  - "wireAuthForms() is called BEFORE window.__authReady is assigned — login/register submit listeners attached before any async delay; forms can never submit natively during warm-up"
+  - "window.__authReady is set to Auth.init() BEFORE initGeo() is called — geo.js guards on window.__authReady instanceof Promise; undefined → geo never starts"
+  - "applyAuthState() is called only after await window.__authReady — never before"
+  - "After auth resolves: renderFavourites(true) called if favListWrap exists; Messages.initMessagesPage called for convList/thread pages; admin.js injected dynamically if adminPanel exists; initSettings() called"
+  - "Auth.onLogin hook calls renderFavourites(true) and BbmPrefs.sync() — page state refreshed whenever auth changes"
+  - "Login/register forms: e.preventDefault() stops native submission; password field cleared immediately after every attempt"
+  - "Forms must not submit natively under any timing condition — Tera templates carry onsubmit=return false as unconditional backstop"
+  - "admin.js is loaded as a dynamic <script> element injected after auth resolves — admin.js uses window.Auth/Api/.__authReady which are guaranteed set at that point"
+  - "wireUI() (logout, FAB, message links) is called last, after auth resolves"
+status: implemented
 qa_report: >
-  Race condition fixed 2026-03-30 — wireAuthForms() now runs before await window.__authReady.
-  Credentials appeared in URL (GET default form submit) before fix.
+  2026-03-31: wireAuthHooks() added; BbmPrefs imported and exposed;
+  renderFavourites/messages/admin init added post-auth. Auth.onLogin
+  hooks refreshFavourites + BbmPrefs.sync. Status updated to implemented.
 ---

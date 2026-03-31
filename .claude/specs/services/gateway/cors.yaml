@@ -1,0 +1,42 @@
+---
+id: services/gateway/cors
+description: >
+  Gateway CORS policy and WebSocket origin validation. Controls which browser
+  origins may make cross-origin requests to the gateway API and establish
+  WebSocket connections.
+additional_info: >
+  CORS_ORIGINS is a required env var — gateway panics at startup if missing.
+  No default value is intentional: a misconfigured deployment fails loudly
+  rather than silently allowing all origins.
+related_spec: services/server/proxy
+related_ticket:
+pre_conditions:
+  1: CORS_ORIGINS env var is set (comma-separated list of allowed origins, e.g. https://boom.up.railway.app)
+  2: JWT_SECRET env var is set — same value as server service
+sources:
+  - /services/gateway/src/main.rs
+  - /services/gateway/src/ws.rs
+expected_behaviour:
+  - "CORS_ORIGINS env var is required. Gateway panics on startup if missing or empty."
+  - "CORS_ORIGINS is parsed as a comma-separated list of origin strings, trimmed of whitespace."
+  - "HTTP CORS layer: AllowOrigin::list(cors_origins) — only listed origins receive CORS headers. Unlisted origins receive no CORS headers (browser blocks the request)."
+  - "Allowed HTTP methods: GET, POST, PUT, DELETE, PATCH"
+  - "Allowed headers: Authorization, Content-Type, and any required custom headers"
+  - "WebSocket origin check (origin_ok): compares the browser Origin header against cors_origins. Connection refused (403) if Origin is absent or not in the allowed list."
+  - "Both the HTTP CORS layer and the WS origin check draw from the same cors_origins Vec — a single source of truth."
+  - "Server proxy forwards the browser Origin header to the gateway WebSocket handshake — this is required for origin_ok to work correctly when the browser connects via the server proxy."
+  - "No wildcard origins. '*' is never allowed regardless of env var content."
+status: implemented
+tests:
+  1: "Request from allowed origin: CORS headers present in response"
+  2: "Request from unlisted origin: no CORS headers, browser blocks"
+  3: "WS upgrade from allowed origin: connection established"
+  4: "WS upgrade from unlisted origin: 403"
+  5: "WS upgrade with no Origin header: 403"
+  6: "CORS_ORIGINS env var missing at startup: gateway panics with clear error"
+  7: "Multiple origins in CORS_ORIGINS: all allowed independently"
+qa_report: >
+  2026-03-30: CORS_ORIGINS promoted from hardcoded constant to required env var.
+  Both CorsLayer and ws origin_ok() now draw from AppState.cors_origins.
+  Server proxy (proxy.rs) updated to extract and forward browser Origin header
+  to upstream WS handshake so origin_ok() sees the correct origin.

@@ -6,9 +6,9 @@
 
 ---
 
-**Branch:** `claude/fix-path-bugs-HhisD`
-**Session date:** 2026-03-30
-**Last updated:** 2026-03-30T20:00Z
+**Branch:** `claude/fix-ui-pages-session-30ZSB`
+**Session date:** 2026-03-31
+**Last updated:** 2026-03-31T08:00Z
 
 ---
 
@@ -18,57 +18,58 @@ Session closed — wrap-up complete.
 
 ---
 
-## Completed This Session (round 4)
+## Completed This Session
 
-- **map.js initMap()**: added `if (!document.getElementById('map')) return;` guard — fixes Leaflet "Map container not found" error thrown on every non-index page
-- **modal-login.html / modal-register.html**: removed `name="password"` from password fields — belt-and-suspenders guard against password appearing in URL if native form submission fires despite other protections
-- **gateway/src/main.rs**: `CORS_ORIGINS` promoted from hardcoded constant to required env var; `cors_origins: Vec<String>` added to `Config` and `AppState`; CORS layer and WS origin check both use it
-- **gateway/src/ws.rs**: `origin_ok()` signature changed to `allowed: &[String]`; both `ws_location` and `ws_messages` pass `&state.cors_origins`
-- **server/src/proxy.rs**: `proxy_ws` extracts browser `Origin` header and passes it to `tunnel_ws`; `tunnel_ws` inserts it into the upstream WebSocket handshake — fixes WS 403 caused by gateway origin check seeing no Origin from the proxy
-- **server/src/main.rs**: `ASSET_VERSION` now falls back to first 7 chars of `RAILWAY_GIT_COMMIT_SHA`, then `"dev"` — fixes "v0" version display
-- **specs/ui/boomboom.yaml**: created — documents initApp() initialization order contract
-- **specs/ui/map.yaml**: created — documents initMap() no-op guard and Leaflet preconditions
-- **specs/ui/auth-modal.yaml**: updated — Tera paths as sources, `onsubmit="return false"` and `name` removal in pre_conditions
-- **CLAUDE.md**: Spec Workflow rule tightened — "any module with inter-module contracts, async lifecycles, security-relevant behaviour, or initialization-order dependencies requires a spec; when in doubt, write the spec"
+### UI page regression fixes (commits 2c030c3, 5651baa)
 
-## Completed This Session (round 3)
+- **map.js**: `bbm-marker` → `bbn-marker`, `--bbm-bearing` → `--bbn-bearing` — markers were completely unstyled (wrong size, no colour, no ring)
+- **lock.js**: Removed `DOMContentLoaded` wrapper from `initUnlockButton()` — buttons were never wired; users got stuck at lock modal
+- **lock.js**: Extracted `wireAuthHooks()` — module-level Auth hook code ran at import time when `window.Auth` was undefined; now called explicitly from boomboom.js
+- **settings.js**: Fixed pref keys `bbn_pref_map_zoom` / `bbn_pref_show_fav_pins` (were `bbn_pref_*` after earlier rename but still mismatched prefs.js)
+- **boomboom.js**: Imported `prefs.js`, exposed `window.BbmPrefs`, called `wireAuthHooks()`, called `BbmPrefs.sync()` on login
+- **boomboom.js**: `renderFavourites(true)` after auth resolves and in `Auth.onLogin` — favourites page was showing "log in" state forever
+- **boomboom.js**: `Messages.initMessagesPage({ convList/thread })` after auth — conversation list and thread were never rendered
+- **boomboom.js**: Dynamic `<script src="/scripts/admin.js">` injection after auth if `adminPanel` exists — T-33 fixed
 
-- **boomboom.js**: extracted `wireAuthForms()` — wires login/register submit listeners BEFORE `await window.__authReady`, so the forms can never submit natively during the auth warm-up window. Race condition that put credentials in the URL is eliminated.
-- **modal-login.html / modal-register.html**: added `onsubmit="return false"` as unconditional backstop against native form submission at the HTML level
+### Full bbm→bbn rename (commit 5651baa)
 
-## Completed This Session (round 2)
+- All `bbm-` CSS class names, `--bbm-*` CSS variable references, and `bbm_*` storage keys renamed to `bbn-`/`bbn_` across 13 files
+- `BBNCrypto` was already correct (was never `BBMCrypto` in codebase)
+- localStorage keys renamed: `bbn_meet`, `bbn_token`, `bbn_guest_id`, `bbn_guest_exp`, `bbn_pref_*` — existing users' preferences reset on first deploy (acceptable)
 
-- **boomboom.js initApp()**: fixed `__authReady` initialization order — `window.__authReady = Auth.init()` now set BEFORE `initGeo()`. geo.js checks `window.__authReady instanceof Promise`; before this fix it was always `undefined` → geo never started → map never rendered.
-- **service-worker.js**: bumped `CACHE_NAME` from `app-v2` to `app-v3` to force browser to evict old SW cache (which had wrong `/bbn/` paths and stale asset list).
+### Security specs (commit 6a9aa05)
 
-## Completed This Session (round 1)
+- **NEW** `specs/ui/lock.yaml` — inactivity timer, key locking, unlock modal, `wireAuthHooks()`
+- **NEW** `specs/ui/crypto.yaml` — BBNCrypto proxy, worker communication contract
+- **NEW** `specs/ui/crypto-worker.yaml` — ECDH P-256, AES-GCM-256, PBKDF2-200k, non-extractable key boundary
+- **NEW** `specs/services/gateway/cors.yaml` — `CORS_ORIGINS` env var, WS `origin_ok()`, single source of truth
+- **UPDATED** `specs/ui/auth.yaml` — `bbn_meet` key, refreshed qa_report
+- **UPDATED** `specs/ui/auth-modal.yaml` — filled status/qa_report, full SEC-1.15 detail
+- **UPDATED** `specs/ui/boomboom.yaml` — `implemented`, added all new behaviours
+- **UPDATED** `specs/services/server/proxy.yaml` — `implemented`, Origin forwarding added
 
-- **manifest.json** — replaced all `/bbn/` paths with `/` (start_url, scope, icon srcs)
-- **service-worker.js ASSETS** — fixed wrong paths: `app.js` → `boomboom.js`; `/scripts/X.js` → `/scripts/lib/X.js` for crypto-worker, crypto, geo, lock, map, opaque-client
-- **Tera base.html** — replaced deprecated `apple-mobile-web-app-capable` with `mobile-web-app-capable`
-- **Tera modal-login.html** — wrapped fields in `<form id="loginForm">`, button changed to `type="submit"`, added `required` attrs
-- **Tera modal-register.html** — wrapped fields in `<form id="registerForm">`, button changed to `type="submit"`, added `required`/`autocomplete` attrs
-- **boomboom.js wireUI()** — wired `loginForm` and `registerForm` submit events → call `Auth.login()` / `Auth.register()`, show errors in error divs, clear password field after attempt, close modal on success
+### Tickets
+
+- **T-33** closed — admin panel empty root cause found and fixed (dynamic script injection)
 
 ---
 
 ## Key Decisions Made
 
-- Tera templates (`services/server/templates/`) are the ones actually served — not Jekyll `ui/_includes/`. Always fix Tera first.
-- `wireAuthForms()` must run synchronously, before `await window.__authReady`, to prevent form race conditions.
-- `CORS_ORIGINS` must be set in Railway for the **gateway** service. No default value — gateway panics if missing.
-- `JWT_SECRET` must be **identical** in both server and gateway Railway services. Mismatch → `bbn_tok` cookie validated differently → all protected routes redirect to `/`.
-- WS proxy Origin forwarding: server's `proxy_ws` now extracts the browser `Origin` and re-inserts it into the upstream WS handshake so gateway's `origin_ok()` passes.
-- `ALLOWED_ORIGINS` was hardcoded as `["https://biffjezos.github.io"]` — this is gone, replaced by `CORS_ORIGINS` env var.
+- `bbm` was a global typo throughout; canonical prefix is `bbn`. All CSS classes, CSS vars, localStorage/sessionStorage keys, DOM class queries updated.
+- `BBNCrypto` was already the correct name (crypto.js always used `BBN`). No rename needed.
+- sessionStorage for JWT token is intentional (privacy-by-design: clears on tab close). localStorage is used only for data that should survive tab close: guest ID, expiry, meeting target, preferences.
+- `admin.js` is a non-module legacy script; it cannot be imported. Dynamic injection after auth is the correct loading strategy — `window.Auth`, `window.Api`, `window.__authReady` are all guaranteed set at that point.
+- `initUnlockButton()` must never be wrapped in `DOMContentLoaded` — it is called from `initApp()` which itself runs on `DOMContentLoaded`, so the event has already fired.
 
 ---
 
 ## Blockers / Parked Items
 
-- **`/favourites` redirect (and other protected routes)** — most likely `JWT_SECRET` mismatch between server and gateway Railway services. Server validates `bbn_tok` with its own `JWT_SECRET`; if it doesn't match the gateway's key, the guard rejects the cookie and redirects to `/`. **Owner must verify JWT_SECRET is identical in both services.**
-- **`/admin` page empty** — `admin.js` is dead code, never loaded. Ticket T-33 created. Needs investigation.
-- **User icon changed** — sex-aware circle icon reported missing from map. Not investigated this session.
-- **502 on `/api/auth/guest`** — owner must verify `GATEWAY_URL` is set correctly in Railway for the server service, and that the gateway service is running.
+- **`/settings` non-editable account info** — if `ssr_me` is None (gateway down or unreachable), shows "Loading…". JS `initAccountInfo()` also fails silently. Backend/infra issue.
+- **`/favourites` and other protected routes redirect** — most likely `JWT_SECRET` mismatch between server and gateway Railway services. Both must use the same secret.
+- **502 on `/api/auth/guest`** — verify `GATEWAY_URL` is set correctly in Railway server service and gateway is running.
+- **`specs/ui/opaque-client.yaml` missing** — OPAQUE protocol client has clear security contracts (SEC-1.10 PBKDF2 email hash). Needs a spec next session.
 - `JWT_SECRET`, `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION`, `CORS_ORIGINS` must be set in Railway.
 - 18 CodeQL alerts open (fetched 2026-03-25).
 
@@ -76,31 +77,14 @@ Session closed — wrap-up complete.
 
 ## Handoff Notes
 
-### Owner — Railway env vars to set before next test
+### Railway env vars — no changes needed for this commit
+All fixes in this session are client-side JS and specs only.
 
-**gateway service** (new required var):
-- `CORS_ORIGINS` = `https://boom.up.railway.app` (or comma-separated list including staging URLs)
+### Spec gap to fill next session
+`specs/ui/opaque-client.yaml` — covers the OPAQUE WASM client, the PBKDF2 email hash (SEC-1.10), and the two-step login/register flow contract. Medium priority.
 
-**Both server AND gateway services** (must match exactly):
-- `JWT_SECRET` — verify they are identical. Mismatch is the root cause of `/favourites` redirect.
+### bbn_ storage key rename — deploy impact
+Users will lose stored preferences and meeting targets on first deployment after this branch merges. The JWT is in sessionStorage (per-tab) so login state is unaffected. Guest ID (`bbn_guest_id`) will regenerate silently.
 
-**server service** (optional, will auto-use git SHA):
-- `ASSET_VERSION` = leave unset to auto-use `RAILWAY_GIT_COMMIT_SHA` first 7 chars, or set explicitly.
-
-### WS 403 root cause — now fixed
-Gateway's `origin_ok()` was always rejecting WS connections from the server proxy because the proxy did not forward the browser's `Origin` header. Now fixed: `proxy_ws` in `server/src/proxy.rs` extracts `Origin` and re-inserts it into the upstream WS handshake.
-
-### CORS_ORIGINS root cause — now fixed
-`ALLOWED_ORIGINS` was hardcoded as `["https://biffjezos.github.io"]` in `gateway/src/main.rs`. It is now a required env var (`CORS_ORIGINS`). Gateway panics on startup if missing — this is intentional.
-
-### Credential-in-URL race condition — now fixed (SEC-1.15)
-Login/register forms had no `name="password"` and `onsubmit="return false"` in HTML, but `wireAuthForms()` was wired AFTER `await window.__authReady`. During the auth warm-up window, a fast submit could fire native GET form submission. Fix: `wireAuthForms()` runs before the await; `onsubmit="return false"` is unconditional backstop; no `name` attr on password fields.
-
-### Template duality — Tera vs Jekyll
-The Rust server serves Tera templates from `services/server/templates/`. The Jekyll files in `ui/_includes/` are NOT used. Always fix Tera first.
-
-### Admin panel (T-33)
-Owner reported `/admin` page is empty. `admin.js` is likely dead code not loaded by any template. Needs investigation next session.
-
-### JWT_SECRET mismatch — likely root cause of /favourites redirect
-Server's `guards::check_auth` / `guards::require_user` decode `bbn_tok` cookie using server's `JWT_SECRET`. Gateway signs JWTs with its own `JWT_SECRET`. If they differ, the server rejects every cookie. Both services must share the same secret.
+### T-27 (App Architecture Specs) — still planned
+Several spec gaps remain for the gateway service (JWT signing/validation, rate limiting, WS auth). T-27 is the umbrella ticket.
