@@ -564,15 +564,15 @@ async function renderPublicProfile() {
 // ── Exports ───────────────────────────────────────────────
 
 export function initMyProfile() {
-  // Re-render on block events (block modal dispatches bbm:user-blocked)
-  document.addEventListener('bbm:user-blocked', () => {
+  // Re-render on block events (block modal dispatches bbn:user-blocked)
+  document.addEventListener('bbn:user-blocked', () => {
     if (document.getElementById('profileFormWrap')) renderMyProfile();
   });
   renderMyProfile();
 }
 
 export function initPublicProfile() {
-  document.addEventListener('bbm:user-blocked', () => {
+  document.addEventListener('bbn:user-blocked', () => {
     if (document.getElementById('pubProfilePage')) renderPublicProfile();
   });
   renderPublicProfile();

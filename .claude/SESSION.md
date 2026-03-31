@@ -6,70 +6,78 @@
 
 ---
 
-**Branch:** `claude/fix-ui-pages-session-30ZSB`
+**Branch:** `claude/fix-ui-api-issues-ObVYc`
 **Session date:** 2026-03-31
-**Last updated:** 2026-03-31T08:00Z
+**Last updated:** 2026-03-31T12:10Z
 
 ---
 
 ## In Progress
 
-Session closed — wrap-up complete.
+Committing and pushing fix batch.
 
 ---
 
 ## Completed This Session
 
-### UI page regression fixes (commits 2c030c3, 5651baa)
+### UI/API bug fixes — (pending commit)
 
-- **map.js**: `bbm-marker` → `bbn-marker`, `--bbm-bearing` → `--bbn-bearing` — markers were completely unstyled (wrong size, no colour, no ring)
-- **lock.js**: Removed `DOMContentLoaded` wrapper from `initUnlockButton()` — buttons were never wired; users got stuck at lock modal
-- **lock.js**: Extracted `wireAuthHooks()` — module-level Auth hook code ran at import time when `window.Auth` was undefined; now called explicitly from boomboom.js
-- **settings.js**: Fixed pref keys `bbn_pref_map_zoom` / `bbn_pref_show_fav_pins` (were `bbn_pref_*` after earlier rename but still mismatched prefs.js)
-- **boomboom.js**: Imported `prefs.js`, exposed `window.BbmPrefs`, called `wireAuthHooks()`, called `BbmPrefs.sync()` on login
-- **boomboom.js**: `renderFavourites(true)` after auth resolves and in `Auth.onLogin` — favourites page was showing "log in" state forever
-- **boomboom.js**: `Messages.initMessagesPage({ convList/thread })` after auth — conversation list and thread were never rendered
-- **boomboom.js**: Dynamic `<script src="/scripts/admin.js">` injection after auth if `adminPanel` exists — T-33 fixed
+All fixes are client-side JS and one server template change.
 
-### Full bbm→bbn rename (commit 5651baa)
+#### Admin panel — `window.Api.adminXxx is not a function`
+- **api.js**: Added all missing admin API methods: `adminGetConfig`, `adminGetSettings`, `adminGetLocationConfig`, `adminUpdateSetting`, `adminSearchUsers`, `adminListVenueManagers`, `adminPatchUser`, `adminReassignVenueManager`, `adminListTiers`, `adminCreateTier`, `adminUpdateTier`, `adminDeleteTier`, `adminListFeatures`, `adminUpdateFeature`. All map to the correct gateway routes (`/api/admin/...`).
 
-- All `bbm-` CSS class names, `--bbm-*` CSS variable references, and `bbm_*` storage keys renamed to `bbn-`/`bbn_` across 13 files
-- `BBNCrypto` was already correct (was never `BBMCrypto` in codebase)
-- localStorage keys renamed: `bbn_meet`, `bbn_token`, `bbn_guest_id`, `bbn_guest_exp`, `bbn_pref_*` — existing users' preferences reset on first deploy (acceptable)
+#### bbm→bbn rename — missed items
+- **api.js**: `bbm:tier-gate` → `bbn:tier-gate` (event name in both `apiFetch` dispatch and `initApiGlobals` listener)
+- **blocks.js**: `bbm:user-blocked` → `bbn:user-blocked`
+- **profile.js**: `bbm:user-blocked` → `bbn:user-blocked` (two listeners)
+- **prefs.js**: `BbmPrefs` → `BbnPrefs` (export name and `window.BbnPrefs` assignment)
+- **map.js**: `window.BbmPrefs` → `window.BbnPrefs`
+- **boomboom.js**: import `BbnPrefs`, expose as `window.BbnPrefs`
 
-### Security specs (commit 6a9aa05)
+#### Map favourites not loading
+- **Root cause**: `window.__authReady?.then(...)` in map.js ran at ES module import time, before `initApp()` set `window.__authReady`. The `.then()` callback was silently discarded.
+- **Fix**: Removed the broken `window.__authReady?.then(...)` block. Added `loadFavourites()` function exported from `MapModule`. Called from `wireAuth`'s `Auth.onLogin` hook in boomboom.js (fires for both existing session on page load and new login).
 
-- **NEW** `specs/ui/lock.yaml` — inactivity timer, key locking, unlock modal, `wireAuthHooks()`
-- **NEW** `specs/ui/crypto.yaml` — BBNCrypto proxy, worker communication contract
-- **NEW** `specs/ui/crypto-worker.yaml` — ECDH P-256, AES-GCM-256, PBKDF2-200k, non-extractable key boundary
-- **NEW** `specs/services/gateway/cors.yaml` — `CORS_ORIGINS` env var, WS `origin_ok()`, single source of truth
-- **UPDATED** `specs/ui/auth.yaml` — `bbn_meet` key, refreshed qa_report
-- **UPDATED** `specs/ui/auth-modal.yaml` — filled status/qa_report, full SEC-1.15 detail
-- **UPDATED** `specs/ui/boomboom.yaml` — `implemented`, added all new behaviours
-- **UPDATED** `specs/services/server/proxy.yaml` — `implemented`, Origin forwarding added
+#### Route guard — logged-out users not redirected from protected pages
+- **Root cause**: When a JWT expired and the page was reloaded, `Auth.init()` fell through to `initGuest()` without calling `Auth.onLogout`. The `onLogout` handler's redirect was never triggered.
+- **Fix**: Added route guard in `initApp()` after `await window.__authReady`. If not registered and on a protected route (`/messages`, `/favourites`, `/profile`, `/admin`, `/settings`) → redirect to `/`. Also added `PROTECTED_PATHS` constant reused by both the guard and the `onLogout` redirect handler.
 
-### Tickets
+#### prefs.js — broken module-level auto-hooks
+- **Root cause**: prefs.js had module-level code that tried to hook into `window.Auth.onLogin` and `window.__authReady`. Both are undefined at ES module import time. The hooks were silently discarded.
+- **Fix**: Removed the broken auto-hooks. Sync is now driven entirely by boomboom.js: `BbnPrefs.sync()` is called in `Auth.onLogin` (via wireAuth) and `await BbnPrefs.sync()` is called before `initSettings()`.
 
-- **T-33** closed — admin panel empty root cause found and fixed (dynamic script injection)
+#### Settings zoom always shows default 13
+- **Root cause**: `initPreferences()` read localStorage before `BbnPrefs.sync()` had fetched server prefs. localStorage was empty, so fell back to `|| '13'`.
+- **Fix**: `await BbnPrefs.sync()` before `initSettings()` in `initApp()`. Changed default fallback from `'13'` to `'17'` to match `prefs.js` default.
+
+#### Settings 'Account type: —'
+- **settings.js** `initAccountInfo()`: removed `account_type` row — there's only one account type.
+- **settings.html** SSR: removed the `Account type:` line from server-rendered fallback.
+
+#### Auth.onLogout redirect coverage
+- **boomboom.js**: replaced `mapModule.refreshMarkers()` in `Auth.onLogout` with `mapModule.onLogout()` so map state is fully cleared on logout (markers, favLines, meetControl, favIds, bearing reset).
+- Added `Auth.onGuestExpired` hook wired to `mapModule.onGuestExpired()`.
 
 ---
 
 ## Key Decisions Made
 
-- `bbm` was a global typo throughout; canonical prefix is `bbn`. All CSS classes, CSS vars, localStorage/sessionStorage keys, DOM class queries updated.
-- `BBNCrypto` was already the correct name (crypto.js always used `BBN`). No rename needed.
-- sessionStorage for JWT token is intentional (privacy-by-design: clears on tab close). localStorage is used only for data that should survive tab close: guest ID, expiry, meeting target, preferences.
-- `admin.js` is a non-module legacy script; it cannot be imported. Dynamic injection after auth is the correct loading strategy — `window.Auth`, `window.Api`, `window.__authReady` are all guaranteed set at that point.
-- `initUnlockButton()` must never be wrapped in `DOMContentLoaded` — it is called from `initApp()` which itself runs on `DOMContentLoaded`, so the event has already fired.
+- `window.__authReady` is set in `initApp()`, which runs on `DOMContentLoaded`. ES modules run their top-level code *before* `DOMContentLoaded` handlers fire. Any module-level code that references `window.__authReady` will see `undefined`. All such patterns must be replaced by exported functions called from boomboom.js at the right time.
+- `BbnPrefs.sync()` must be awaited before `initSettings()` to ensure localStorage is populated with server values before the preferences form reads them.
+- Route guard after `await window.__authReady` is the correct place to enforce protected-route redirects for expired/missing tokens. The `onLogout` handler catches mid-session logouts; the guard catches page-load with expired token.
 
 ---
 
 ## Blockers / Parked Items
 
-- **`/settings` non-editable account info** — if `ssr_me` is None (gateway down or unreachable), shows "Loading…". JS `initAccountInfo()` also fails silently. Backend/infra issue.
-- **`/favourites` and other protected routes redirect** — most likely `JWT_SECRET` mismatch between server and gateway Railway services. Both must use the same secret.
-- **502 on `/api/auth/guest`** — verify `GATEWAY_URL` is set correctly in Railway server service and gateway is running.
-- **`specs/ui/opaque-client.yaml` missing** — OPAQUE protocol client has clear security contracts (SEC-1.10 PBKDF2 email hash). Needs a spec next session.
+- **`/settings` non-editable account info** — if `ssr_me` is None (gateway down), shows "Loading…". Backend/infra issue.
+- **`/favourites` and other protected routes redirect** — JWT_SECRET mismatch between server and gateway Railway services. Both must use the same secret.
+- **502 on `/api/auth/guest`** — verify `GATEWAY_URL` in Railway server service.
+- **`adminListVenueManagers`** uses `by=role&q=venue_manager` — confirm server's admin/users handler supports `by=role` filter. If not, the venue manager reassign dropdown will show an error (handled gracefully in admin.js).
+- **Session countdown / premature logout** — most likely short JWT TTL or JWT_SECRET mismatch causing 401 on API calls → `Auth.logout()`. Client-side: route guard now handles redirects. Server-side: verify `JWT_SECRET` matches across services.
+- **Fixed-location venues on map** — if venues are not returned by `GET /location/nearby`, they won't appear. Backend concern.
+- **`specs/ui/opaque-client.yaml` missing** — OPAQUE protocol client spec. Medium priority.
 - `JWT_SECRET`, `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION`, `CORS_ORIGINS` must be set in Railway.
 - 18 CodeQL alerts open (fetched 2026-03-25).
 
@@ -78,13 +86,13 @@ Session closed — wrap-up complete.
 ## Handoff Notes
 
 ### Railway env vars — no changes needed for this commit
-All fixes in this session are client-side JS and specs only.
+All fixes are client-side JS and one server template. No new env vars required.
 
-### Spec gap to fill next session
-`specs/ui/opaque-client.yaml` — covers the OPAQUE WASM client, the PBKDF2 email hash (SEC-1.10), and the two-step login/register flow contract. Medium priority.
+### Deploy impact
+- `window.BbnPrefs` replaces `window.BbmPrefs` — any external scripts referencing `window.BbmPrefs` will break (none expected).
+- `bbn:tier-gate` and `bbn:user-blocked` event names are now consistent — any listeners using `bbm:` names would need updating (all listeners are in the codebase and are now fixed).
 
-### bbn_ storage key rename — deploy impact
-Users will lose stored preferences and meeting targets on first deployment after this branch merges. The JWT is in sessionStorage (per-tab) so login state is unaffected. Guest ID (`bbn_guest_id`) will regenerate silently.
-
-### T-27 (App Architecture Specs) — still planned
-Several spec gaps remain for the gateway service (JWT signing/validation, rate limiting, WS auth). T-27 is the umbrella ticket.
+### Next session priorities
+1. Verify `adminListVenueManagers` works (by=role query param on server) — may need backend fix.
+2. Write `specs/ui/opaque-client.yaml`.
+3. Investigate premature logout — check JWT TTL in gateway config and JWT_SECRET consistency.

@@ -33,9 +33,7 @@ export async function initAccountInfo() {
   if (!wrap) return;
   try {
     const me = await Api.getMe();
-    let html = infoRow('Tier', me.tier || '—');
-    html += infoRow('Account type', me.account_type || '—');
-    wrap.innerHTML = html;
+    wrap.innerHTML = infoRow('Tier', me.tier || '—');
   } catch { /* leave SSR fallback in place */ }
 }
 
@@ -68,7 +66,7 @@ export async function initPreferences() {
   if (!wrap || !zoomEl || !favPinsEl || !saveBtn) return;
 
   wrap.style.display = '';
-  zoomEl.value    = localStorage.getItem(PREF_MAP_ZOOM) || '13';
+  zoomEl.value    = localStorage.getItem(PREF_MAP_ZOOM) || '17';
   favPinsEl.checked = localStorage.getItem(PREF_FAV_PINS) !== 'false';
 
   saveBtn.onclick = () => {
