@@ -145,6 +145,11 @@ export async function handleConversationsUpdate(messages) {
     }
   });
 
+  if (Object.keys(threads).length === 0) {
+    wrap.innerHTML = '<div class="bbn-empty"><p>No conversations yet.</p></div>';
+    return;
+  }
+
   wrap.innerHTML = await Promise.all(
     Object.entries(threads).map(async ([uid, m]) => {
       const profile = await Api.getProfile(uid);

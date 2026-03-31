@@ -269,6 +269,11 @@ async function initApp() {
   window.OpaqueClient = OpaqueClient;
   window.BbnPrefs = BbnPrefs;
 
+  // Clear any SSR content in #profileFormWrap immediately — prevents a brief
+  // flash of server-rendered nickname/age before JS renders the proper form.
+  const _pfw = document.getElementById('profileFormWrap');
+  if (_pfw) _pfw.innerHTML = '<div class="bbn-loading"><p>Loading…</p></div>';
+
   // Service Worker
   if ('serviceWorker' in navigator) {
     try {
@@ -317,6 +322,9 @@ async function initApp() {
       window.location.href = BASE + '/';
       return;
     }
+    // Fetch guest tier radius — refreshRadius() is only called on Auth.onLogin,
+    // so fresh guest page loads would otherwise show no radius circle.
+    mapModule.refreshRadius();
   }
 
   // Apply UI state AFTER auth is ready

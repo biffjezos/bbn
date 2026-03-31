@@ -6,93 +6,84 @@
 
 ---
 
-**Branch:** `claude/fix-ui-api-issues-ObVYc`
+**Branch:** `claude/fix-aria-hidden-focus-ZsyJo`
 **Session date:** 2026-03-31
-**Last updated:** 2026-03-31T12:30Z
+**Last updated:** 2026-03-31T13:30Z
 
 ---
 
 ## In Progress
 
-Session wrap-up — complete.
+Client-side bug fixes (current session) — committing now.
 
 ---
 
 ## Completed This Session
 
-### UI/API bug fixes — commit 70a96d6
+### Fix batch 2 — client-side bugs from v3e46488 deploy
 
-All fixes are client-side JS and one server template change.
+#### `DEBUG is not defined` — lock.js crash (breaks every page)
+- **Root cause**: `lock.js` referenced `DEBUG` as a bare identifier but never declared it. `api.js` declares `const DEBUG` as a module-scoped constant; it does not leak to other modules.
+- **Fix**: Added `const DEBUG = window.location.search.includes('dbg');` at the top of `lock.js`.
 
-#### Admin panel — `window.Api.adminXxx is not a function`
-- **api.js**: Added all missing admin API methods: `adminGetConfig`, `adminGetSettings`, `adminGetLocationConfig`, `adminUpdateSetting`, `adminSearchUsers`, `adminListVenueManagers`, `adminPatchUser`, `adminReassignVenueManager`, `adminListTiers`, `adminCreateTier`, `adminUpdateTier`, `adminDeleteTier`, `adminListFeatures`, `adminUpdateFeature`. All map to the correct gateway routes (`/api/admin/...`).
+#### aria-hidden / focus accessibility warning
+- **Root cause**: `lock()` and `unlock()` showed/hid the Bootstrap modal while a focused element remained in the page or modal. Browser blocks `aria-hidden` on elements with focused descendants.
+- **Fix**: Call `document.activeElement?.blur()` before `modal.show()` (in `lock()`) and before `modal.hide()` (in `unlock()`).
 
-#### bbm→bbn rename — missed items
-- **api.js**: `bbm:tier-gate` → `bbn:tier-gate` (event name in both `apiFetch` dispatch and `initApiGlobals` listener)
-- **blocks.js**: `bbm:user-blocked` → `bbn:user-blocked`
-- **profile.js**: `bbm:user-blocked` → `bbn:user-blocked` (two listeners)
-- **prefs.js**: `BbmPrefs` → `BbnPrefs` (export name and `window.BbnPrefs` assignment)
-- **map.js**: `window.BbmPrefs` → `window.BbnPrefs`
-- **boomboom.js**: import `BbnPrefs`, expose as `window.BbnPrefs`
+#### Map — self marker and radius stale after logout
+- **Root cause**: `onLogout()` did not remove `selfMarker`, `selfCircle`, or reset `viewRadius`/`lastSex`. After logout, the logged-in user's sex-aware icon and large admin radius remained on the map.
+- **Fix**: `onLogout()` now removes `selfMarker`, `selfCircle`, resets `viewRadius=0`, `lastSex=undefined`, and calls `refreshRadius()` to fetch the guest tier radius. `placeSelfMarker()` now guards against non-registered users: guests do not get a personal sex-aware marker. The radius circle is shown for both guests and registered users (guest circle uses neutral yellow).
 
-#### Map favourites not loading
-- **Root cause**: `window.__authReady?.then(...)` in map.js ran at ES module import time, before `initApp()` set `window.__authReady`. The `.then()` callback was silently discarded.
-- **Fix**: Removed the broken `window.__authReady?.then(...)` block. Added `loadFavourites()` function exported from `MapModule`. Called from `wireAuth`'s `Auth.onLogin` hook in boomboom.js (fires for both existing session on page load and new login).
+#### Map — fresh guest has no radius circle
+- **Root cause**: `refreshRadius()` was only called from `Auth.onLogin`. Guests (never logged in) never triggered `onLogin`, so `viewRadius` stayed 0 and no circle was drawn.
+- **Fix**: After `await window.__authReady` in `initApp()`, if `!Auth.isRegistered()`, call `mapModule.refreshRadius()` to fetch the guest tier radius.
 
-#### Route guard — logged-out users not redirected from protected pages
-- **Root cause**: When a JWT expired and the page was reloaded, `Auth.init()` fell through to `initGuest()` without calling `Auth.onLogout`. The `onLogout` handler's redirect was never triggered.
-- **Fix**: Added route guard in `initApp()` after `await window.__authReady`. If not registered and on a protected route (`/messages`, `/favourites`, `/profile`, `/admin`, `/settings`) → redirect to `/`. Also added `PROTECTED_PATHS` constant reused by both the guard and the `onLogout` redirect handler.
+#### /messages — "No conversations" message missing
+- **Root cause**: `handleConversationsUpdate([])` with empty messages produced an empty thread map, and `Promise.all([]).then(arr => arr.join(''))` set `wrap.innerHTML = ''` (blank).
+- **Fix**: Early return with empty-state message when `Object.keys(threads).length === 0`.
 
-#### prefs.js — broken module-level auto-hooks
-- **Root cause**: prefs.js had module-level code that tried to hook into `window.Auth.onLogin` and `window.__authReady`. Both are undefined at ES module import time. The hooks were silently discarded.
-- **Fix**: Removed the broken auto-hooks. Sync is now driven entirely by boomboom.js: `BbnPrefs.sync()` is called in `Auth.onLogin` (via wireAuth) and `await BbnPrefs.sync()` is called before `initSettings()`.
+#### /settings — account info shows "Loading…" forever if API down
+- **Root cause**: `initAccountInfo()` showed "Loading…" initially, then catch block did nothing on API failure, leaving "Loading…" forever.
+- **Fix**: JWT data (nickname, tier, role) rendered synchronously as immediate fallback. API call runs after and enriches with email if available.
 
-#### Settings zoom always shows default 13
-- **Root cause**: `initPreferences()` read localStorage before `BbnPrefs.sync()` had fetched server prefs. localStorage was empty, so fell back to `|| '13'`.
-- **Fix**: `await BbnPrefs.sync()` before `initSettings()` in `initApp()`. Changed default fallback from `'13'` to `'17'` to match `prefs.js` default.
-
-#### Settings 'Account type: —'
-- **settings.js** `initAccountInfo()`: removed `account_type` row — there's only one account type.
-- **settings.html** SSR: removed the `Account type:` line from server-rendered fallback.
-
-#### Auth.onLogout redirect coverage
-- **boomboom.js**: replaced `mapModule.refreshMarkers()` in `Auth.onLogout` with `mapModule.onLogout()` so map state is fully cleared on logout (markers, favLines, meetControl, favIds, bearing reset).
-- Added `Auth.onGuestExpired` hook wired to `mapModule.onGuestExpired()`.
+#### /profile — SSR content flicker (nickname/age h? element appears then disappears)
+- **Root cause**: Server renders SSR content (nickname, age) into `#profileFormWrap`. JS only replaces it after `await window.__authReady` (up to several seconds later). Brief flash of SSR data before the proper profile form.
+- **Fix**: Added immediate `#profileFormWrap` clear at the start of `initApp()` (at `DOMContentLoaded` time, before auth resolves).
 
 ---
 
 ## Key Decisions Made
 
-- `window.__authReady` is set in `initApp()`, which runs on `DOMContentLoaded`. ES modules run their top-level code *before* `DOMContentLoaded` handlers fire. Any module-level code that references `window.__authReady` will see `undefined`. All such patterns must be replaced by exported functions called from boomboom.js at the right time.
-- `BbnPrefs.sync()` must be awaited before `initSettings()` to ensure localStorage is populated with server values before the preferences form reads them.
-- Route guard after `await window.__authReady` is the correct place to enforce protected-route redirects for expired/missing tokens. The `onLogout` handler catches mid-session logouts; the guard catches page-load with expired token.
+- Self marker (sex-aware icon) is only for registered users. Guests are not personally identified on the map — only a radius circle shows their coverage area.
+- `placeSelfMarker()` is the enforcement point for this rule, not just `onLogout()`. This prevents the stale-icon bug from reoccurring in any path that calls `placeSelfMarker`.
+- `onLogout()` spec now matches `onGuestExpired()` for clearing — both clear ALL map state including selfMarker, selfCircle, viewRadius.
+- `DEBUG` must be declared in every module that uses it. api.js's `const DEBUG` is module-private; other modules that need debug logging must declare their own.
 
 ---
 
 ## Blockers / Parked Items
 
-- **`/settings` non-editable account info** — if `ssr_me` is None (gateway down), shows "Loading…". Backend/infra issue.
-- **`/favourites` and other protected routes redirect** — JWT_SECRET mismatch between server and gateway Railway services. Both must use the same secret.
-- **502 on `/api/auth/guest`** — verify `GATEWAY_URL` in Railway server service.
-- **`adminListVenueManagers`** uses `by=role&q=venue_manager` — confirm server's admin/users handler supports `by=role` filter. If not, the venue manager reassign dropdown will show an error (handled gracefully in admin.js).
-- **Session countdown / premature logout** — most likely short JWT TTL or JWT_SECRET mismatch causing 401 on API calls → `Auth.logout()`. Client-side: route guard now handles redirects. Server-side: verify `JWT_SECRET` matches across services.
-- **Fixed-location venues on map** — if venues are not returned by `GET /location/nearby`, they won't appear. Backend concern.
+- **503 / signal timeout on Railway** — `/api/health`, `/api/favourites`, `/api/location` all timing out. Cold-start or service down. Backend/infra issue.
+- **`/api/admin/location-config` timeout** — admin settings location tab shows "Location config unavailable." Backend.
+- **`/favourites` and other protected routes redirect** — JWT_SECRET mismatch. Both server and gateway must use the same secret.
+- **`adminListVenueManagers`** uses `by=role&q=venue_manager` — confirm server's admin/users handler supports `by=role` filter.
+- **Fixed-location venues on map** — if not returned by `GET /location/nearby`, won't appear. Backend concern.
 - **`specs/ui/opaque-client.yaml` missing** — OPAQUE protocol client spec. Medium priority.
-- `JWT_SECRET`, `GATEWAY_URL`, `GATEWAY_ALLOWED_HOST`, `ASSET_VERSION`, `CORS_ORIGINS` must be set in Railway.
 - 18 CodeQL alerts open (fetched 2026-03-25).
 
 ---
 
 ## Handoff Notes
 
-### Railway env vars — no changes needed for this commit
-All fixes are client-side JS and one server template. No new env vars required.
+### Railway env vars
+No new env vars required. All fixes are client-side JS only.
 
 ### Deploy impact
-- `window.BbnPrefs` replaces `window.BbmPrefs` — any external scripts referencing `window.BbmPrefs` will break (none expected).
-- `bbn:tier-gate` and `bbn:user-blocked` event names are now consistent — any listeners using `bbm:` names would need updating (all listeners are in the codebase and are now fixed).
+- `window.Auth.isRegistered()` now gates the self marker in `placeSelfMarker()`. Any path that triggers `placeSelfMarker` for a guest will correctly show only the radius circle.
+- Self marker is now explicitly removed on logout (not just cleaned up on next `geo:position` event).
 
 ### Next session priorities
-1. Verify `adminListVenueManagers` works (by=role query param on server) — may need backend fix.
-2. Write `specs/ui/opaque-client.yaml`.
-3. Investigate premature logout — check JWT TTL in gateway config and JWT_SECRET consistency.
+1. Verify guest radius circle appears correctly after deploy.
+2. Investigate 503/timeouts on Railway — may need to extend cold-start timeout or check service health.
+3. Write `specs/ui/opaque-client.yaml`.
+4. Check `adminListVenueManagers` backend support for `by=role` filter.

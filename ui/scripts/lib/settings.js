@@ -31,10 +31,27 @@ function infoRow(label, value) {
 export async function initAccountInfo() {
   const wrap = document.getElementById('accountInfoWrap');
   if (!wrap) return;
+
+  // Show JWT data immediately — no API call needed, no loading state
+  const jwt = parseJwt(Auth.getToken());
+  if (jwt) {
+    const rows = [];
+    if (jwt.nickname) rows.push(infoRow('Nickname', jwt.nickname));
+    if (jwt.tier)     rows.push(infoRow('Tier', jwt.tier));
+    if (jwt.role && jwt.role !== 'user') rows.push(infoRow('Role', jwt.role));
+    if (rows.length)  wrap.innerHTML = rows.join('');
+  }
+
+  // Enrich with server data (adds email if available)
   try {
     const me = await Api.getMe();
-    wrap.innerHTML = infoRow('Tier', me.tier || '—');
-  } catch { /* leave SSR fallback in place */ }
+    const rows = [];
+    if (me.nickname) rows.push(infoRow('Nickname', me.nickname));
+    if (me.email)    rows.push(infoRow('Email', me.email));
+    if (me.tier)     rows.push(infoRow('Tier', me.tier));
+    if (me.role && me.role !== 'user') rows.push(infoRow('Role', me.role));
+    if (rows.length) wrap.innerHTML = rows.join('');
+  } catch { /* JWT fallback already shown */ }
 }
 
 // ── App Limits (read-only tier info) ─────────────────────

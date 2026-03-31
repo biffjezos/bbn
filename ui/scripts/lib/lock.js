@@ -2,6 +2,8 @@
 // lock.js — Inactivity & tab lock with modal
 // ============================================================
 
+const DEBUG = window.location.search.includes('dbg');
+
 const INACTIVITY_LOCK_MS = 3 * 60 * 1000; // 3 minutes
 const HIDE_LOCK_MS = 30 * 1000;           // 30 seconds
 
@@ -27,6 +29,8 @@ export function lock() {
   clearInactivityTimer();
   window.BBNCrypto?.lock();
   if (DEBUG) console.log('[Lock] Keys locked.');
+  // Blur focused element before showing modal — prevents aria-hidden warning
+  if (document.activeElement) document.activeElement.blur();
   const modal = getModal();
   if (modal) modal.show();
 }
@@ -35,6 +39,8 @@ export function lock() {
 export function unlock() {
   _locked = false;
   resetInactivityTimer();
+  // Blur focused element before hiding modal — prevents aria-hidden warning
+  if (document.activeElement) document.activeElement.blur();
   const modal = getModal();
   if (modal) modal.hide();
   window.dispatchEvent(new CustomEvent('bbn:unlocked'));

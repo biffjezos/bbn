@@ -52,3 +52,6 @@ qa_report: >
   wired correctly when called from initApp(). wireAuthHooks() extracted as explicit
   export, called after window.Auth is assigned. Lock/unlock flow and modal behaviour
   verified against expected_behaviour.
+  2026-03-31 (fix): Added module-level DEBUG constant (window.location.search.includes('dbg'))
+  to fix ReferenceError crash. Added document.activeElement.blur() before modal show/hide
+  to prevent aria-hidden-focus accessibility warning.
