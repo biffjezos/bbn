@@ -31,21 +31,21 @@ function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 
 function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
 
 function loadingHtml(text = 'Loading…') {
-  return `<div class="bbm-loading"><p>${escHtml(text)}</p></div>`;
+  return `<div class="bbn-loading"><p>${escHtml(text)}</p></div>`;
 }
 
 // ── Meeting mode ───────────────────────────────────────────
 
 function getMeetUid() {
-  try { return JSON.parse(localStorage.getItem('bbm_meet') || 'null')?.uid || null; } catch { return null; }
+  try { return JSON.parse(localStorage.getItem('bbn_meet') || 'null')?.uid || null; } catch { return null; }
 }
 function getMyId() {
   try { return JSON.parse(atob(Auth.getToken().split('.')[1])).sub; } catch { return null; }
 }
 
 function toggleMeet(uid, nickname, sex) {
-  if (getMeetUid() === uid) localStorage.removeItem('bbm_meet');
-  else localStorage.setItem('bbm_meet', JSON.stringify({ uid, nickname }));
+  if (getMeetUid() === uid) localStorage.removeItem('bbn_meet');
+  else localStorage.setItem('bbn_meet', JSON.stringify({ uid, nickname }));
   renderFavourites();
 }
 
@@ -139,7 +139,7 @@ function favItemHtml(f,isFav,unreadIds=new Set(),blockedIds=new Set()){
 
 function sectionHtml(title, items, isFav, unreadIds=new Set(), blockedIds=new Set()){
   if(!items.length) return '';
-  return `<div class="bbm-search-section mb-2"><div class="bbm-search-section-label text-muted-bb small mb-1">${escHtml(title)}</div>${items.map(f=>favItemHtml(f,isFav,unreadIds,blockedIds)).join('')}</div>`;
+  return `<div class="bbn-search-section mb-2"><div class="bbn-search-section-label text-muted-bb small mb-1">${escHtml(title)}</div>${items.map(f=>favItemHtml(f,isFav,unreadIds,blockedIds)).join('')}</div>`;
 }
 
 // ── Main render ─────────────────────────────────────────────
@@ -149,7 +149,7 @@ export async function renderFavourites(forceReload=false){
   if(!wrap) return;
 
   if(!isRegistered()){
-    wrap.innerHTML=`<div class="bbm-empty"><i class="bi bi-star"></i><p>Log in to see your favourites.</p><button class="btn btn-bbm-primary mt-3" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button></div>`;
+    wrap.innerHTML=`<div class="bbn-empty"><i class="bi bi-star"></i><p>Log in to see your favourites.</p><button class="btn btn-bbn-primary mt-3" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button></div>`;
     return;
   }
 
@@ -173,7 +173,7 @@ export async function renderFavourites(forceReload=false){
 }
 
 async function renderFavList(wrap,favourites,blockedIds=new Set()){
-  if(!favourites.length){ wrap.innerHTML=`<div class="bbm-empty"><i class="bi bi-star"></i><p>No favourites yet.<br>Tap a user on the map to add them.</p></div>`; return; }
+  if(!favourites.length){ wrap.innerHTML=`<div class="bbn-empty"><i class="bi bi-star"></i><p>No favourites yet.<br>Tap a user on the map to add them.</p></div>`; return; }
   const unreadIds=await fetchUnreadIds();
   wrap.innerHTML=favourites.map(f=>favItemHtml(f,true,unreadIds,blockedIds)).join('');
 }
@@ -197,7 +197,7 @@ async function renderSearchResults(wrap,q,rawQuery,blockedIds=new Set()){
     globalUsers=users.filter(u=>!favIds.has(u.userId));
   }catch(err){ wrap.innerHTML=`<div class="alert alert-danger mt-3">${escHtml(err.message)}</div>`; return; }
 
-  if(!matchedFavs.length && !globalUsers.length){ wrap.innerHTML=`<div class="bbm-empty"><i class="bi bi-search"></i><p>No users found for <em>${escHtml(rawQuery)}</em></p></div>`; return; }
+  if(!matchedFavs.length && !globalUsers.length){ wrap.innerHTML=`<div class="bbn-empty"><i class="bi bi-search"></i><p>No users found for <em>${escHtml(rawQuery)}</em></p></div>`; return; }
 
   const unreadIds=await fetchUnreadIds();
   wrap.innerHTML=
@@ -210,7 +210,7 @@ async function renderSearchResults(wrap,q,rawQuery,blockedIds=new Set()){
 function bindListEvents(wrap){
   wrap.querySelectorAll('.fav-meet-btn').forEach(btn=>btn.addEventListener('click',()=>toggleMeet(btn.dataset.userid,btn.dataset.nickname,btn.dataset.sex)));
   wrap.querySelectorAll('.fav-remove-btn').forEach(btn=>btn.addEventListener('click',async()=>{
-    if(getMeetUid()===btn.dataset.userid) localStorage.removeItem('bbm_meet');
+    if(getMeetUid()===btn.dataset.userid) localStorage.removeItem('bbn_meet');
     try{ await Api.removeFavourite(btn.dataset.userid); cachedFavourites=null; cachedBlockedIds=null; await renderFavourites(true); } 
     catch(err){ alert('Error: '+err.message); }
   }));
@@ -238,8 +238,8 @@ export function initSearchBar(){
   if(!wrap||!input||!clear) return;
 
   const sex=Auth?.getSex?.();
-  if(sex==='m') wrap.classList.add('bbm-search--male');
-  else if(sex==='f') wrap.classList.add('bbm-search--female');
+  if(sex==='m') wrap.classList.add('bbn-search--male');
+  else if(sex==='f') wrap.classList.add('bbn-search--female');
 
   wrap.style.display='';
 

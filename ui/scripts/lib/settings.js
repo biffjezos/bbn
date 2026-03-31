@@ -4,8 +4,8 @@ import { Api } from './api.js';
 import { Auth } from './auth.js';
 
 // Preference keys (localStorage) — must match prefs.js
-const PREF_MAP_ZOOM = 'bbm_pref_map_zoom';
-const PREF_FAV_PINS = 'bbm_pref_show_fav_pins';
+const PREF_MAP_ZOOM = 'bbn_pref_map_zoom';
+const PREF_FAV_PINS = 'bbn_pref_show_fav_pins';
 
 // ── Utilities ─────────────────────────────────────────────
 function escHtml(str) {
@@ -105,7 +105,7 @@ export async function initBlockedUsers() {
       wrap.innerHTML = list.map(b => `
         <div class="d-flex align-items-center justify-content-between mb-2" data-blocked-id="${escHtml(b.userId)}">
           <span class="small">${escHtml(b.nickname || b.userId)}</span>
-          <button class="btn btn-sm btn-bbm-ghost unblock-btn" data-uid="${escHtml(b.userId)}">Unblock</button>
+          <button class="btn btn-sm btn-bbn-ghost unblock-btn" data-uid="${escHtml(b.userId)}">Unblock</button>
         </div>`).join('');
 
       wrap.querySelectorAll('.unblock-btn').forEach(btn => {

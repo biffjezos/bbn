@@ -4,10 +4,10 @@
 
 import { Api } from './api.js';
 
-const STORAGE_TOKEN_KEY = 'bbm_token';
-const STORAGE_GUEST_KEY = 'bbm_guest_id';
-const STORAGE_NICK_KEY  = 'bbm_nickname';
-const STORAGE_GUEST_EXP = 'bbm_guest_exp';
+const STORAGE_TOKEN_KEY = 'bbn_token';
+const STORAGE_GUEST_KEY = 'bbn_guest_id';
+const STORAGE_NICK_KEY  = 'bbn_nickname';
+const STORAGE_GUEST_EXP = 'bbn_guest_exp';
 const GUEST_TTL_MS      = 15 * 60 * 1000;
 const GUEST_CLEANUP_MS  = 60 * 60 * 1000; // 1 hour
 
@@ -64,7 +64,7 @@ export const Auth = (() => {
     function clearUserStorage() {
         sessionStorage.removeItem(STORAGE_TOKEN_KEY);
         sessionStorage.removeItem(STORAGE_NICK_KEY);
-        localStorage.removeItem('bbm_meet');
+        localStorage.removeItem('bbn_meet');
         clearBbnCookie();
     }
 

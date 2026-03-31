@@ -37,7 +37,7 @@ function roleBadgesHtml(roles) {
 function sexClass(sex) { return sex === 'f' ? 'female' : sex === 'm' ? 'male' : 'unknown'; }
 function sexEmoji(sex)  { return sex === 'f' ? '👌' : sex === 'm' ? '👆' : '👊'; }
 function sexLabel(sex)  { return sex === 'f' ? 'Female' : sex === 'm' ? 'Male' : '—'; }
-function loadingHtml(text = 'Loading…') { return `<div class="bbm-loading"><p>${escHtml(text)}</p></div>`; }
+function loadingHtml(text = 'Loading…') { return `<div class="bbn-loading"><p>${escHtml(text)}</p></div>`; }
 
 // ── My Profile ────────────────────────────────────────────
 
@@ -67,9 +67,9 @@ async function renderMyProfile() {
   if (!wrap) return;
 
   if (!Auth.isRegistered()) {
-    wrap.innerHTML = `<div class="bbm-empty"><i class="bi bi-person-circle"></i>
+    wrap.innerHTML = `<div class="bbn-empty"><i class="bi bi-person-circle"></i>
       <p>Log in to manage your profile.</p>
-      <button class="btn btn-bbm-primary mt-3" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button></div>`;
+      <button class="btn btn-bbn-primary mt-3" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button></div>`;
     return;
   }
 
@@ -101,18 +101,18 @@ async function renderMyProfile() {
         <label class="form-label">Venue name</label>
         <input type="text" class="form-control" id="editNickname"
           value="${escHtml(current.venueName || current.nickname || '')}" minlength="2" maxlength="64" placeholder="Venue display name" />
-        <div class="mt-1" style="font-size:0.78rem;color:var(--bbm-text-faint)">Shown to nearby users on the map.</div>
+        <div class="mt-1" style="font-size:0.78rem;color:var(--bbn-text-faint)">Shown to nearby users on the map.</div>
       </div>
       <div class="mb-4">
         <label class="form-label">Address</label>
         <div class="form-control-plaintext text-muted-bb small" style="padding-left:0">${escHtml(current.address || '—')}</div>
-        <div class="mt-1" style="font-size:0.78rem;color:var(--bbm-text-faint)">Location is fixed. Contact support to update.</div>
+        <div class="mt-1" style="font-size:0.78rem;color:var(--bbn-text-faint)">Location is fixed. Contact support to update.</div>
       </div>` : `
       <div class="mb-3">
         <label class="form-label" for="editNickname">Nickname</label>
         <input type="text" class="form-control" id="editNickname"
           value="${escHtml(current.nickname || '')}" minlength="2" maxlength="32" placeholder="Display name" />
-        <div class="mt-1" style="font-size:0.78rem;color:var(--bbm-text-faint)">Shown to nearby users. Not unique.</div>
+        <div class="mt-1" style="font-size:0.78rem;color:var(--bbn-text-faint)">Shown to nearby users. Not unique.</div>
       </div>
       <div class="row g-3 mb-4">
         <div class="col-6">
@@ -130,7 +130,7 @@ async function renderMyProfile() {
       </div>`;
 
   wrap.innerHTML = `
-    <div class="bbm-profile-form">
+    <div class="bbn-profile-form">
       <div id="profileAlert" class="d-none mb-4"></div>
       <div class="mb-4 d-flex align-items-center gap-2 flex-wrap">
         <span id="tierBadge"
@@ -143,10 +143,10 @@ async function renderMyProfile() {
       </div>
       ${editableFields}
       <div class="d-flex gap-3 flex-wrap mb-4">
-        <button class="btn btn-bbm-primary" id="saveProfileBtn">
+        <button class="btn btn-bbn-primary" id="saveProfileBtn">
           <i class="bi bi-check2 me-2"></i>Save Changes
         </button>
-        <button class="btn btn-bbm-ghost" id="changePasswordBtn">
+        <button class="btn btn-bbn-ghost" id="changePasswordBtn">
           <i class="bi bi-key me-2"></i>Change Password
         </button>
       </div>
@@ -200,8 +200,8 @@ async function renderMyProfile() {
     if (existing) { existing.remove(); return; }
     const section = document.createElement('div');
     section.id = 'changePasswordSection';
-    section.className = 'bbm-profile-form mt-4 pt-4';
-    section.style.borderTop = '1px solid var(--bbm-border)';
+    section.className = 'bbn-profile-form mt-4 pt-4';
+    section.style.borderTop = '1px solid var(--bbn-border)';
     section.innerHTML = `
       <h5 class="heading-serif mb-3" style="font-size:1.1rem">Change Password</h5>
       <div id="pwAlert" class="d-none mb-3"></div>
@@ -211,7 +211,7 @@ async function renderMyProfile() {
         <input type="password" class="form-control" id="newPw" autocomplete="new-password" placeholder="At least 8 characters" /></div>
       <div class="mb-4"><label class="form-label" for="confirmPw">Confirm New Password</label>
         <input type="password" class="form-control" id="confirmPw" autocomplete="new-password" /></div>
-      <button class="btn btn-bbm-primary" id="savePwBtn"><i class="bi bi-check2 me-2"></i>Update Password</button>`;
+      <button class="btn btn-bbn-primary" id="savePwBtn"><i class="bi bi-check2 me-2"></i>Update Password</button>`;
     wrap.appendChild(section);
 
     document.getElementById('savePwBtn').addEventListener('click', async () => {
@@ -260,12 +260,12 @@ async function renderManagerVenueSection(profileWrap) {
 
   const section = document.createElement('div');
   section.id = 'managerVenueSection';
-  section.className = 'bbm-profile-form mt-5 pt-4';
-  section.style.borderTop = '1px solid var(--bbm-border)';
+  section.className = 'bbn-profile-form mt-5 pt-4';
+  section.style.borderTop = '1px solid var(--bbn-border)';
   section.innerHTML = `<h5 class="heading-serif mb-3" style="font-size:1.1rem"><i class="bi bi-house-fill me-2"></i>My Venues</h5>
     <div id="venueLoading" class="text-muted-bb small">Loading…</div>`;
 
-  const forms = profileWrap.querySelectorAll('.bbm-profile-form');
+  const forms = profileWrap.querySelectorAll('.bbn-profile-form');
   forms[forms.length - 1].before(section);
 
   let venues = [];
@@ -281,10 +281,10 @@ async function renderManagerVenueSection(profileWrap) {
   const createWrap = document.createElement('div');
   createWrap.className = 'mb-4';
   createWrap.innerHTML = `
-    <button class="btn btn-bbm-secondary btn-sm" id="vcToggleBtn">
+    <button class="btn btn-bbn-secondary btn-sm" id="vcToggleBtn">
       <i class="bi bi-plus-lg me-1"></i>Add Venue
     </button>
-    <div id="venueCreatePanel" class="d-none mt-3 bbm-section">
+    <div id="venueCreatePanel" class="d-none mt-3 bbn-section">
       <div id="venueCreateAlert" class="d-none mb-3"></div>
       <div class="row g-3 mb-3">
         <div class="col-12 col-sm-6">
@@ -312,7 +312,7 @@ async function renderManagerVenueSection(profileWrap) {
       </div>
       <p class="text-muted-bb small mb-3">Venue name, address, and location cannot be changed after creation.</p>
       <div class="d-flex gap-2 flex-wrap">
-        <button class="btn btn-bbm-primary btn-sm" id="vcSubmitBtn"><i class="bi bi-house-check me-1"></i>Create Venue</button>
+        <button class="btn btn-bbn-primary btn-sm" id="vcSubmitBtn"><i class="bi bi-house-check me-1"></i>Create Venue</button>
         <button class="btn btn-secondary btn-sm" id="vcCancelBtn">Cancel</button>
       </div>
     </div>`;
@@ -366,7 +366,7 @@ async function renderManagerVenueSection(profileWrap) {
   venues.forEach(function(venue) {
     const sid  = escHtml(venue.id);
     const card = document.createElement('div');
-    card.className = 'bbm-section mb-3';
+    card.className = 'bbn-section mb-3';
     card.id = 'venueCard-' + sid;
     card.innerHTML = `
       <div class="d-flex align-items-center gap-2 flex-wrap" style="cursor:pointer" id="venueCardHeader-${sid}">
@@ -398,8 +398,8 @@ async function renderManagerVenueSection(profileWrap) {
           </div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-          <button class="btn btn-bbm-primary btn-sm" id="veSaveBtn-${sid}"><i class="bi bi-check2 me-1"></i>Save</button>
-          <button class="btn btn-bbm-danger btn-sm" id="veDeleteBtn-${sid}"><i class="bi bi-trash3 me-1"></i>Delete Venue</button>
+          <button class="btn btn-bbn-primary btn-sm" id="veSaveBtn-${sid}"><i class="bi bi-check2 me-1"></i>Save</button>
+          <button class="btn btn-bbn-danger btn-sm" id="veDeleteBtn-${sid}"><i class="bi bi-trash3 me-1"></i>Delete Venue</button>
         </div>
       </div>`;
     list.appendChild(card);
@@ -476,8 +476,8 @@ async function renderPublicProfile() {
     const isBlocked = !!profile.blockedByViewer;
     const canMsg    = !(isVenue && profile.canReceiveMessages === false);
     const msgBtnHtml = !canMsg ? '' : isBlocked
-      ? `<span class="btn btn-bbm-pink disabled" aria-disabled="true" style="opacity:0.5"><i class="bi bi-chat-dots me-2"></i>Message</span>`
-      : `<a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message</a>`;
+      ? `<span class="btn btn-bbn-pink disabled" aria-disabled="true" style="opacity:0.5"><i class="bi bi-chat-dots me-2"></i>Message</span>`
+      : `<a href="${threadHref}" class="btn btn-bbn-pink"><i class="bi bi-chat-dots me-2"></i>Message</a>`;
     const blockToggleHtml = isBlocked
       ? `<button class="btn btn-link text-muted p-0" id="unblockUserBtn" style="font-size:0.875rem;text-decoration:none"><i class="bi bi-slash-circle me-1"></i>Unblock</button>`
       : `<button class="btn btn-link text-danger p-0" id="blockUserBtn" style="font-size:0.875rem;text-decoration:none"><i class="bi bi-slash-circle me-1"></i>Block User</button>`;
@@ -486,18 +486,18 @@ async function renderPublicProfile() {
       <div class="mt-4">
         <p class="text-muted-bb mb-3">Create an account to message and favourite people nearby.</p>
         <div class="d-flex gap-3 flex-wrap">
-          <button class="btn btn-bbm-primary" data-bs-toggle="modal" data-bs-target="#registerModal"><i class="bi bi-person-plus me-2"></i>Create Account</button>
-          <button class="btn btn-bbm-ghost" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>
+          <button class="btn btn-bbn-primary" data-bs-toggle="modal" data-bs-target="#registerModal"><i class="bi bi-person-plus me-2"></i>Create Account</button>
+          <button class="btn btn-bbn-ghost" data-bs-toggle="modal" data-bs-target="#loginModal">Log In</button>
         </div>
       </div>`
     : isOwnProfile ? `
       <div class="d-flex gap-3 flex-wrap mt-4 align-items-center">
-        <a href="${threadHref}" class="btn btn-bbm-pink"><i class="bi bi-chat-dots me-2"></i>Message yourself</a>
+        <a href="${threadHref}" class="btn btn-bbn-pink"><i class="bi bi-chat-dots me-2"></i>Message yourself</a>
       </div>`
     : `
       <div class="d-flex gap-3 flex-wrap mt-4 align-items-center">
         ${msgBtnHtml}
-        <button class="btn ${isFav ? 'btn-bbm-outline-pink' : 'btn-bbm-ghost'}" id="favToggleBtn"
+        <button class="btn ${isFav ? 'btn-bbn-outline-pink' : 'btn-bbn-ghost'}" id="favToggleBtn"
           data-userid="${escHtml(userId)}" data-fav="${isFav}">
           <i class="bi bi-star${isFav ? '-fill text-pink' : ''} me-2"></i>${isFav ? 'Favourited' : 'Add to Favourites'}
         </button>
@@ -506,13 +506,13 @@ async function renderPublicProfile() {
       <div class="mt-3">${blockToggleHtml}</div>`;
 
     page.innerHTML = `
-      <div class="bbm-pub-profile-hero">
+      <div class="bbn-pub-profile-hero">
         <div class="container-fluid px-4 px-md-5">
-          <div class="bbm-pub-avatar ${cls}">${avatarInner}</div>
-          <h1 class="bbm-pub-name">${escHtml(profile.nickname || displayName)}</h1>
+          <div class="bbn-pub-avatar ${cls}">${avatarInner}</div>
+          <h1 class="bbn-pub-name">${escHtml(profile.nickname || displayName)}</h1>
           ${isVenue
-            ? `<p class="bbm-pub-meta"><i class="bi bi-house-fill me-1"></i>Venue</p>`
-            : `<p class="bbm-pub-meta">${profile.age ? escHtml(String(profile.age)) + ' · ' : ''}${sexLabel(profile.sex)}</p>`
+            ? `<p class="bbn-pub-meta"><i class="bi bi-house-fill me-1"></i>Venue</p>`
+            : `<p class="bbn-pub-meta">${profile.age ? escHtml(String(profile.age)) + ' · ' : ''}${sexLabel(profile.sex)}</p>`
           }
           ${actionBlock}
         </div>
@@ -542,12 +542,12 @@ async function renderPublicProfile() {
         if (wasFav) {
           await Api.removeFavourite(userId);
           btn.dataset.fav = 'false';
-          btn.className = 'btn btn-bbm-ghost';
+          btn.className = 'btn btn-bbn-ghost';
           btn.innerHTML = '<i class="bi bi-star me-2"></i>Add to Favourites';
         } else {
           await Api.addFavourite(userId);
           btn.dataset.fav = 'true';
-          btn.className = 'btn btn-bbm-outline-pink';
+          btn.className = 'btn btn-bbn-outline-pink';
           btn.innerHTML = '<i class="bi bi-star-fill text-pink me-2"></i>Favourited';
         }
       } catch (err) { alert('Error: ' + err.message); }
@@ -556,7 +556,7 @@ async function renderPublicProfile() {
   } catch (err) {
     page.innerHTML = `<div class="container-fluid px-4 px-md-5 py-5">
       <div class="alert alert-danger">${escHtml(err.message)}</div>
-      <a href="/" class="btn btn-bbm-ghost mt-2"><i class="bi bi-arrow-left me-2"></i>Back to Map</a>
+      <a href="/" class="btn btn-bbn-ghost mt-2"><i class="bi bi-arrow-left me-2"></i>Back to Map</a>
     </div>`;
   }
 }

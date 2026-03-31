@@ -50,7 +50,7 @@ export function isRegistered() {
 }
 
 export function loadingHtml(text = 'Loading…') {
-  return `<div class="bbm-loading"><p>${escHtml(text)}</p></div>`;
+  return `<div class="bbn-loading"><p>${escHtml(text)}</p></div>`;
 }
 
 // ── Crypto ───────────────────────────────────────────────

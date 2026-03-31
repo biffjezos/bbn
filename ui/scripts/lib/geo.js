@@ -83,7 +83,7 @@ export async function pushLocation(lat, lng, accuracy) {
 function setStatus(text, state) {
   const dot = document.getElementById('statusDot');
   const span = document.getElementById('statusText');
-  if (dot) dot.className = 'bbm-status-dot' + (state ? ' ' + state : '');
+  if (dot) dot.className = 'bbn-status-dot' + (state ? ' ' + state : '');
   if (span) span.textContent = text;
 }
 
