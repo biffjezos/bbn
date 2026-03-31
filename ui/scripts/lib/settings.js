@@ -33,8 +33,10 @@ export async function initAccountInfo() {
   if (!wrap) return;
   try {
     const me = await Api.getMe();
-    wrap.innerHTML = infoRow('Tier', me.tier || '—');
-  } catch { /* leave SSR fallback in place */ }
+    let html = infoRow('Tier', me.tier || '—');
+    if (me.account_type) html += infoRow('Account type', me.account_type);
+    wrap.innerHTML = html;
+  } catch { wrap.innerHTML = '<p class="text-muted-bb small">Could not load account info.</p>'; }
 }
 
 // ── App Limits (read-only tier info) ─────────────────────
@@ -69,17 +71,25 @@ export async function initPreferences() {
   zoomEl.value    = localStorage.getItem(PREF_MAP_ZOOM) || '17';
   favPinsEl.checked = localStorage.getItem(PREF_FAV_PINS) !== 'false';
 
-  saveBtn.onclick = () => {
+  saveBtn.onclick = async () => {
     const zoom = parseInt(zoomEl.value, 10);
     if (isNaN(zoom) || zoom < 1 || zoom > 19) {
       if (statusEl) statusEl.textContent = 'Zoom must be 1–19.';
       return;
     }
+    saveBtn.disabled = true;
     localStorage.setItem(PREF_MAP_ZOOM, String(zoom));
     localStorage.setItem(PREF_FAV_PINS, String(favPinsEl.checked));
-    if (statusEl) {
-      statusEl.textContent = 'Saved.';
-      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
+    try {
+      await Api.updatePreferences({ mapZoom: zoom, showFavPins: favPinsEl.checked });
+      if (statusEl) {
+        statusEl.textContent = 'Saved.';
+        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
+      }
+    } catch {
+      if (statusEl) statusEl.textContent = 'Saved locally (server unreachable).';
+    } finally {
+      saveBtn.disabled = false;
     }
   };
 }

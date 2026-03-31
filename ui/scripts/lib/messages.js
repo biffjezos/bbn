@@ -236,7 +236,19 @@ export function setupThreadUI() {
 
 // ── Init ────────────────────────────────────────────────
 export function initMessagesPage({ thread = false, convList = false } = {}) {
-  if (convList) renderConversationList();
+  if (convList) {
+    renderConversationList();
+    // HTTP fallback: load conversations immediately; WS will update when ready
+    Api.getConversations().then(data => {
+      const msgs = Array.isArray(data) ? data : (data.messages || []);
+      return handleConversationsUpdate(msgs);
+    }).catch(() => {
+      const el = document.getElementById('convListWrap');
+      if (el && el.querySelector('.bbn-loading')) {
+        el.innerHTML = '<p class="text-muted-bb small">Could not load conversations.</p>';
+      }
+    });
+  }
 
   if (thread) {
     _threadInitialized = true;
