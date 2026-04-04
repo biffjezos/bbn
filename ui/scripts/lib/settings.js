@@ -84,17 +84,26 @@ export async function initPreferences() {
   zoomEl.value    = localStorage.getItem(PREF_MAP_ZOOM) || '17';
   favPinsEl.checked = localStorage.getItem(PREF_FAV_PINS) !== 'false';
 
-  saveBtn.onclick = () => {
+  saveBtn.onclick = async () => {
     const zoom = parseInt(zoomEl.value, 10);
     if (isNaN(zoom) || zoom < 1 || zoom > 19) {
       if (statusEl) statusEl.textContent = 'Zoom must be 1–19.';
       return;
     }
-    localStorage.setItem(PREF_MAP_ZOOM, String(zoom));
-    localStorage.setItem(PREF_FAV_PINS, String(favPinsEl.checked));
-    if (statusEl) {
-      statusEl.textContent = 'Saved.';
-      setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
+    const showFavPins = favPinsEl.checked;
+    saveBtn.disabled = true;
+    try {
+      await Api.updatePreferences({ mapZoom: zoom, showFavPins });
+      localStorage.setItem(PREF_MAP_ZOOM, String(zoom));
+      localStorage.setItem(PREF_FAV_PINS, String(showFavPins));
+      if (statusEl) {
+        statusEl.textContent = 'Saved.';
+        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
+      }
+    } catch {
+      if (statusEl) statusEl.textContent = 'Save failed — try again.';
+    } finally {
+      saveBtn.disabled = false;
     }
   };
 }

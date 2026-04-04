@@ -14,7 +14,16 @@
 
 ## In Progress
 
-Nothing — committing now.
+Nothing.
+
+---
+
+## Completed This Session (continued)
+
+#### /settings — preferred zoom level never persisted (always showed 13)
+- `saveBtn.onclick` in `settings.js` only wrote to `localStorage` — never called the API.
+- On next login, `BbnPrefs.sync()` fetched the server value (`mapZoom: 13`) and overwrote localStorage.
+- Fixed: save handler now `await Api.updatePreferences({ mapZoom, showFavPins })` first; only updates localStorage on success. Button is disabled during the request.
 
 #### Stale premium radius shown as yellow guest circle after logout
 - Race condition: `refreshRadius()` on `onLogin` starts a `getNearbyRadius('premium')` API call.
