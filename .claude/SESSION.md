@@ -23,12 +23,8 @@ Nothing.
 - Tries `adminListTiers()` in parallel; if it succeeds (admin only), finds next higher tier (excluding `unrestricted`) and renders an upgrade hint with its radius/offline values.
 - Non-admin users see their own tier values only (no public list-tiers endpoint exists).
 
-#### /admin Settings — location config now editable
-- Location config section changed from read-only display to editable inputs + Save buttons.
-- `store_type` remains read-only (env-var only).
-- Added `adminUpdateLocationConfig(key, value)` → `PUT /admin/location-config/{key}` to api.js.
-- `saveLocationConfigValue()` added to admin.js, same pattern as `saveSettingValue()`.
-- **Note:** backend must expose `PUT /admin/location-config/{key}` for saves to work. If it doesn't, save shows an error message gracefully.
+#### /admin Settings — location config stays read-only
+- Reverted editable location config — no backend `PUT /admin/location-config/{key}` endpoint confirmed. Stays read-only until backend supports it.
 
 ---
 
