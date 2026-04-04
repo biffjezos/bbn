@@ -16,6 +16,14 @@
 
 Nothing — committing now.
 
+#### Stale premium radius shown as yellow guest circle after logout
+- Race condition: `refreshRadius()` on `onLogin` starts a `getNearbyRadius('premium')` API call.
+- With a slow backend (502s / 15s signal timeouts), that call can still be in flight when the user logs out.
+- `onLogout` resets `viewRadius=0`; `onGuestReady` sets it correctly to 500m.
+- But the stale premium call resolves last and overwrites `viewRadius=23km`.
+- Next geo event draws a yellow circle (sex=null after logout) at 23km. 
+- Fixed in `refreshRadius()`: capture `wasRegistered` at call time; discard `.then()` result if `isRegistered()` changed.
+
 ---
 
 ## Completed This Session
