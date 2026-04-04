@@ -275,7 +275,10 @@ function onLogout(){
 function refreshSelf(){ if(map && GeoState.pos) placeSelfMarker(GeoState.pos.lat,GeoState.pos.lng); }
 function refreshRadius(){
   const tier=window.Auth?.getTier?.()||'guest';
+  const wasRegistered=window.Auth?.isRegistered?.()||false;
   window.Api.getNearbyRadius(tier).then(data=>{
+    // Discard stale result if login/logout happened while request was in flight
+    if((window.Auth?.isRegistered?.()||false)!==wasRegistered) return;
     viewRadius=data.radiusM??0;
     if(map && GeoState.pos) placeSelfMarker(GeoState.pos.lat,GeoState.pos.lng);
   }).catch(()=>{});

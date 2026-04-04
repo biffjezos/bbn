@@ -185,9 +185,10 @@ export function initDangerZone() {
 export async function initSettings() {
   if (!Auth.isRegistered()) return;
 
-  await initAccountInfo();
-  await initAppLimits();
-  await initPreferences();
-  await initBlockedUsers();
+  // No API dependency — show immediately
+  initPreferences();
   initDangerZone();
+
+  // API-dependent sections run in parallel (don't block each other or preferences)
+  await Promise.allSettled([initAccountInfo(), initAppLimits(), initBlockedUsers()]);
 }

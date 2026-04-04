@@ -793,93 +793,100 @@ var LOCATION_CONFIG_FIELDS = [
 async function renderSettingsTab() {
   var content = document.getElementById('adminTabContent');
   content.innerHTML = '<p class="text-muted-bb small">Loading…</p>';
+
+  var settingsData = null;
   try {
-    var results = await Promise.allSettled([
-      window.Api.adminGetSettings(),
-      window.Api.adminGetLocationConfig(),
-    ]);
-    var settingsData = results[0].status === 'fulfilled' ? results[0].value : null;
-    var locData      = results[1].status === 'fulfilled' ? results[1].value : null;
+    settingsData = await window.Api.adminGetSettings();
+  } catch (err) {
+    content.innerHTML = '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
+    return;
+  }
 
-    var settings = settingsData ? (settingsData.settings || []) : [];
+  var settings = settingsData ? (settingsData.settings || []) : [];
 
-    // Group by section
-    var sections = {};
-    settings.forEach(function (s) {
-      if (!sections[s.section]) sections[s.section] = [];
-      sections[s.section].push(s);
-    });
+  // Group by section
+  var sections = {};
+  settings.forEach(function (s) {
+    if (!sections[s.section]) sections[s.section] = [];
+    sections[s.section].push(s);
+  });
 
-    var sectionOrder = ['rate_limits', 'auth', 'messages', 'requests'];
-    // Add any unknown sections at the end
-    Object.keys(sections).forEach(function (k) {
-      if (sectionOrder.indexOf(k) === -1) sectionOrder.push(k);
-    });
+  var sectionOrder = ['rate_limits', 'auth', 'messages', 'requests'];
+  Object.keys(sections).forEach(function (k) {
+    if (sectionOrder.indexOf(k) === -1) sectionOrder.push(k);
+  });
 
-    var html = ['<div id="settingsContainer">'];
-    sectionOrder.forEach(function (sec) {
-      if (!sections[sec]) return;
-      var icon  = SETTING_SECTION_ICONS[sec] || 'bi-gear';
-      var label = SETTING_SECTION_LABELS[sec] || sec;
-      html.push('<div class="bbn-section mb-4">');
-      html.push('  <h6 class="mb-3"><i class="bi ' + icon + ' me-2"></i>' + escHtml(label) + '</h6>');
-      html.push('  <div class="row g-3">');
-      sections[sec].forEach(function (s) {
-        var restartNote = s.restartRequired
-          ? '<span class="text-muted-bb ms-1" style="font-size:0.7rem" title="Takes effect on next restart">(restart)</span>'
-          : '';
-        html.push('    <div class="col-12 col-sm-6 col-md-4">');
-        html.push('      <label class="form-label small mb-1" for="setting-' + escHtml(s.key) + '">');
-        html.push('        ' + escHtml(s.label) + restartNote);
-        html.push('      </label>');
-        html.push('      <div class="small text-muted-bb mb-1" style="font-size:0.7rem">' + escHtml(s.description) + '</div>');
-        html.push('      <div class="input-group input-group-sm">');
-        html.push('        <input type="number" class="form-control" id="setting-' + escHtml(s.key) + '"');
-        html.push('               data-setting-key="' + escHtml(s.key) + '"');
-        html.push('               value="' + escHtml(String(s.value)) + '" min="0" />');
-        html.push('        <button class="btn btn-bbn-primary btn-sm" data-save-setting="' + escHtml(s.key) + '">Save</button>');
-        html.push('      </div>');
-        html.push('      <div id="setting-msg-' + escHtml(s.key) + '" class="small mt-1" style="min-height:1em"></div>');
-        html.push('    </div>');
-      });
-      html.push('  </div>');
-      html.push('</div>');
-    });
-
-    // Read-only Location section
+  var html = ['<div id="settingsContainer">'];
+  sectionOrder.forEach(function (sec) {
+    if (!sections[sec]) return;
+    var icon  = SETTING_SECTION_ICONS[sec] || 'bi-gear';
+    var label = SETTING_SECTION_LABELS[sec] || sec;
     html.push('<div class="bbn-section mb-4">');
-    html.push('  <h6 class="mb-3"><i class="bi bi-geo-alt me-2"></i>Location</h6>');
-    if (locData) {
-      html.push('  <div class="row g-3">');
+    html.push('  <h6 class="mb-3"><i class="bi ' + icon + ' me-2"></i>' + escHtml(label) + '</h6>');
+    html.push('  <div class="row g-3">');
+    sections[sec].forEach(function (s) {
+      var restartNote = s.restartRequired
+        ? '<span class="text-muted-bb ms-1" style="font-size:0.7rem" title="Takes effect on next restart">(restart)</span>'
+        : '';
+      html.push('    <div class="col-12 col-sm-6 col-md-4">');
+      html.push('      <label class="form-label small mb-1" for="setting-' + escHtml(s.key) + '">');
+      html.push('        ' + escHtml(s.label) + restartNote);
+      html.push('      </label>');
+      html.push('      <div class="small text-muted-bb mb-1" style="font-size:0.7rem">' + escHtml(s.description) + '</div>');
+      html.push('      <div class="input-group input-group-sm">');
+      html.push('        <input type="number" class="form-control" id="setting-' + escHtml(s.key) + '"');
+      html.push('               data-setting-key="' + escHtml(s.key) + '"');
+      html.push('               value="' + escHtml(String(s.value)) + '" min="0" />');
+      html.push('        <button class="btn btn-bbn-primary btn-sm" data-save-setting="' + escHtml(s.key) + '">Save</button>');
+      html.push('      </div>');
+      html.push('      <div id="setting-msg-' + escHtml(s.key) + '" class="small mt-1" style="min-height:1em"></div>');
+      html.push('    </div>');
+    });
+    html.push('  </div>');
+    html.push('</div>');
+  });
+
+  // Location section — placeholder updated once config loads
+  html.push('<div class="bbn-section mb-4" id="locConfigSection">');
+  html.push('  <h6 class="mb-3"><i class="bi bi-geo-alt me-2"></i>Location</h6>');
+  html.push('  <p class="small text-muted-bb" id="locConfigStatus">Loading…</p>');
+  html.push('</div>');
+
+  html.push('</div>');
+  content.innerHTML = html.join('');
+
+  content.querySelectorAll('[data-save-setting]').forEach(function (btn) {
+    btn.addEventListener('click', function () { saveSettingValue(btn.dataset.saveSetting); });
+  });
+  content.querySelectorAll('[data-setting-key]').forEach(function (inp) {
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') saveSettingValue(inp.dataset.settingKey);
+    });
+  });
+
+  // Load location config in background — don't block settings render
+  window.Api.adminGetLocationConfig()
+    .then(function (locData) {
+      var sec = document.getElementById('locConfigSection');
+      if (!sec) return;
+      var locHtml = ['<div class="row g-3">'];
       LOCATION_CONFIG_FIELDS.forEach(function (field) {
         var val = locData[field.key];
         if (val === undefined || val === null) return;
-        html.push('    <div class="col-12 col-sm-6 col-md-4">');
-        html.push('      <div class="form-label small mb-1">' + escHtml(field.label) + '</div>');
-        html.push('      <div class="small text-muted-bb mb-1" style="font-size:0.7rem">' + escHtml(field.description) + '</div>');
-        html.push('      <div class="form-control form-control-sm text-muted-bb" style="background:var(--bbn-input-bg,#1a1a2e);cursor:default">' + escHtml(String(val)) + '</div>');
-        html.push('    </div>');
+        locHtml.push('  <div class="col-12 col-sm-6 col-md-4">');
+        locHtml.push('    <div class="form-label small mb-1">' + escHtml(field.label) + '</div>');
+        locHtml.push('    <div class="small text-muted-bb mb-1" style="font-size:0.7rem">' + escHtml(field.description) + '</div>');
+        locHtml.push('    <div class="form-control form-control-sm text-muted-bb" style="background:var(--bbn-input-bg,#1a1a2e);cursor:default">' + escHtml(String(val)) + '</div>');
+        locHtml.push('  </div>');
       });
-      html.push('  </div>');
-    } else {
-      html.push('  <p class="small text-muted-bb">Location config unavailable.</p>');
-    }
-    html.push('</div>');
-
-    html.push('</div>');
-    content.innerHTML = html.join('');
-
-    content.querySelectorAll('[data-save-setting]').forEach(function (btn) {
-      btn.addEventListener('click', function () { saveSettingValue(btn.dataset.saveSetting); });
+      locHtml.push('</div>');
+      var statusEl = document.getElementById('locConfigStatus');
+      if (statusEl) statusEl.outerHTML = locHtml.join('');
+    })
+    .catch(function () {
+      var statusEl = document.getElementById('locConfigStatus');
+      if (statusEl) statusEl.textContent = 'Location config unavailable.';
     });
-    content.querySelectorAll('[data-setting-key]').forEach(function (inp) {
-      inp.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') saveSettingValue(inp.dataset.settingKey);
-      });
-    });
-  } catch (err) {
-    content.innerHTML = '<div class="alert alert-danger">' + escHtml(err.message) + '</div>';
-  }
 }
 
 async function saveSettingValue(key) {
