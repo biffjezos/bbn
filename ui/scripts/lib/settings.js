@@ -60,10 +60,46 @@ export async function initAppLimits() {
 
   const tier = parseJwt(Auth.getToken())?.tier || 'guest';
   try {
-    const info = await Api.getTierInfo(tier);
+    const [infoResult, tiersResult] = await Promise.allSettled([
+      Api.getTierInfo(tier),
+      Api.adminListTiers(),
+    ]);
+
+    const info     = infoResult.status === 'fulfilled' ? infoResult.value : null;
+    const allTiers = tiersResult.status === 'fulfilled' ? (tiersResult.value?.tiers || []) : [];
+
+    if (!info) return;
+
     const rows = [];
-    if (info.nearby_radius   != null) rows.push(infoRow('Nearby radius',  formatRadius(info.nearby_radius)));
-    if (info.message_radius  != null) rows.push(infoRow('Message radius', formatRadius(info.message_radius)));
+    if (info.nearby_radius    != null) rows.push(infoRow('Nearby radius',     formatRadius(info.nearby_radius)));
+    if (info.message_radius   != null) rows.push(infoRow('Message radius',    formatRadius(info.message_radius)));
+    if (info.message_offline  != null) rows.push(infoRow('Offline messaging', info.message_offline ? 'Yes' : 'No'));
+
+    // Upgrade hint — only when tier list is available (admin users)
+    if (allTiers.length) {
+      const currentRank = allTiers.find(t => t.name === tier)?.rank ?? -1;
+      const sorted = allTiers
+        .filter(t => (t.rank ?? 0) > currentRank && t.name !== 'unrestricted')
+        .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+      const next = sorted[0];
+      if (next) {
+        const nextNearby  = next.nearbyRadiusM  ?? next.nearby_radius_m;
+        const nextMsg     = next.messageRadiusM ?? next.message_radius_m;
+        const nextOffline = next.messageOffline ?? next.message_offline;
+        const nextLabel   = escHtml(next.label || next.name);
+        const hints = [];
+        if (nextNearby  != null) hints.push(`nearby radius up to ${escHtml(formatRadius(nextNearby))}`);
+        if (nextMsg     != null) hints.push(`message radius up to ${escHtml(formatRadius(nextMsg))}`);
+        if (nextOffline)         hints.push('offline messaging');
+        if (hints.length) {
+          rows.push(`<p class="small mt-2 mb-0" style="color:var(--bbn-text-faint)">
+            <i class="bi bi-arrow-up-circle me-1"></i>
+            <strong>${nextLabel}</strong> unlocks: ${hints.join(', ')}.
+          </p>`);
+        }
+      }
+    }
+
     if (rows.length) {
       fields.innerHTML = rows.join('');
       wrap.style.display = '';

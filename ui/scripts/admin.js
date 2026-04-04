@@ -873,15 +873,35 @@ async function renderSettingsTab() {
       LOCATION_CONFIG_FIELDS.forEach(function (field) {
         var val = locData[field.key];
         if (val === undefined || val === null) return;
+        var isReadOnly = field.key === 'store_type';
         locHtml.push('  <div class="col-12 col-sm-6 col-md-4">');
-        locHtml.push('    <div class="form-label small mb-1">' + escHtml(field.label) + '</div>');
+        locHtml.push('    <label class="form-label small mb-1" for="lc-' + escHtml(field.key) + '">' + escHtml(field.label) + '</label>');
         locHtml.push('    <div class="small text-muted-bb mb-1" style="font-size:0.7rem">' + escHtml(field.description) + '</div>');
-        locHtml.push('    <div class="form-control form-control-sm text-muted-bb" style="background:var(--bbn-input-bg,#1a1a2e);cursor:default">' + escHtml(String(val)) + '</div>');
+        if (isReadOnly) {
+          locHtml.push('    <div class="form-control form-control-sm text-muted-bb" style="background:var(--bbn-input-bg,#1a1a2e);cursor:default">' + escHtml(String(val)) + '</div>');
+        } else {
+          locHtml.push('    <div class="input-group input-group-sm">');
+          locHtml.push('      <input type="number" class="form-control" id="lc-' + escHtml(field.key) + '"');
+          locHtml.push('             data-lc-key="' + escHtml(field.key) + '"');
+          locHtml.push('             value="' + escHtml(String(val)) + '" min="0" />');
+          locHtml.push('      <button class="btn btn-bbn-primary btn-sm" data-save-lc="' + escHtml(field.key) + '">Save</button>');
+          locHtml.push('    </div>');
+          locHtml.push('    <div id="lc-msg-' + escHtml(field.key) + '" class="small mt-1" style="min-height:1em"></div>');
+        }
         locHtml.push('  </div>');
       });
       locHtml.push('</div>');
       var statusEl = document.getElementById('locConfigStatus');
       if (statusEl) statusEl.outerHTML = locHtml.join('');
+
+      sec.querySelectorAll('[data-save-lc]').forEach(function (btn) {
+        btn.addEventListener('click', function () { saveLocationConfigValue(btn.dataset.saveLc); });
+      });
+      sec.querySelectorAll('[data-lc-key]').forEach(function (inp) {
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') saveLocationConfigValue(inp.dataset.lcKey);
+        });
+      });
     })
     .catch(function () {
       var statusEl = document.getElementById('locConfigStatus');
@@ -903,6 +923,29 @@ async function saveSettingValue(key) {
   msg.textContent = 'Saving…';
   try {
     await window.Api.adminUpdateSetting(key, val);
+    msg.style.color = 'var(--bbn-success, #00e5a0)';
+    msg.textContent = 'Saved.';
+    setTimeout(function () { if (msg.textContent === 'Saved.') msg.textContent = ''; }, 2000);
+  } catch (err) {
+    msg.style.color = 'var(--bbn-danger, #e74c3c)';
+    msg.textContent = err.message || 'Error saving.';
+  }
+}
+
+async function saveLocationConfigValue(key) {
+  var inp = document.getElementById('lc-' + key);
+  var msg = document.getElementById('lc-msg-' + key);
+  if (!inp || !msg) return;
+  var val = parseInt(inp.value, 10);
+  if (isNaN(val) || val < 0) {
+    msg.style.color = 'var(--bbn-danger, #e74c3c)';
+    msg.textContent = 'Must be a non-negative integer.';
+    return;
+  }
+  msg.style.color = '';
+  msg.textContent = 'Saving…';
+  try {
+    await window.Api.adminUpdateLocationConfig(key, val);
     msg.style.color = 'var(--bbn-success, #00e5a0)';
     msg.textContent = 'Saved.';
     setTimeout(function () { if (msg.textContent === 'Saved.') msg.textContent = ''; }, 2000);

@@ -155,6 +155,7 @@ export const Api = {
     adminGetConfig: () => apiFetch('/admin/config'),
     adminGetSettings: () => apiFetch('/admin/settings'),
     adminGetLocationConfig: () => apiFetch('/admin/location-config'),
+    adminUpdateLocationConfig: (key, value) => apiFetch(`/admin/location-config/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
     adminUpdateSetting: (key, value) => apiFetch(`/admin/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
     adminSearchUsers: ({ q, by, accountType } = {}) => {
         const qs = new URLSearchParams();
