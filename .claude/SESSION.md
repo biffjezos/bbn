@@ -6,89 +6,51 @@
 
 ---
 
-**Branch:** `claude/fix-aria-hidden-focus-ZsyJo`
-**Session date:** 2026-03-31
-**Last updated:** 2026-03-31T15:00Z
+**Branch:** `claude/fix-deployment-errors-mRt2z`
+**Session date:** 2026-04-04
+**Last updated:** 2026-04-04T00:00Z
 
 ---
 
 ## In Progress
 
-Nothing — ready to commit and push.
+Nothing — committing now.
 
 ---
 
 ## Completed This Session
 
-### Fix batch 1 — deployed v3e46488 bugs
+### Fix batch 3 — deployed v742581f bugs
 
-#### `DEBUG is not defined` — lock.js crash
-- Added `const DEBUG = window.location.search.includes('dbg');` at top of lock.js.
+#### /settings — preferences section never showed (blocked by sequential API awaits)
+- `initSettings()` was doing `await initAccountInfo()` then `await initAppLimits()` then `await initPreferences()` sequentially.
+- If the backend times out (~15s per call), preferences took 30s+ to appear.
+- Fixed: `initPreferences()` and `initDangerZone()` now called immediately (no API dependency).
+- `initAccountInfo()`, `initAppLimits()`, `initBlockedUsers()` now run in parallel via `Promise.allSettled`.
+- Also removed `await` from `BbnPrefs.sync()` in boomboom.js — it was blocking `initSettings()` from starting by ~15s when the `/users/me/preferences` API is slow.
 
-#### aria-hidden / focus accessibility warning
-- Added `document.activeElement?.blur()` before modal.show() and modal.hide() in lock.js.
-
-#### /messages — blank instead of "No conversations yet."
-- Early return with empty-state message when `Object.keys(threads).length === 0` in messages.js.
-
-#### /settings — "Loading…" forever when API down
-- JWT immediate fallback (tier, role) rendered synchronously; API enriches with email if available.
-
-#### /profile — SSR content flash
-- Removed `{% if ssr_me %}` block from profile.html server template entirely.
-
-#### /settings — email + role in SSR account info
-- Added email + role to settings.html SSR; added email field to MeData struct in main.rs.
-
-### Fix batch 2 — regressions introduced in v900626b
-
-#### Guest self marker completely gone
-- Removed the `if (!isRegistered) { remove; return; }` guard added in session 1. Guests always get a yellow 👊 marker.
-
-#### Guest shows wrong sex-colored icon after logged-in session
-- Added `_sex = null; _nickname = null;` at the start of `initGuest()` in auth.js. Previously sex leaked from expired registered session.
-
-#### Two icons stacked after login (self + nearby self)
-- Added `getSelfId()` helper and `if(selfId && u.userId === selfId) return;` self-filter in `renderMarkers()` in map.js.
-
-#### Stale admin radius after logout
-- Removed `refreshRadius()` from `onLogout()` (reads stale admin token — cleared 3 lines AFTER onLogout fires).
-- Wired `Auth.onGuestReady = () => { mapModule.refreshRadius(); }` in boomboom.js — fires after initGuest() sets guest token.
-- `onLogout()` now removes selfMarker, selfCircle, resets viewRadius=0, lastSex=undefined immediately.
-
-#### Female user icon shows yellow instead of pink
-- Removed the registered-user guard that was blocking `placeSelfMarker()` from calling `makeLeafIcon(sex,...)`. The icon now always derives from `Auth.getSex()` which returns null for guests (→ yellow fist).
-
-### Cleanup
-
-#### `.claude/specs/` — deleted entirely
-- Owner instruction: "REMOVE ALL SPECS. THEY ARE USELESS."
-- `rm -rf .claude/specs/`
-
-#### `.claude/CLAUDE.md` — removed all specs-related content
-- Deleted "Spec Workflow" section entirely.
-- Removed "Update specs." bullet from Before Each Commit.
-- Removed "Update spec files" step from Session Wrap-Up Checklist (renumbered steps 3→7 to 3→6, shifting old 4→3, 5→4, 6→5, 7→6, 8→7).
-- Removed `.claude/specs/` entry from Persistent Files.
+#### /admin Settings tab — 10-20 second delay before content shows
+- `renderSettingsTab()` was doing `Promise.allSettled([adminGetSettings(), adminGetLocationConfig()])` — waiting for BOTH before rendering anything.
+- `adminGetSettings()` succeeds quickly (200ms), but `adminGetLocationConfig()` times out (~15s).
+- Fixed: settings render immediately after `adminGetSettings()` resolves. Location config loads in background via `.then()/.catch()` — shows "Loading…" placeholder then updates.
 
 ---
 
 ## Key Decisions Made
 
-- Guests get yellow 👊 self marker. Registered males get blue 👆. Registered females get pink 🤞.
-- `placeSelfMarker()` is never guarded by isRegistered — the icon color derives from `Auth.getSex()` which returns null for guests.
-- `_sex` and `_nickname` cleared at the START of `initGuest()` to prevent leaking from expired sessions.
-- `refreshRadius()` must not be called from `onLogout()` — `_token` is still the registered user's token at that point. Use `Auth.onGuestReady` instead.
-- Specs abolished by owner request.
+- `BbnPrefs.sync()` is fire-and-forget in boomboom.js. The map reads prefs at init time (before line 351), so sync ordering doesn't matter for the map. Settings form reads localStorage directly.
+- Location config section in admin uses a named placeholder (`id="locConfigSection"`) that gets updated when the background fetch resolves.
 
 ---
 
 ## Blockers / Parked Items
 
-- **503 / signal timeout on Railway** — `/api/health`, `/api/favourites`, `/api/location` all timing out. Cold-start or service down. Backend/infra issue.
-- **`/api/admin/location-config` timeout** — admin settings location tab shows "Location config unavailable." Backend.
+- **502 Bad Gateway on Railway** — `/api/auth/guest` and `/api/health` returning 502. Cold-start or service down. Backend/infra issue — cannot fix from frontend.
+- **503 / signal timeout on Railway** — `/api/favourites` timing out. Backend/infra issue.
+- **`/api/admin/location-config` timeout** — admin settings location tab shows "Loading…" then "Location config unavailable." Backend.
+- **geo.js:172 browser violation** — "Only request geolocation information in response to a user gesture." Non-breaking console hint — geolocation permission still works. Not fixable without significant UX restructure.
+- **ipwho.org 503** — external service. geo.js already handles with fallbacks (iplocate.io, api.ipapi.is). Console noise only.
 - **JWT_SECRET mismatch** — protected routes may redirect. Both server and gateway must use the same secret.
-- **Fixed-location venues on map** — if not returned by `GET /location/nearby`, won't appear. Backend concern.
 - **18 CodeQL alerts open** (fetched 2026-03-25).
 
 ---
@@ -99,14 +61,15 @@ Nothing — ready to commit and push.
 No new env vars required.
 
 ### Deploy impact
-- Guest self marker restored (yellow fist emoji icon).
-- Female icon now correctly pink after login.
-- No stale radius or stacked icons after login/logout cycle.
-- Settings page shows email + tier + role (not nickname).
-- Profile page no longer flashes SSR nickname/age before form renders.
-- Messages page shows "No conversations yet." when inbox is empty.
+- /settings now shows Preferences section immediately (no longer blocked by API timeouts).
+- /settings Danger Zone also shows immediately.
+- Account info and App Limits still load from API in parallel (as before, but concurrent not sequential).
+- /admin Settings tab shows settings content within ~1s (no longer waits 15s for location-config timeout).
+- Location config section in admin shows "Loading…" then either populates or shows "unavailable".
+
+### Notes on remaining errors
+The 502/503 errors and signal timeouts on `/api/favourites`, `/api/auth/guest`, `/api/health` are Railway backend issues. The frontend already handles them gracefully (shows error messages). These cannot be fixed in the frontend code.
 
 ### Next session priorities
-1. Verify all map fixes on deployed build.
-2. Investigate 503/timeouts on Railway.
-3. Check CodeQL alerts (18 open from 2026-03-25).
+1. Investigate 502/503 Railway timeouts — cold start issue or service down?
+2. Check CodeQL alerts (18 open from 2026-03-25).

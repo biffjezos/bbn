@@ -347,8 +347,8 @@ async function initApp() {
   }
 
   // Settings and profile pages require auth (token for API calls)
-  // Sync preferences first so initPreferences() reads correct values from localStorage
-  if (Auth.isRegistered()) await BbnPrefs.sync();
+  // Sync preferences in background — don't block settings page on API timeout
+  if (Auth.isRegistered()) BbnPrefs.sync();
   initSettings();
   if (document.getElementById('profileFormWrap')) initMyProfile();
   if (document.getElementById('pubProfilePage'))  initPublicProfile();
