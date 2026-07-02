@@ -1,7 +1,7 @@
 # ── Build stage ───────────────────────────────────────────────
-FROM rust:latest AS builder
+FROM rust:1 AS builder
 WORKDIR /build
-COPY services/Cargo.toml services/rust-toolchain.toml ./
+COPY services/Cargo.toml services/Cargo.lock services/rust-toolchain.toml ./
 COPY services/common ./common
 # Stub workspace members not being built
 COPY services/authority-service/Cargo.toml ./authority-service/Cargo.toml
@@ -22,7 +22,7 @@ COPY services/gateway/Cargo.toml ./gateway/Cargo.toml
 RUN mkdir -p ./gateway/src && echo 'fn main(){}' > ./gateway/src/main.rs
 # Build target
 COPY services/server ./server
-RUN cargo build --release -p server
+RUN cargo build --release --locked -p server
 
 # ── Runtime stage ─────────────────────────────────────────────
 FROM debian:bookworm-slim

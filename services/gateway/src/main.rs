@@ -146,6 +146,11 @@ async fn main() {
     let http      = reqwest::Client::builder()
         .tcp_keepalive(Duration::from_secs(30))
         .pool_max_idle_per_host(50)
+        // Backstop timeouts so a hung downstream service can't wedge a request
+        // (and thus the whole gateway) indefinitely — the source of the 502s.
+        // Per-request `.timeout(...)` calls still override this where set.
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15))
         .build()
         .expect("HTTP client");
 
@@ -153,6 +158,8 @@ async fn main() {
     match http
         .post(format!("{}/migrate/run", cfg.migration_url))
         .header("X-Service-Token", svc_cache.get("gateway", &cfg.service_secret).await.unwrap_or_default())
+        // Migrations create indexes on first boot — allow more than the client default.
+        .timeout(Duration::from_secs(120))
         .send().await
     {
         Ok(r) => match r.json::<serde_json::Value>().await {
@@ -222,13 +229,21 @@ async fn main() {
                 };
                 let get_u32 = |k: &str, d: u32| json[k].as_i64().unwrap_or(d as i64) as u32;
                 let get_u64 = |k: &str, d: u64| json[k].as_i64().unwrap_or(d as i64) as u64;
+                // Only swap the limiter when its config actually changed. Rebuilding
+                // unconditionally every 60 s would also reset the live request counts,
+                // letting a brute-forcer get a fresh allowance each minute.
                 macro_rules! refresh {
-                    ($lim:expr, $max_k:expr, $win_k:expr, $dm:expr, $dw:expr) => {
-                        *$lim.write().unwrap() = rate::FixedWindow::new(
-                            get_u32($max_k, $dm),
-                            Duration::from_secs(get_u64($win_k, $dw)),
-                        );
-                    };
+                    ($lim:expr, $max_k:expr, $win_k:expr, $dm:expr, $dw:expr) => {{
+                        let new_max = get_u32($max_k, $dm);
+                        let new_win = Duration::from_secs(get_u64($win_k, $dw));
+                        let unchanged = {
+                            let cur = $lim.read().unwrap();
+                            cur.max == new_max && cur.window == new_win
+                        };
+                        if !unchanged {
+                            *$lim.write().unwrap() = rate::FixedWindow::new(new_max, new_win);
+                        }
+                    }};
                 }
                 refresh!(s2.lim_login,    "login_rate_max",    "login_rate_window_secs",    10,   900);
                 refresh!(s2.lim_register, "register_rate_max", "register_rate_window_secs", 5,   3600);

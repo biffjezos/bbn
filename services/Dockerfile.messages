@@ -1,7 +1,7 @@
 # ── Build stage ───────────────────────────────────────────────
-FROM rust:latest AS builder
+FROM rust:1 AS builder
 WORKDIR /build
-COPY services/Cargo.toml services/rust-toolchain.toml ./
+COPY services/Cargo.toml services/Cargo.lock services/rust-toolchain.toml ./
 COPY services/common ./common
 # Stub workspace members not being built
 COPY services/location-service/Cargo.toml ./location-service/Cargo.toml
@@ -22,7 +22,7 @@ COPY services/authority-service/Cargo.toml ./authority-service/Cargo.toml
 RUN mkdir -p ./authority-service/src && echo 'fn main(){}' > ./authority-service/src/main.rs
 COPY services/server/Cargo.toml ./server/Cargo.toml
 RUN mkdir -p ./server/src && echo 'fn main(){}' > ./server/src/main.rs
-RUN cargo build --release -p messages-service
+RUN cargo build --release --locked -p messages-service
 
 # ── Runtime stage ─────────────────────────────────────────────
 FROM debian:bookworm-slim

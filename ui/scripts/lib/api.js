@@ -2,7 +2,9 @@
 // bOOmbOOm.NOW! — API Client (module version)
 // ============================================================
 
-const DEBUG = true;
+// Verbose request/response logging is opt-in via the ?dbg URL flag (matches debug.js).
+// Never log ciphertext, emailHash, or admin payloads to the console by default.
+const DEBUG = typeof location !== 'undefined' && location.search.includes('dbg');
 const API_BASE = '/api';
 
 async function apiFetch(path, options = {}, _retries = 1) {

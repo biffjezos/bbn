@@ -417,14 +417,20 @@ async fn delete_me(
     let c_locs      = state.db.collection::<Document>("locations");
     let c_messages  = state.db.collection::<Document>("messages");
     let c_favourites = state.db.collection::<Document>("favourites");
-    let (r1, r2, r3, r4) = tokio::join!(
+    let c_blocks    = state.db.collection::<Document>("blocks");
+    let c_notifications = state.db.collection::<Document>("notifications");
+    // Purge every collection that carries this user's data — privacy-by-design
+    // leaves nothing behind, including blocks issued/received and notifications.
+    let (r1, r2, r3, r4, r5, r6) = tokio::join!(
         c_users.delete_one(doc! { "_id": oid }),
         c_locs.delete_one(doc! { "userId": id }),
         c_messages.delete_many(doc! { "$or": [{ "fromUserId": id }, { "toUserId": id }] }),
         c_favourites.delete_many(doc! { "$or": [{ "ownerUserId": id }, { "favouriteUserId": id }] }),
+        c_blocks.delete_many(doc! { "$or": [{ "blockerUserId": id }, { "blockedUserId": id }] }),
+        c_notifications.delete_many(doc! { "$or": [{ "recipientUserId": id }, { "fromUserId": id }] }),
     );
 
-    if r1.is_err() || r2.is_err() || r3.is_err() || r4.is_err() {
+    if r1.is_err() || r2.is_err() || r3.is_err() || r4.is_err() || r5.is_err() || r6.is_err() {
         eprintln!("[users/me DELETE] partial failure");
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Internal error." }))).into_response();
     }

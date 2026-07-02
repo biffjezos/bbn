@@ -207,3 +207,11 @@ One-line stubs only — full details in [AUDIT_DONE.md](AUDIT_DONE.md).
 - SEC-1.13 ✅ fixed 2026-03-25 — CWE-312 clear-text sessionStorage `sex` key removed, read from JWT
 - SEC-1.14 ✅ fixed 2026-03-25 — CWE-312 `sex` removed from `bbm_meet` localStorage
 - SEC-1.15 ✅ fixed 2026-03-30 — CWE-319 credentials in URL, login form GET race condition
+- SEC-1.16 ✅ fixed 2026-07-02 — WS messaging bypassed the message_online tier gate (raw-JWT path); now calls /authority/verify
+- SEC-1.17 ✅ fixed 2026-07-02 — gateway rate limiters reset counts every 60 s; now rebuilt only when config changes
+- SEC-1.18 ✅ fixed 2026-07-02 — plaintext fallback in messages.js send path; now blocks + prompts unlock
+- SEC-1.19 ✅ fixed 2026-07-02 — account deletion left blocks + notifications behind; delete_me now purges both
+- SEC-1.20 ✅ fixed 2026-07-02 — api.js DEBUG logged request/response bodies in prod; now gated on ?dbg
+- INFRA-1.5 ✅ fixed 2026-07-02 — gateway/server HTTP clients had no timeouts (502/hang source); added connect/read timeouts + boot-migration override
+- INFRA-1.6 ✅ fixed 2026-07-02 — Dockerfiles now COPY Cargo.lock, build --locked, pin FROM rust:1
+- MAINT-2.7 ✅ fixed 2026-07-02 — messages.js drifted from template IDs + WS protocol (messaging broken); rewritten against both

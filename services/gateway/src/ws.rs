@@ -39,6 +39,28 @@ fn origin_ok(headers: &HeaderMap, allowed: &[String]) -> bool {
         .unwrap_or(false)
 }
 
+/// Verify a user JWT via authority-service and enforce a feature requirement.
+/// Returns the verified subject (userId) on success. Fails closed on any error
+/// (network, revoked token, insufficient tier), so the WS is rejected unless the
+/// account genuinely holds the feature — this is the tier gate the HTTP path
+/// applies via `verified_proxy`, which the raw-JWT WS path previously skipped.
+async fn verify_ws_feature(state: &AppState, token: &str, feature: &str) -> Option<String> {
+    let svc = get_svc_token(state).await?;
+    let resp = state.http
+        .post(format!("{}/authority/verify", state.authority_url))
+        .header("X-Service-Token", &svc)
+        .json(&json!({ "token": token, "feature": feature }))
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body = resp.json::<Value>().await.ok()?;
+    body["sub"].as_str().map(String::from)
+}
+
 // ── WebSocket — Location ──────────────────────────────────────────────────────
 
 pub async fn ws_location(ws: WebSocketUpgrade, State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
@@ -212,15 +234,13 @@ async fn handle_msg_socket(socket: WebSocket, state: AppState) {
         Some(t) if !t.is_empty() => t.to_string(),
         _ => { tx.send(ws_close(4001, "Auth required")).ok(); sender_task.abort(); return; }
     };
-    let claims = match decode_user_token(&token, &state.jwt_secret) {
-        Ok(c)  => c,
-        Err(_) => { tx.send(ws_close(4001, "Invalid token")).ok(); sender_task.abort(); return; }
+    // Enforce the same tier gate the HTTP messaging routes use (`message_online`).
+    // authority-service also re-checks tokenVersion, so a revoked or downgraded
+    // token cannot open a messaging socket.
+    let user_id = match verify_ws_feature(&state, &token, "message_online").await {
+        Some(sub) => sub,
+        None => { tx.send(ws_close(4003, "Messaging unavailable for your account.")).ok(); sender_task.abort(); return; }
     };
-    if !matches!(claims.role.as_str(), "user" | "admin") {
-        tx.send(ws_close(4003, "Registered account required")).ok(); sender_task.abort(); return;
-    }
-
-    let user_id = claims.sub.clone();
     println!("[WS:msg] + {user_id}");
 
     let viewing: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));

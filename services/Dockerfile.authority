@@ -1,8 +1,8 @@
 # ── Build stage ───────────────────────────────────────────────
-FROM rust:latest AS builder
+FROM rust:1 AS builder
 WORKDIR /build
 # Copy workspace files from services/ subdirectory (build context is repo root)
-COPY services/Cargo.toml services/rust-toolchain.toml ./
+COPY services/Cargo.toml services/Cargo.lock services/rust-toolchain.toml ./
 COPY services/common ./common
 COPY services/location-service/Cargo.toml ./location-service/Cargo.toml
 RUN mkdir -p ./location-service/src && echo 'fn main(){}' > ./location-service/src/main.rs
@@ -21,7 +21,7 @@ RUN mkdir -p ./migration-service/src && echo 'fn main(){}' > ./migration-service
 COPY services/server/Cargo.toml ./server/Cargo.toml
 RUN mkdir -p ./server/src && echo 'fn main(){}' > ./server/src/main.rs
 COPY services/authority-service ./authority-service
-RUN cargo build --release -p authority-service
+RUN cargo build --release --locked -p authority-service
 
 # ── Runtime stage ─────────────────────────────────────────────
 FROM debian:bookworm-slim

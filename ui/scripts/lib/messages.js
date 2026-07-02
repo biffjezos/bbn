@@ -4,14 +4,16 @@
 // ============================================================
 
 import { Api } from './api.js';
+import { promptBlock } from './blocks.js';
 
 const _pubKeyCache = {};
+const _profileCache = {};
 const _CACHE_TTL_MS = 5 * 60 * 1000;
 
 let _msgWs = null;
 let _wsRetry = 1000;
 let _wsRetryTmr = null;
-let _threadInitialized = false;
+let _currentUid = null;   // partner userId of the open thread (thread page only)
 
 // ── Utilities ─────────────────────────────────────────────
 export function escHtml(str) {
@@ -53,12 +55,39 @@ export function loadingHtml(text = 'Loading…') {
   return `<div class="bbn-loading"><p>${escHtml(text)}</p></div>`;
 }
 
+function threadUid() {
+  return new URLSearchParams(location.search).get('uid');
+}
+
+// ── Send-error banner (thread page) ───────────────────────
+function showSendError(text) {
+  const el = document.getElementById('sendError');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('d-none');
+}
+
+function clearSendError() {
+  const el = document.getElementById('sendError');
+  if (el) el.classList.add('d-none');
+}
+
+// ── Profiles ─────────────────────────────────────────────
+async function getCachedProfile(userId) {
+  const hit = _profileCache[userId];
+  if (hit && hit.exp > Date.now()) return hit.value;
+
+  const profile = await Api.getProfile(userId);
+  _profileCache[userId] = { value: profile, exp: Date.now() + _CACHE_TTL_MS };
+  return profile;
+}
+
 // ── Crypto ───────────────────────────────────────────────
 export async function getPublicKey(userId) {
   const hit = _pubKeyCache[userId];
   if (hit && hit.exp > Date.now()) return hit.value;
 
-  const profile = await Api.getProfile(userId);
+  const profile = await getCachedProfile(userId);
 
   if (profile.accountType === 'venue' && profile.managerId) {
     return getPublicKey(profile.managerId);
@@ -107,17 +136,26 @@ function connectMsgWS() {
   _msgWs.onopen = () => {
     _wsRetry = 1000;
     wsSend({ type: 'auth', token: window.Auth.getToken() });
+    // Subscribe to the currently open thread so the server starts pushing it.
+    if (_currentUid) wsSend({ type: 'view', userId: _currentUid });
   };
 
   _msgWs.onmessage = async e => {
-    const msg = JSON.parse(e.data);
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
 
-    if (msg.type === 'conversations') {
-      handleConversationsUpdate(msg.messages);
-    }
-
-    if (msg.type === 'thread') {
-      handleThreadUpdate(msg.messages);
+    switch (msg.type) {
+      case 'conversations':
+        handleConversationsUpdate(msg.messages);
+        break;
+      case 'thread':
+        // Ignore stale pushes for a thread we're no longer viewing.
+        if (_currentUid && msg.userId && msg.userId !== _currentUid) break;
+        handleThreadUpdate(msg.messages);
+        break;
+      case 'send:error':
+        showSendError(msg.error || 'Message could not be sent.');
+        break;
     }
   };
 
@@ -152,7 +190,7 @@ export async function handleConversationsUpdate(messages) {
 
   wrap.innerHTML = await Promise.all(
     Object.entries(threads).map(async ([uid, m]) => {
-      const profile = await Api.getProfile(uid);
+      const profile = await getCachedProfile(uid);
 
       let text = m.text;
 
@@ -163,12 +201,15 @@ export async function handleConversationsUpdate(messages) {
         }
       } catch {}
 
+      const nickname = profile.nickname || uid;
+      const href = `/messages/thread/?uid=${encodeURIComponent(uid)}&name=${encodeURIComponent(nickname)}`;
+
       return `
-        <div class="conv-item">
-          <div>${escHtml(profile.nickname || uid)}</div>
+        <a class="conv-item" href="${href}">
+          <div>${escHtml(nickname)}</div>
           <div>${escHtml(text)}</div>
           <div>${timeAgo(m.sentAt)}</div>
-        </div>
+        </a>
       `;
     })
   ).then(arr => arr.join(''));
@@ -176,8 +217,10 @@ export async function handleConversationsUpdate(messages) {
 
 // ── Thread ───────────────────────────────────────────────
 export async function handleThreadUpdate(messages) {
-  const wrap = document.getElementById('threadWrap');
+  const wrap = document.getElementById('threadMsgs');
   if (!wrap) return;
+
+  const myId = getMyId();
 
   wrap.innerHTML = await Promise.all(
     messages.map(async m => {
@@ -190,7 +233,8 @@ export async function handleThreadUpdate(messages) {
         }
       } catch {}
 
-      return `<div class="msg">${escHtml(text)}</div>`;
+      const mine = m.fromUserId === myId;
+      return `<div class="msg ${mine ? 'msg-mine' : 'msg-theirs'}">${escHtml(text)}</div>`;
     })
   ).then(arr => arr.join(''));
 
@@ -204,8 +248,8 @@ export function renderConversationList() {
 }
 
 export function renderThread() {
-  const el = document.getElementById('threadWrap');
-  if (el) el.innerHTML = loadingHtml();
+  const el = document.getElementById('threadMsgs');
+  if (el) el.innerHTML = loadingHtml('Loading messages…');
 }
 
 // ── Thread UI ────────────────────────────────────────────
@@ -215,28 +259,64 @@ export function setupThreadUI() {
 
   if (!input || !btn) return;
 
-  btn.onclick = async () => {
+  const uid = threadUid();
+
+  // Partner display name from the query param.
+  const name = new URLSearchParams(location.search).get('name');
+  const nameEl = document.getElementById('threadDisplayName');
+  if (nameEl && name) nameEl.textContent = name;
+
+  // Character counter.
+  const charCount = document.getElementById('charCount');
+  const maxChars = parseInt(input.getAttribute('maxlength') || '144', 10);
+  const updateCount = () => {
+    if (charCount) charCount.textContent = String(maxChars - input.value.length);
+  };
+  input.addEventListener('input', updateCount);
+  updateCount();
+
+  const doSend = async () => {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text || !uid) return;
 
-    const params = new URLSearchParams(location.search);
-    const uid = params.get('uid');
+    // Privacy-by-design: never transmit plaintext. If the crypto worker is
+    // locked or encryption fails, block the send and prompt the user to unlock.
+    if (!window.BBNCrypto?.isUnlocked?.()) {
+      showSendError('Unlock your messages to send — enter your password.');
+      window.Auth?.onNeedsUnlock?.();
+      return;
+    }
 
-    let payload = text;
-
+    let payload;
     try {
       const enc = await window.BBNCrypto.encryptMessage(text, await getPublicKey(uid));
       payload = JSON.stringify({ cipher: enc });
-    } catch {}
+    } catch {
+      showSendError('Could not encrypt message. Unlock your messages and try again.');
+      return;
+    }
 
-    wsSend({
-      type: 'send',
-      toUserId: uid,
-      text: payload
-    });
-
+    clearSendError();
+    wsSend({ type: 'send', toUserId: uid, text: payload });
     input.value = '';
+    updateCount();
   };
+
+  btn.onclick = doSend;
+
+  // Ctrl/Cmd+Enter to send.
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      doSend();
+    }
+  });
+
+  // Block user from the thread menu.
+  const blockBtn = document.getElementById('threadBlockBtn');
+  if (blockBtn && uid) {
+    blockBtn.addEventListener('click', () => promptBlock(uid, name));
+  }
 }
 
 // ── Init ────────────────────────────────────────────────
@@ -244,7 +324,7 @@ export function initMessagesPage({ thread = false, convList = false } = {}) {
   if (convList) renderConversationList();
 
   if (thread) {
-    _threadInitialized = true;
+    _currentUid = threadUid();
     renderThread();
     setupThreadUI();
   }

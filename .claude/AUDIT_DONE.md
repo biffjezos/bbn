@@ -8,6 +8,62 @@ consolidated into AUDIT.md on 2026-07-02.)
 
 ---
 
+## Review fixes (2026-07-02, second session)
+
+### DONE — SEC-1.16 WS messaging bypassed the tier gate
+**File:** `services/gateway/src/ws.rs`. The HTTP messaging routes enforce the `message_online`
+feature via `verified_proxy` → `/authority/verify`, but the WS message socket only decoded the
+JWT (signature + role), skipping both the feature gate and the tokenVersion re-check. A user
+whose tier lacks messaging (or whose token was revoked) could still send via WS. **Fix:** the WS
+auth phase now calls a new `verify_ws_feature()` that POSTs to `/authority/verify` with
+`feature: "message_online"`, failing closed on any error. This also fixes the venue_manager
+inconsistency (the old role check allowed only user/admin).
+
+### DONE — SEC-1.17 Gateway rate limiters reset every 60 s
+**File:** `services/gateway/src/main.rs`. The settings-refresh task rebuilt every `FixedWindow`
+(and its live counters) on each 60 s tick even when nothing changed, so "10 logins / 15 min"
+effectively became ~10 / min for an attacker. **Fix:** the `refresh!` macro now compares the
+current max/window and only swaps the limiter when the config actually changed.
+
+### DONE — SEC-1.18 Plaintext fallback in the message send path
+**File:** `ui/scripts/lib/messages.js`. `setupThreadUI`'s `catch {}` left `payload = text` when
+`encryptMessage` threw (crypto locked / missing pubkey), transmitting cleartext to the server
+(rejected, but already off the device). **Fix:** send is blocked if the worker is locked or
+encryption fails; the user is shown an error and prompted to unlock. No plaintext leaves the browser.
+
+### DONE — SEC-1.19 Account deletion left blocks + notifications
+**File:** `services/users-service/src/main.rs`. `delete_me` purged users/locations/messages/
+favourites but not `blocks` or `notifications`. **Fix:** both collections are now deleted in the
+same `tokio::join!` (blockerUserId/blockedUserId and recipientUserId/fromUserId).
+
+### DONE — SEC-1.20 api.js DEBUG logged bodies in production
+**File:** `ui/scripts/lib/api.js`. `const DEBUG = true` logged every request/response body
+(ciphertext, emailHash, admin payloads) to the console. **Fix:** `DEBUG` now derives from the
+`?dbg` URL flag, matching debug.js. (Owner approved this change explicitly.)
+
+### DONE — INFRA-1.5 No HTTP client timeouts (502 / hang source)
+**Files:** `services/gateway/src/main.rs`, `services/server/src/main.rs`. Neither reqwest client
+set default timeouts, so a hung downstream could wedge requests (and gateway boot) indefinitely —
+the reported Railway 502 / "signal timeout" class. **Fix:** gateway client gets 5 s connect / 15 s
+read; the boot-migration POST overrides to 120 s (index creation). server client gets 5 s / 30 s.
+Per-request `.timeout(...)` calls still override where already set.
+
+### DONE — INFRA-1.6 Non-reproducible Docker builds
+**Files:** `services/Dockerfile.*` (all 9). Builds copied only Cargo.toml (no lockfile), ran
+`cargo build` without `--locked`, and used `FROM rust:latest` — so dependency and toolchain
+versions could drift between deploys. **Fix:** each Dockerfile now `COPY services/Cargo.lock`,
+builds `--locked`, and pins `FROM rust:1`. Cargo.lock confirmed tracked + in sync.
+
+### DONE — MAINT-2.7 messages.js drifted from template + WS protocol (messaging broken)
+**File:** `ui/scripts/lib/messages.js`. Post-T-29 the module rendered into `#threadWrap` (the whole
+page wrapper, wiping the thread UI), never sent `{type:'view'}` to subscribe a thread, ignored
+`send:error`, and produced non-clickable conversation rows — messaging could not work end to end.
+**Fix:** rewritten against the actual template IDs (`#threadMsgs`, `#sendError`, `#charCount`,
+`#threadDisplayName`, `#threadBlockBtn`) and the gateway WS protocol; conversation rows now link to
+`/messages/thread/`; added Ctrl/Cmd+Enter and a 5-min profile cache (removes the N+1 profile fetch).
+
+---
+
 ## Archived during audit-file consolidation (2026-07-02)
 
 ### DONE — SEC-1.15 CWE-319 Credentials in URL — login/register form GET race condition

@@ -258,9 +258,16 @@ async fn main() {
     let tera = Tera::new(&format!("{templates_dir}/**/*.html"))
         .unwrap_or_else(|e| panic!("failed to load templates from {templates_dir}: {e}"));
 
+    let http_client = reqwest::Client::builder()
+        // Backstop so a hung gateway can't wedge page/API-proxy requests forever.
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("HTTP client");
+
     let state = Arc::new(AppState {
         gateway_url: gateway_url.trim_end_matches('/').to_string(),
-        http_client: reqwest::Client::new(),
+        http_client,
         tera,
         asset_version,
         jwt_secret,

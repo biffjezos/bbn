@@ -14,18 +14,39 @@
 
 ## In Progress
 
-Read-only codebase review delivered 2026-07-02 (no code changes, per owner instruction).
-Key results in the review report (chat) — headline: messages thread page is broken by a
-frontend contract mismatch (threadWrap vs threadMsgs, missing 'view' WS subscribe, ignored
-send:error, plaintext fallback on encrypt failure); gateway HTTP client has no default
-timeouts (502 source); gateway rate limiters reset every 60s; WS send path bypasses the
-message_online tier gate; delete_me doesn't purge blocks/notifications; Dockerfiles don't
-copy Cargo.lock; deploy.yml still deploys Jekyll (T-30 open). cargo check --workspace: PASS.
-Next step: owner decides → file findings as audit items/tickets, then fix in priority order.
+Nothing — fixes implemented and verified, committing now.
 
 ---
 
 ## Completed This Session
+
+### Codebase review + fixes (2026-07-02, later session)
+
+Read-only review first, then fixed all findings the owner approved. `cargo check --locked
+--workspace` PASS; messages.js / api.js pass `node --check`.
+
+**Messaging repair (frontend — this is why messaging was broken):** rewrote `ui/scripts/lib/messages.js`
+against the real template IDs and gateway WS protocol — render into `#threadMsgs` (was destroying
+`#threadWrap`, the whole page), send `{type:'view'}` to subscribe the thread, handle `send:error`
+into `#sendError`, make conversation items link to `/messages/thread/`, wire `#charCount`,
+Ctrl/Cmd+Enter, `#threadDisplayName`, and the block button; added a profile cache (kills the N+1).
+
+**Security (SEC-1.16..1.20):** WS messaging now enforces the `message_online` tier gate + tokenVersion
+via `/authority/verify` (was raw-JWT, bypassable — gateway/ws.rs); gateway rate limiters only rebuild
+when config changes (were resetting counts every 60 s — gateway/main.rs); no-plaintext-fallback on
+send (messages.js blocks + prompts unlock instead of sending cleartext); `delete_me` now also purges
+`blocks` + `notifications` (users-service); `DEBUG` in api.js gated on `?dbg`.
+
+**Reliability (INFRA-1.5):** gateway + server reqwest clients got connect/read timeouts (15 s / 30 s)
++ a 120 s override on the boot migration call — kills the 502/hang class.
+
+**Deploy reproducibility (INFRA-1.6):** all 9 Dockerfiles now `COPY services/Cargo.lock`, build
+`--locked`, and pin `FROM rust:1` (was `rust:latest`). Cargo.lock confirmed tracked + in sync.
+
+**NOT done (needs owner go-ahead):** `deploy.yml` still builds the dead Jekyll site to GitHub Pages —
+it's a CI workflow file, blocked by the standing "no CI changes without explicit instruction" rule.
+This is ticket T-30 (server deployment / CI migration, 0/3). README doc-rot (bcrypt→OPAQUE, 7d→24h)
+and `admin_settings`→`meta_settings` comment drift left as-is (cosmetic).
 
 ### Harness restructure for the Fable 5 model tier (no code touched)
 
