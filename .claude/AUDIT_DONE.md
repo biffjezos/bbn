@@ -1,7 +1,78 @@
 # bOOmbOOm.NOW! — Resolved Audit Items
 
 All resolved audit findings, regardless of concern category.
-Items moved here from AUDIT.md, AUDIT_SECURITY.md, and AUDIT_PERFORMANCE.md when confirmed fixed or accepted.
+Items are moved here from AUDIT.md when confirmed fixed or accepted.
+(Entries before 2026-07-02 came from the former per-concern files
+AUDIT_SECURITY/INFRASTRUCTURE/MAINTAINABILITY/USABILITY/PERFORMANCE.md,
+consolidated into AUDIT.md on 2026-07-02.)
+
+---
+
+## Archived during audit-file consolidation (2026-07-02)
+
+### DONE — SEC-1.15 CWE-319 Credentials in URL — login/register form GET race condition
+
+**Files:** `ui/scripts/boomboom.js`, `services/server/templates/partials/modal-login.html`, `services/server/templates/partials/modal-register.html`
+
+**Finding (2026-03-30):** Login and register forms had no `method` attribute so browser defaulted to GET. `wireAuthForms()` was called after `await window.__authReady`, meaning during the auth warm-up window a user who clicked submit had no event listener attached. The browser submitted the form natively, appending `email=...&password=...` to the URL. Plaintext credentials appeared in the address bar, browser history, and server access logs.
+
+**Fix (2026-03-30):** Three-layer defence:
+1. `wireAuthForms()` moved to run **before** `await window.__authReady` — listener always attached before page can be interacted with.
+2. `onsubmit="return false"` added to both form elements in Tera templates — native submission structurally impossible regardless of JS state.
+3. `name="password"` removed from password input fields — even if native submission fired, password value would not appear in URL.
+
+**Original severity:** CRITICAL — fixed same session as discovery.
+
+---
+
+### DONE — SEC-1.10 Email pre-hash uses plain SHA-256 — no work factor
+
+**File:** `ui/scripts/opaque-client.js:hashEmail`
+
+**Finding (2026-03-23):** The client computed `emailHash = hex(SHA-256(lowercase(email)))` before sending to the server. SHA-256 has no work factor: an attacker who captures the in-transit value (TLS termination, infra logging) or obtains the DB + `EMAIL_PEPPER` can reverse any email address using a dictionary at essentially zero cost.
+
+**Fix (2026-03-23, deployed 2026-03-24):** Replaced with `PBKDF2-SHA256(password=email, salt='boomboom-email-v2', iterations=100_000)` via WebCrypto's native `crypto.subtle`. The fixed domain salt is not secret; protection comes from the iteration count — bulk reversal now requires ~100k SHA-256 ops per candidate email per target user.
+
+**Original severity:** HIGH
+
+---
+
+### DONE — SEC-1.11 No per-user salt on email hash — pepper leak enables bulk precomputation
+
+**File:** `services/auth-service/src/main.rs:auth_register_finish`
+
+**Finding (2026-03-23):** `emailHash` stored in the DB was derived as `HMAC(pepper, SHA-256(email))` with no per-user random component. If `EMAIL_PEPPER` leaks, an attacker can precompute the entire hash space for all known email addresses in one pass and cross-reference the full `users` collection.
+
+**Fix (2026-03-23, deployed 2026-03-24):** At registration the server generates a random 16-byte `emailSalt` per user and stores it alongside `emailHash`. The PBKDF2 work factor from SEC-1.10 already makes bulk precomputation expensive; `emailSalt` adds defence-in-depth and is reserved for the per-user `profileKey = PBKDF2(email, emailSalt)` derivation when profile encryption (T-24) lands. It is not mixed into the lookup hash (that would break lookup).
+
+**Original severity:** MEDIUM
+
+---
+
+### DONE — SEC-1.12 Auth token in localStorage persisted after tab close
+
+**Fixed:** 2026-03-23 — switched token storage to `sessionStorage`; added `pagehide` handler issuing DELETE /location so stale locations are not served after tab close. (Full session context in AUDIT_SECURITY.md git history.)
+
+**Original severity:** HIGH
+
+---
+
+### DONE — MAINT-2.4 `app.js` mixed six distinct module concerns
+
+**File:** `ui/scripts/app.js` (formerly ~990 lines)
+
+**Resolved 2026-03-19:** the original file contained 6 IIFEs with distinct responsibilities, each moved to its own file, loaded globally via `default.html` in dependency order:
+
+- `ui/scripts/debug.js` — debug console overlay (~24 lines); activate with `?dbg` in URL
+- `ui/scripts/warmup.js` — pre-warm backend services on first tab load (~12 lines)
+- `ui/scripts/app.js` — main app shell: Auth hooks, nav/offcanvas wiring, modals, FAB (~336 lines)
+- `ui/scripts/geo.js` — GeoModule: geolocation, WS location push, status bar, IP fallback (~282 lines)
+- `ui/scripts/lock.js` — LockModule: inactivity/tab-hide key locking, unlock modal (~183 lines)
+- `ui/scripts/notif.js` — NotifModule: notification polling, dismissable banners (~117 lines)
+
+Load order is preserved in `default.html`; each module wraps the previous `Auth.onLogin/onLogout` hooks via the same chaining pattern used before the split.
+
+**Original severity:** LOW
 
 ---
 

@@ -1,46 +1,49 @@
 # Claude Code — Standing Instructions
 
+State lives in files; hooks carry it into context. Do not re-read what a hook
+already injected. Keep exactly one copy of every fact.
+
 ---
 
 ## Definitions
 
-**Session-start signal** — Any of the following triggers the pre-session
-checklist: a new, otherwise empty session; the owner writing *"I am back"*,
-*"I want to start a new session"*, or any similar phrasing that clearly
-indicates a fresh start.
+**Session-start signal** — a new, otherwise empty session, or the owner writing
+*"I am back"*, *"I want to start a new session"*, or similar clear fresh-start phrasing.
 
-**Wrap-up signal** — Any phrase that clearly signals the owner wants to close
-the current session: *"wrap it up"*, *"end the session"*, *"take a break"*,
+**Wrap-up signal** — *"wrap it up"*, *"end the session"*, *"take a break"*,
 *"let's close"*, *"we're done for today"*, or similar. A polite sign-off
-(*"thank you"*, *"goodbye"*, *"good night"*) said **after** a wrap-up was
-already completed is **not** a second wrap-up trigger. Do not repeat the
-wrap-up procedure.
+(*"thank you"*, *"good night"*) **after** a wrap-up was already completed is
+not a second trigger — do not repeat the wrap-up.
 
 ---
 
-## Pre-Session Checklist
+## Session Start
 
-Run this on every session-start signal, in order:
+The SessionStart hook has already injected `SESSION.md`, the open-tickets board,
+and the open-audit-items board into context. Do not re-read those files, and do
+not read the codebase, ticket files, or `AUDIT_DONE.md` speculatively — open a
+specific file only when the task needs its full detail.
 
-1. Read `.claude/SESSION.md` **first** — this is the most recent context and bridges any prior compaction.
-2. Read `.claude/AUDIT.md` (the index and global summary table). Do not read individual concern files speculatively — open them only when you need full context on a specific item. Do not read the rest of the codebase speculatively.
-3. Read `.claude/TICKETS.md` (the index) for pending tickets. Open individual ticket files in `.claude/tickets/` only when you need full detail on a specific ticket.
-4. **CodeQL alerts** — run `git fetch origin dev --quiet && git show origin/dev:.claude/codeql-alerts.md 2>/dev/null`. If the file exists and was written since the most recent Wednesday, report the alerts — they take priority over tickets.
-5. Greet the owner, present the last audit summary and SESSION.md "In Progress" state, and ask what to do.
+On a session-start signal:
+
+1. **CodeQL alerts** — run `git fetch origin dev --quiet && git show origin/dev:.claude/codeql-alerts.md 2>/dev/null`. If the file exists and was written since the most recent Wednesday, report open alerts — they take priority over tickets.
+2. Greet the owner, present the injected "In Progress" state and open-items boards in two or three sentences, and ask what to do.
 
 ---
 
-## Friction Awareness
+## Known Failure Modes
 
-Before acting on any task, scan the Friction Label Taxonomy in `.claude/CHANGELOG.md`
-and ask whether the current situation matches a known pattern. This is a pre-action
-check, not a retrospective. Examples:
+Recurring, project-specific mistakes from past sessions (distilled from
+CHANGELOG.md reflections). Check the relevant line before acting, not after:
 
-- Splitting or creating files → check for **pattern blindness** (scan existing conventions first)
-- Writing output for the owner → check for **mixed scope** (is everything here their action?)
-- Adding structure or content → check for **redundancy** (does this already exist?)
-
-If a match is found, apply the known fix before proceeding.
+- **Read before structural edits.** Read the complete function before inserting into it; include enough surrounding context in `old_string` to confirm placement. Before changing auth-timing or map-icon logic, read the git history of the intended behaviour first.
+- **Match scope to request.** No unsolicited changes, guards, or refactors. Informational questions get a prose answer first — tools only if a code change is actually implied.
+- **Verify before claiming.** After any build/check command, run `git status` (untracked Cargo.lock has bitten before). Never state something works without having confirmed it.
+- **ES module timing:** never access `window.Auth` or `window.__authReady` at ES module top level — these are set inside `initApp()` on DOMContentLoaded, after module evaluation; callbacks are silently discarded. All post-auth work goes through exported functions called from `boomboom.js` at the right point in `initApp()`.
+- **Security-sensitive form listeners** are wired synchronously at DOM-ready, never after an `await`. Every form with a submit button gets `method="POST"` and `onsubmit="return false"` at creation time.
+- **New workspace crate** → grep the Dockerfiles for stub blocks immediately. **Base-path/template migration** → grep for `service-worker` and `navigator.serviceWorker.register` to confirm scope alignment.
+- **After patching a "missing key in a loaded map" bug**, grep the whole service for the same access pattern before closing the ticket.
+- **Modules with inter-module contracts, async lifecycles, security-relevant behaviour, or init-order dependencies** are fragile here — state the contract explicitly in the ticket or commit when you touch one.
 
 ---
 
@@ -48,169 +51,64 @@ If a match is found, apply the known fix before proceeding.
 
 Before writing any code for a ticket:
 
-1. **Re-read the ticket.** Check whether its implementation plan is still
-   valid. Flag any prerequisites that were not met when the ticket was written
-   (missing env vars, dependent tickets not yet done, schema changes needed
-   first, etc.).
-2. **Check for consequences.** If the implementation touches auth, encryption,
-   privacy, the business model, or requires backend/infrastructure changes not
-   already in place, state this clearly before proceeding.
-3. **Propose alternatives if warranted.** If a simpler or safer path exists,
-   briefly describe it and let the owner decide. Create an alternative ticket
-   rather than silently deviating.
-4. **Confirm scope.** State what you are about to do in one or two sentences
-   and proceed — do not ask for permission if the ticket is clear.
+1. **Re-read the ticket.** Check the implementation plan is still valid; flag unmet prerequisites (missing env vars, dependent tickets, schema changes).
+2. **Check for consequences.** If the work touches auth, encryption, privacy, the business model, or needs backend/infrastructure changes not already in place, say so before proceeding.
+3. **Propose alternatives if warranted** — as an alternative ticket, never as a silent deviation.
+4. **Confirm scope** in one or two sentences and proceed — do not ask permission if the ticket is clear.
 
 ---
 
 ## Before Each Commit / Push
 
-- **Update SESSION.md.** Refresh the "In Progress", "Completed This Session", and "Handoff Notes" sections. This must happen before every commit so the file is never stale when the PreCompact hook checks it.
-- **Update tickets.** Reflect the current state of any ticket touched this session:
-  update the frontmatter `status`/`phase` in the individual ticket file, move completed
-  phases/tickets to `.claude/tickets/done/` (create a stub there), update the TICKETS.md
-  index row, add any newly discovered tickets as new files. Do this before every commit,
-  not only at wrap-up.
-- **Update audit files.** If any audit item was resolved or its status changed during this
-  session, move it to `AUDIT_DONE.md` (leave a stub), update the source concern file, and
-  keep the global summary table in `AUDIT.md` in sync. Do this before every commit, not only at wrap-up.
-- **Run verify.sh.** After staging and before pushing, run `bash .claude/verify.sh`. Reconcile any ❌ failures — missing stubs, stale SESSION.md — before pushing. Do not push if verify.sh exits 1.
-- **Reflect.** Identify anything that slowed the session down or caused
-   friction: unclear rules, missing context, a workflow step that broke, a
-   ticket structure that wasn't useful. Be brief and honest. You may ask the
-   Project Owner about their perspective if uncertain.
-- **Improve.** If a change to CLAUDE.md or the ticket file structure would
-   prevent the identified friction in future sessions, apply it now. Log every change
-   made to CLAUDE.md in `.claude/CHANGELOG.md` — one sentence per change, with
-   date and tag `CHANGE`or `REFLECTION` (see Persistent Files).
+1. **Update SESSION.md** — refresh "In Progress", "Completed This Session", and "Handoff Notes". Never stale at commit time.
+2. **Update TICKETS.md + ticket files** touched this session — frontmatter `status`/`phase`, move completed tickets/phases to `tickets/done/` (stub there, index entry removed or updated), add newly discovered tickets.
+3. **Update AUDIT.md** — new findings in as open items with `<!-- ITEM -->` tags; resolved items moved to `AUDIT_DONE.md` with a one-line stub in AUDIT.md's Resolved section.
+4. **Run `bash .claude/verify.sh`** after staging. Reconcile any ❌ before pushing; do not push on exit 1.
+5. If this session changed CLAUDE.md or the file structure, or hit real friction, **log it in CHANGELOG.md** (`CHANGE` / `REFLECTION`, one sentence, newest first).
 
 ## After Each Commit / Push
 
-After every commit and push, always report — even if there is nothing to report:
+Always report, even when empty:
 
-- **Backend changes required:** list only actions **the owner must take manually** —
-  env vars to add, update, or remove in Railway; shell commands to run; Railway
-  settings to change. Do NOT list code changes already committed. If none, write
-  *"No backend changes required."*
-- **Expected behavior:** one sentence describing what is now different or new,
-  if not obvious from the commit message or ticket title (e.g. *"User documents
-  in the `users` collection now include a `preferences` sub-object."*).
----
-
-## Context Window Awareness
-
-The PreCompact hook will automatically fire before auto-compaction and block until SESSION.md is updated. But do not wait for the hook — be proactive:
-
-- After any large file-loading operation (reading 5+ files, ingesting a full service), note this explicitly.
-- If a session has been running for many exchanges or you have loaded significant context, say so: *"This session is getting deep — I'll update SESSION.md now as a precaution."*
-- Never let SESSION.md go stale for more than one commit cycle.
-
-If the PreCompact hook blocks you (you see the ⚠️ message): immediately update SESSION.md, inform the owner that compaction is about to happen, then proceed. The hook will allow compaction once SESSION.md is fresh.
+- **Backend changes required:** only actions the owner must take manually — Railway env vars, shell commands, settings. Not code changes already committed. If none: *"No backend changes required."*
+- **Expected behavior:** one sentence on what is now different, if not obvious from the commit message.
 
 ---
 
-## Session Wrap-Up Checklist
+## Compaction
 
-When the owner signals a wrap-up (see Definitions), run these steps in order
-without asking for permission:
+The harness summarizes long conversations automatically; the PreCompact hook
+blocks auto-compaction while SESSION.md is stale. Don't wait for it: after
+loading significant context or before any long-running step, update SESSION.md
+proactively. If the hook blocks you (⚠️ message), update SESSION.md immediately,
+tell the owner compaction is imminent, and continue.
 
-1. Update `.claude/SESSION.md` — write a complete "Handoff Notes" section covering everything the next session needs that isn't in TICKETS.md or AUDIT.md.
-2. Update audit files — add new findings to the correct concern file, move resolved items
-   to `AUDIT_DONE.md`, update existing entries, and **keep the global summary table in
-   `AUDIT.md` in sync** (update the status cell for any item that changed). File names
-   and their concerns are listed in the Persistent Files section below.
-3. Update ticket files — move completed tickets/phases to `.claude/tickets/done/`
-   (create a stub file there), update the individual ticket file's frontmatter,
-   update the TICKETS.md index row, add any new tickets as new files in `.claude/tickets/`.
-5. If there are 10 or more `REFLECTION` entries in the `Log`-section of the `CHANGELOG.md`,
-   compact them into a 250 words max. summary in the `Reflection` section including the essence of the existing reflections and **remove them from the Log**. The Log retains only `CHANGE` entries after compaction.
-6. If there are 25 or more entries `CHANGE` in the `Log`-section of the `CHANGELOG.md`, remove
-   the oldest entries (by date) until the total counts 15.
-7. Commit all outstanding changes to the session branch, including all updated files.
-8. Inform the owner the branch is pushed and ready — they will open the PR from the UI.
+---
+
+## Session Wrap-Up
+
+On a wrap-up signal, run in order without asking:
+
+1. Update `SESSION.md` — complete "Handoff Notes" covering everything the next session needs that isn't in TICKETS.md or AUDIT.md.
+2. Update `AUDIT.md` / `AUDIT_DONE.md` (findings, moves, stubs) and ticket files/index as in the pre-commit steps.
+3. CHANGELOG maintenance: if the Log holds 10+ `REFLECTION` entries, distill them into the Reflection section (≤250 words) and remove them from the Log; if the Log holds 25+ `CHANGE` entries, drop the oldest until 15 remain.
+4. Commit all outstanding changes to the session branch and push.
+5. Tell the owner the branch is pushed and ready — they open the PR from the UI.
 
 ---
 
 ## Persistent Files
 
-### `.claude/SESSION.md` — Rolling session state *(read first)*
-Contains: current branch, what is in progress, key decisions made this session (not yet in TICKETS.md),
-completed work with commit hashes, and handoff notes for the next session.
-Updated by Claude at session-start and before every commit. The PreCompact hook checks this file's
-freshness — if stale (>5 min), it blocks auto-compaction until updated.
-
-### `.claude/session-audit.log` — Automated action log
-Contains: timestamped TSV entries for every Edit, Write, and Bash tool call this session.
-Written by the PostToolUse hook — not by Claude directly. Read it via `verify.sh` to confirm
-what was actually done. Do not edit this file manually. Append-only.
-
-### `.claude/AUDIT.md` — Audit index
-Contains: links to all concern files (with descriptions), owner notes / open questions,
-and the **global summary table** of every open and resolved finding across all concerns.
-Cross-concern items that don't fit any single concern file also go here.
-You are the owner. Keep the global summary table in sync whenever any concern file changes.
-Do not put feature requests or roadmap items here.
-
-### `.claude/AUDIT_INFRASTRUCTURE.md` — Infrastructure log (`INFRA-` prefix)
-Contains: Railway/MongoDB environment issues, service dependencies, deployment constraints,
-one-time backend operations required. Same ownership rules as AUDIT.md.
-
-### `.claude/AUDIT_MAINTAINABILITY.md` — Maintainability log (`MAINT-` prefix)
-Contains: code structure issues, duplication, architectural debt, patterns that complicate
-future changes. Same ownership rules as AUDIT.md.
-
-### `.claude/AUDIT_USABILITY.md` — Usability log (`UX-` prefix)
-Contains: user-facing friction, UX issues, interaction flows that degrade the user experience.
-Same ownership rules as AUDIT.md.
-
-### `.claude/AUDIT_SECURITY.md` — Security log (`SEC-` prefix)
-Contains: security bugs, vulnerabilities, auth/privacy concerns. Filed
-separately so security issues are never buried. Same ownership rules as AUDIT.md.
-
-### `.claude/AUDIT_PERFORMANCE.md` — Performance log (`PERF-` prefix)
-Contains: performance bottlenecks, slow queries, inefficient patterns, scaling concerns.
-Filed separately for the same reason. Same ownership rules as AUDIT.md.
-
-### `.claude/AUDIT_DONE.md` — Resolved audit items archive
-Contains: resolved findings from any audit file. Move items here when fixed —
-never delete them. Note which file they came from and when they were resolved.
-
-Rules for moving:
-- Move an item only when the fix is confirmed in code (not just planned).
-- After moving, leave a one-line stub in the source concern file pointing to AUDIT_DONE.md
-  (e.g. `SEC-1.7 ✅ fixed 2026-03-23 — details in AUDIT_DONE.md`).
-- Items that are code-complete but have outstanding deployment steps (env vars, DB ops)
-  stay in the concern file until fully live.
-- Read AUDIT_DONE.md only when you need historical context for a specific item —
-  not on session start, not speculatively.
-
-### `.claude/TICKETS.md` — Ticket index *(read at session start)*
-Contains: one-row summary per open/active/planned/deferred ticket with link, status, priority, title, and phase.
-Also contains cross-ticket architectural decisions. Done tickets are not listed here — they live in `tickets/done/`.
-The project owner may add items directly. Do not remove rows unless the ticket moves to done or the owner says to.
-
-### `.claude/tickets/<id>.md` — Individual ticket files
-Contains: full spec, implementation phases, owner comments, and current status for one ticket.
-Frontmatter fields: `id`, `title`, `status`, `priority`, `concern`, `phase`, `prereqs`, `relates`.
-Read individual files only when you need full detail — not on session start, not speculatively.
-
-Rules for creating and moving:
-- **New ticket:** create `.claude/tickets/T-XX.md` with YAML frontmatter; add a row to TICKETS.md index.
-- **Move a whole ticket to done:** create `.claude/tickets/done/T-XX.md` (summary + what was done);
-  update the TICKETS.md index row to link to `tickets/done/`. Move a whole ticket only when
-  **all its phases are done**.
-- **Move a phase to done:** create `.claude/tickets/done/T-XX-phaseN.md`; update the parent
-  ticket file to show the phase as complete; update the TICKETS.md index phase column.
-- Never delete ticket files — archive, don't remove.
-- Read `tickets/done/` only when you need historical context for a specific ticket.
-
-### `.claude/CHANGELOG.md` — Change history and reflections
-Append an entry during every wrap-up. Two entry types:
-- **CHANGE:** a modification to CLAUDE.md or persistent file structure — what changed and why.
-- **REFLECTION:** a mistake or friction from the session — what went wrong and what rule was added or changed to prevent recurrence.
-
-Format: `YYYY-MM-DD — [CHANGE|REFLECTION]: <description>`. Newest entries go at the top of the Log section.
-Never edit or remove existing entries.
+| File | Role |
+|---|---|
+| `.claude/SESSION.md` | Rolling session state; injected by SessionStart hook; PreCompact hook blocks compaction if stale (>5 min). Update at session start and before every commit. |
+| `.claude/AUDIT.md` | **Single audit file** — all open findings grouped by concern (`INFRA-`, `MAINT-`, `UX-`, `SEC-`, `PERF-` prefixes), each with an `<!-- ITEM -->` tag (parsed by the hook), plus owner notes and one-line resolved stubs. No feature requests here. |
+| `.claude/AUDIT_DONE.md` | Archive of resolved findings — full text moves here, never deleted. Read only for historical context on a specific item. |
+| `.claude/TICKETS.md` | Ticket index — one `<!-- ITEM -->`-tagged heading per non-done ticket (parsed by the hook). Owner may add items directly. |
+| `.claude/tickets/<id>.md` | Full ticket spec. Frontmatter: `id`, `title`, `status`, `priority`, `concern`, `phase`, `prereqs`, `relates`. New ticket ⇒ new file + index entry. Done ⇒ stub in `tickets/done/` (whole ticket only when all phases done; single phase ⇒ `tickets/done/T-XX-phaseN.md`). Never delete ticket files. |
+| `.claude/CHANGELOG.md` | History of harness changes (`CHANGE`) and session frictions (`REFLECTION`), plus the distilled Reflection summary and friction label taxonomy. Append-only except the wrap-up compaction rules. |
+| `.claude/session-audit.log` | TSV log of every Edit/Write/Bash call, written by the PostToolUse hook. Never edit manually. |
+| `.claude/codeql-alerts.md` | Weekly CodeQL snapshot, written by CI on `dev`. Read via the session-start check; do not edit. |
 
 ---
 
@@ -230,7 +128,9 @@ Never edit or remove existing entries.
   suggestions on those files without explicit permission.
 - **Do not change `var DEBUG` in `ui/scripts/api.js`** without explicit
   permission.
-- **Do not change CI/CD workflow files** (`.github/workflows/`) beyond what was explicitly requested. If a CI quality or configuration issue is observed, log it as an audit item and ask the owner — do not self-authorize a fix.
+- **Do not change CI/CD workflow files** (`.github/workflows/`) beyond what was
+  explicitly requested. Log observed CI issues as an audit item and ask the
+  owner — do not self-authorize a fix.
 - **Do not tell me what the project is about.** I already know.
 - **Do not hallucinate errors.** If you cannot find the reported bug, say so.
   Check whether other components are down, environment variables are missing, or
@@ -242,8 +142,8 @@ Never edit or remove existing entries.
 
 - Load only files relevant to the task. Think before reading — be token-sparing.
 - If you identify a change you are not allowed to make (backend, infrastructure,
-  business model), add it to `.claude/TICKETS.md` with a short rationale and
-  prerequisites. Do not implement it.
+  business model), add it as a ticket with a short rationale and prerequisites.
+  Do not implement it.
 - Always create pull requests targeting `dev`, never `main` or any other branch.
 - If the owner suggests something that is a chore to implement, has severe
   implications, strays from privacy-by-design, or is not feasible: explain why,

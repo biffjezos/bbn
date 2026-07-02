@@ -1,22 +1,130 @@
-# bOOmbOOm.NOW! — Audit Index
+# bOOmbOOm.NOW! — Audit
 
-**Last updated:** 2026-03-24
-**Scope:** Full codebase (9 backend services, 9 frontend scripts, config)
-**Auditor:** Claude (claude-sonnet-4-6)
+**Last updated:** 2026-07-02
+**Scope:** Full codebase (9 backend services, frontend scripts, config)
+
+This is the **single audit file**. All open findings live here, grouped by concern.
+ID prefixes are kept: `INFRA-`, `MAINT-`, `UX-`, `SEC-`, `PERF-`.
+Each open item carries an `<!-- ITEM -->` tag — the SessionStart hook parses these
+into the open-items board, so there is no separate summary table. One copy per fact.
+
+**When a finding is resolved:** move its full text to `AUDIT_DONE.md`, leave a
+one-line stub in the Resolved section below. Move only when the fix is confirmed
+in code. Items that are code-complete but have outstanding deployment steps
+(env vars, DB ops) stay open here until fully live.
 
 ---
 
-## Concern Files
+## Infrastructure (`INFRA-`)
 
-Each concern has its own file. Add new findings to the correct file; cross-concern items go here.
+### INFRA-1.3 CORS_ORIGINS env var now required in Railway gateway service
+<!-- ITEM id:INFRA-1.3 status:open priority:high concern:infrastructure -->
 
-- **[AUDIT_INFRASTRUCTURE.md](AUDIT_INFRASTRUCTURE.md)** (`INFRA-`) — Railway/MongoDB environment, deployment constraints, one-time backend ops.
-- **[AUDIT_MAINTAINABILITY.md](AUDIT_MAINTAINABILITY.md)** (`MAINT-`) — Code structure, duplication, architectural debt.
-- **[AUDIT_USABILITY.md](AUDIT_USABILITY.md)** (`UX-`) — User-facing friction and broken interaction flows.
-- **[AUDIT_SECURITY.md](AUDIT_SECURITY.md)** (`SEC-`) — Security bugs, auth/privacy vulnerabilities.
-- **[AUDIT_PERFORMANCE.md](AUDIT_PERFORMANCE.md)** (`PERF-`) — Bottlenecks, slow queries, scaling concerns.
+**Finding (2026-03-30):** `ALLOWED_ORIGINS` was hardcoded to `["https://biffjezos.github.io"]` (old GitHub Pages domain). Changed to required env var `CORS_ORIGINS`. Gateway panics on startup if not set.
 
-Resolved items from any file → **[AUDIT_DONE.md](AUDIT_DONE.md)**
+**Owner action required:** Set `CORS_ORIGINS=https://boom.up.railway.app` in Railway **gateway** service environment variables (comma-separate multiple origins if needed).
+
+**Priority:** HIGH — without this, all cross-origin requests (API + WS) return 403/CORS errors.
+
+---
+
+### INFRA-1.4 JWT_SECRET must be identical in server and gateway Railway services
+<!-- ITEM id:INFRA-1.4 status:open priority:high concern:infrastructure -->
+
+**Finding (2026-03-30):** Server validates `bbn_tok` cookie with its own `JWT_SECRET`. Gateway signs JWTs with its own `JWT_SECRET`. If they differ, every protected page (`/messages/`, `/profile/`, `/favourites/`, `/settings/`, `/admin/`) rejects the cookie and redirects to `/`. Most likely root cause of the `/favourites` logout reported 2026-03-30.
+
+**Owner action required:** In Railway, verify that **both** the `server` service and the `gateway` service have the exact same value for `JWT_SECRET`.
+
+**Priority:** HIGH — every protected route silently fails when mismatch exists.
+
+---
+
+## Maintainability (`MAINT-`)
+
+### MAINT-2.3 Per-handler role guards still scattered across services
+<!-- ITEM id:MAINT-2.3 status:open priority:low concern:maintainability -->
+
+**Date:** 2026-03-16 (updated 2026-03-24)
+**Files:** `services/users-service/src/main.rs`, `ui/_layouts/default.html`
+
+**Resolved so far (T-08 Phase 2, 2026-03-24):** Gateway uses a single `authority_guard()` + `role_guard()` pattern; messages, favourites, blocks, location services use `RegisteredByGateway`/`AuthedByGateway` from common; `common/src/auth.rs` has `GatewayIdentity` with pre-verified role.
+
+**What remains:** `users-service` still has `AdminUser`/`RequireRegistered` extractors for its own admin routes (separate from gateway), running an independent tokenVersion DB check. Intentional (services must validate independently when not behind the gateway) but inconsistent with the newer `AuthedByGateway` approach.
+
+**Suggested next step:** Migrate `users-service` admin handlers to `AuthedByGateway` in a focused follow-up session.
+
+**Priority:** LOW — role guards are correct; this is a consistency improvement.
+
+---
+
+### MAINT-2.5 No explicit WebSocket disconnect on message-page navigation
+<!-- ITEM id:MAINT-2.5 status:open priority:low concern:maintainability -->
+
+**File:** `ui/scripts/messages.js`
+
+The `beforeunload` handler sends `{ type: 'view', userId: null }` to clear the thread subscription, but the WebSocket itself is not explicitly closed on navigation. The server's `onclose` handler clears timers and releases the send bucket. The browser closes the WS on unload anyway, but there is no explicit `_msgWs.close()` call — inconsistent with the location WS (`closeLocWS()` is called on logout).
+
+**Priority:** LOW — no functional impact; cosmetic inconsistency.
+
+---
+
+### MAINT-2.6 Per-service Config struct duplication — acceptable, not worth refactoring now
+<!-- ITEM id:MAINT-2.6 status:open priority:low concern:maintainability -->
+
+**Date:** 2026-03-19
+**Files:** `services/*/src/main.rs` (all 9 services)
+
+Each service defines its own `Config` struct with a `from_env()` impl sharing a common core (`port`, `jwt_secret`, `service_secret`, `mongo_uri`, `db_name`). The duplication is intentional and appropriate for independent microservices — the alternatives add build coupling without meaningful benefit at current scale (~30 lines per service), and the `from_env()` impls are not identical.
+
+**When to revisit:** if a new standard env var must be added to all services simultaneously (e.g. `OTEL_ENDPOINT`), a shared `common::BaseConfig` would be justified. Reassess at ~15+ services.
+
+**Priority:** LOW.
+
+---
+
+## Usability (`UX-`)
+
+### UX-3.1 Users enter password twice in the cold login → messages flow
+<!-- ITEM id:UX-3.1 status:open priority:medium concern:usability -->
+
+**Files:** `ui/scripts/auth.js`, `ui/scripts/crypto-worker.js`
+
+Login authenticates the user (issues JWT) but does **not** load the E2EE crypto keys into the worker. When the user navigates to `/messages/`, `requireUnlocked()` finds `BBMCrypto.isUnlocked() === false` and shows the lock screen — requiring the password a second time (PBKDF2 derivation ~1 s, plus a network round-trip for the encrypted key blob).
+
+**Mitigating factors:**
+- SharedWorker on Chrome/Firefox/Edge: keys survive full-page navigations within the same browser session. Double-entry only happens on the first access after a cold login.
+- Safari / iOS: regular Worker is destroyed on every page navigation — password required on every page load that touches messages.
+- Inactivity lock: intentional (3 min idle / 30 s hidden tab).
+
+**Possible improvement (no security downgrade):** after a successful login, automatically attempt to unlock the crypto keys using the password the user just typed — it is available in-memory at that moment. The lock screen on inactivity/tab-hide still protects keys at rest.
+
+**Priority:** MEDIUM — real friction for returning users, especially on Safari.
+
+---
+
+## Performance (`PERF-`)
+
+### PERF-4.1 Send-rate bucket is in-process — not safe for multi-instance gateway
+<!-- ITEM id:PERF-4.1 status:deferred priority:low concern:performance -->
+
+***Postponed by project owner (12 March 2026):*** postponed until further notice.
+
+**File:** `services/gateway/src/main.rs` (in-memory rate bucket)
+
+The per-user send-rate bucket is stored in-process. If the gateway scales to multiple instances, two connections from the same user on different instances get separate buckets, doubling the effective send rate. Fine while Railway runs a single gateway instance. Migrate to a shared store (e.g. Redis `INCR` with TTL key) when Redis lands.
+
+**Priority:** LOW (deferred until horizontal scaling).
+
+---
+
+### PERF-4.2 Notification poll scales linearly with active users
+<!-- ITEM id:PERF-4.2 status:open priority:low concern:performance -->
+
+**Files:** `ui/scripts/app.js` (NotifModule), `services/favourites-service/src/main.rs`
+
+Each logged-in user polls `GET /api/notifications` every 2 minutes (`POLL_INTERVAL_MS`). Negligible at current scale (< 1,000 concurrent). At larger scale, push delivery via the existing message WebSocket would be more efficient.
+
+**Priority:** LOW (revisit before scaling push).
 
 ---
 
@@ -74,38 +182,28 @@ The admin UI should be able to add, edit, change, remove tiers. Therefore, I thi
 
 ---
 
-## Global Summary Table
+## Resolved
 
-When a finding is resolved: update the relevant concern file's summary, move the item to AUDIT_DONE.md, and update the row below to ✅.
+One-line stubs only — full details in [AUDIT_DONE.md](AUDIT_DONE.md).
 
-| Status | ID | Concern | Severity | Finding |
-|---|---|---|---|---|
-| ✅ | INFRA-1.1 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | HIGH | migration-service not running — resolved 2026-03-24 by Railway plan upgrade (1 TB storage). |
-| ✅ | INFRA-1.0 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | MEDIUM | MongoDB disk space — superseded by INFRA-1.1, resolved same. |
-| ✅ | INFRA-1.2 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | LOW | Sessions TTL index carried old 2 h value — resolved via migration 010, confirmed deployed 2026-03-24. |
-| ✅ | MAINT-2.1 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | haversineDistance — resolved, single impl in common/src/geo.rs |
-| ✅ | MAINT-2.2 | [Maintainability](AUDIT_MAINTAINABILITY.md) | MEDIUM | Core utilities — resolved, all in common/src/auth.rs extractors |
-| 🔲 | MAINT-2.3 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | Per-handler role guards still scattered; token verification now centralised |
-| ✅ | MAINT-2.4 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | app.js split into 6 focused files — 2026-03-19 |
-| 🔲 | MAINT-2.5 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | No explicit WS close on message-page navigation |
-| 🔲 | MAINT-2.6 | [Maintainability](AUDIT_MAINTAINABILITY.md) | LOW | Per-service Config struct duplication — acceptable today, reassess at 15+ services |
-| 🔲 | UX-3.1 | [Usability](AUDIT_USABILITY.md) | MEDIUM | Users enter password twice in cold login → messages flow |
-| ✅ | SEC-1.1 | [Security](AUDIT_SECURITY.md) | HIGH | Plain password/email in POST request — OPAQUE fully deployed 2026-03-24; UI password-change also fixed |
-| ✅ | SEC-1.2 | [Security](AUDIT_SECURITY.md) | MEDIUM | Gateway send-rate bypassable at messages-service — per-userId bucket added (T-22, 2026-03-23) |
-| ✅ | SEC-1.3 | [Security](AUDIT_SECURITY.md) | MEDIUM | `real_ip()` trusts spoofable `X-Forwarded-For` — CF-Connecting-IP preferred (T-22, 2026-03-23) |
-| ✅ | SEC-1.4 | [Security](AUDIT_SECURITY.md) | MEDIUM | User JWT TTL hardcoded at 7 days — configurable via admin_settings, default 24 h (T-22, 2026-03-23) |
-| ✅ | SEC-1.5 | [Security](AUDIT_SECURITY.md) | LOW | No request body size cap — DefaultBodyLimit added, configurable via admin_settings (T-22, 2026-03-23) |
-| ✅ | SEC-1.6 | [Security](AUDIT_SECURITY.md) | LOW | `msg_send` shares general API rate bucket — dedicated lim_msg added (T-22, 2026-03-23) |
-| ✅ | SEC-1.7 | [Security](AUDIT_SECURITY.md) | MEDIUM | CWE-918 SSRF — JWT sub raw string interpolated into internal URLs — fixed 2026-03-23 |
-| ✅ | SEC-1.8 | [Security](AUDIT_SECURITY.md) | MEDIUM | NaN panic in location sort (`partial_cmp().unwrap()`) — fixed 2026-03-23 |
-| ✅ | SEC-1.9 | [Security](AUDIT_SECURITY.md) | LOW | Pre-epoch clock panic in `now_unix`/`now_ms` — fixed 2026-03-23 |
-| ✅ | SEC-1.10 | [Security](AUDIT_SECURITY.md) | HIGH | Email pre-hash was plain SHA-256 — replaced with PBKDF2-SHA256 (100k iters), deployed 2026-03-24 |
-| ✅ | SEC-1.11 | [Security](AUDIT_SECURITY.md) | MEDIUM | No per-user email salt — `emailSalt` added to user doc at registration, deployed 2026-03-24 |
-| ✅ | SEC-1.12 | [Security](AUDIT_SECURITY.md) | HIGH | Auth token in `localStorage` — switched to `sessionStorage` + `pagehide` DELETE /location (2026-03-23) |
-| ✅ | SEC-1.13 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of `sex` — removed sessionStorage key, read from JWT instead — fixed 2026-03-25 |
-| ✅ | SEC-1.14 | [Security](AUDIT_SECURITY.md) | HIGH | CWE-312 clear-text storage of sensitive data — removed `sex` from `bbm_meet` localStorage — fixed 2026-03-25 |
-| ✅ | SEC-1.15 | [Security](AUDIT_SECURITY.md) | CRITICAL | CWE-319 Credentials in URL — login form GET race condition — fixed 2026-03-30 |
-| 🔲 | INFRA-1.3 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | HIGH | CORS_ORIGINS now required env var in gateway — owner must set in Railway |
-| 🔲 | INFRA-1.4 | [Infrastructure](AUDIT_INFRASTRUCTURE.md) | HIGH | JWT_SECRET must match in server and gateway — mismatch → all protected routes redirect |
-| ⏸️ | PERF-4.1 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Send-rate bucket in-process — not safe for multi-instance gateway (deferred) |
-| 🔲 | PERF-4.2 | [Performance](AUDIT_PERFORMANCE.md) | LOW | Notification poll scales linearly with active users |
+- INFRA-1.0 ✅ resolved 2026-03-24 — MongoDB disk space, superseded by INFRA-1.1
+- INFRA-1.1 ✅ resolved 2026-03-24 — migration-service not running (Railway plan upgrade)
+- INFRA-1.2 ✅ resolved 2026-03-24 — stale sessions TTL index (migration 010)
+- MAINT-2.1 ✅ resolved — haversineDistance single impl in common/src/geo.rs
+- MAINT-2.2 ✅ resolved — core utilities centralised in common/src/auth.rs extractors
+- MAINT-2.4 ✅ resolved 2026-03-19 — app.js split into 6 focused files
+- SEC-1.1 ✅ resolved 2026-03-24 — plain password/email in POST; OPAQUE fully deployed
+- SEC-1.2 ✅ fixed 2026-03-23 — gateway send-rate bypass at messages-service (T-22)
+- SEC-1.3 ✅ fixed 2026-03-23 — spoofable X-Forwarded-For; CF-Connecting-IP preferred (T-22)
+- SEC-1.4 ✅ fixed 2026-03-23 — JWT TTL configurable via admin_settings, default 24 h (T-22)
+- SEC-1.5 ✅ fixed 2026-03-23 — request body size cap added (T-22)
+- SEC-1.6 ✅ fixed 2026-03-23 — dedicated lim_msg rate bucket for msg_send (T-22)
+- SEC-1.7 ✅ fixed 2026-03-23 — CWE-918 SSRF, JWT sub interpolated into internal URLs
+- SEC-1.8 ✅ fixed 2026-03-23 — NaN panic in location sort
+- SEC-1.9 ✅ fixed 2026-03-23 — pre-epoch clock panic in now_unix/now_ms
+- SEC-1.10 ✅ resolved 2026-03-24 — email pre-hash upgraded to PBKDF2-SHA256 (100k iters), deployed
+- SEC-1.11 ✅ resolved 2026-03-24 — per-user emailSalt added at registration, deployed
+- SEC-1.12 ✅ fixed 2026-03-23 — auth token moved localStorage → sessionStorage + pagehide DELETE /location
+- SEC-1.13 ✅ fixed 2026-03-25 — CWE-312 clear-text sessionStorage `sex` key removed, read from JWT
+- SEC-1.14 ✅ fixed 2026-03-25 — CWE-312 `sex` removed from `bbm_meet` localStorage
+- SEC-1.15 ✅ fixed 2026-03-30 — CWE-319 credentials in URL, login form GET race condition

@@ -44,9 +44,8 @@ if [[ -n "$TICKET_REFS" ]]; then
     ls "$CLAUDE_DIR/tickets/${ref}-"*.md 2>/dev/null | grep -q . && found=1
     [[ -f "$CLAUDE_DIR/tickets/done/${ref}.md" ]] && found=1
     ls "$CLAUDE_DIR/tickets/done/${ref}-"*.md 2>/dev/null | grep -q . && found=1
-    # Fallback: index files (also catches refs in legacy TICKETS_DONE.md)
+    # Fallback: index file
     grep -q "$ref" "$CLAUDE_DIR/TICKETS.md" 2>/dev/null && found=1
-    grep -q "$ref" "$CLAUDE_DIR/TICKETS_DONE.md" 2>/dev/null && found=1
 
     if [[ $found -eq 1 ]]; then
       echo "  ✅ $ref — stub found"
@@ -65,17 +64,10 @@ AUDIT_REFS=$(echo "$COMMIT_MSG" | grep -oE '(SEC|MAINT|INFRA|UX|PERF)-[0-9]+(\.[
 if [[ -n "$AUDIT_REFS" ]]; then
   echo "── Audit refs in commit ──────────────────────────────"
   for ref in $AUDIT_REFS; do
-    PREFIX=$(echo "$ref" | grep -oE '^[A-Z]+')
+    # All audit items live in AUDIT.md (open) or AUDIT_DONE.md (resolved).
     found=0
-    case "$PREFIX" in
-      SEC)   grep -q "$ref" "$CLAUDE_DIR/AUDIT_SECURITY.md" 2>/dev/null && found=1 ;;
-      MAINT) grep -q "$ref" "$CLAUDE_DIR/AUDIT_MAINTAINABILITY.md" 2>/dev/null && found=1 ;;
-      INFRA) grep -q "$ref" "$CLAUDE_DIR/AUDIT_INFRASTRUCTURE.md" 2>/dev/null && found=1 ;;
-      UX)    grep -q "$ref" "$CLAUDE_DIR/AUDIT_USABILITY.md" 2>/dev/null && found=1 ;;
-      PERF)  grep -q "$ref" "$CLAUDE_DIR/AUDIT_PERFORMANCE.md" 2>/dev/null && found=1 ;;
-    esac
-    grep -q "$ref" "$CLAUDE_DIR/AUDIT_DONE.md" 2>/dev/null && found=1
     grep -q "$ref" "$CLAUDE_DIR/AUDIT.md" 2>/dev/null && found=1
+    grep -q "$ref" "$CLAUDE_DIR/AUDIT_DONE.md" 2>/dev/null && found=1
 
     if [[ $found -eq 1 ]]; then
       echo "  ✅ $ref — found in audit files"
