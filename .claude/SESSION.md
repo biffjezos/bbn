@@ -14,7 +14,14 @@
 
 ## In Progress
 
-Nothing — committing the harness restructure now.
+Read-only codebase review delivered 2026-07-02 (no code changes, per owner instruction).
+Key results in the review report (chat) — headline: messages thread page is broken by a
+frontend contract mismatch (threadWrap vs threadMsgs, missing 'view' WS subscribe, ignored
+send:error, plaintext fallback on encrypt failure); gateway HTTP client has no default
+timeouts (502 source); gateway rate limiters reset every 60s; WS send path bypasses the
+message_online tier gate; delete_me doesn't purge blocks/notifications; Dockerfiles don't
+copy Cargo.lock; deploy.yml still deploys Jekyll (T-30 open). cargo check --workspace: PASS.
+Next step: owner decides → file findings as audit items/tickets, then fix in priority order.
 
 ---
 
