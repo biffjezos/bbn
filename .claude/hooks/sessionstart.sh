@@ -86,23 +86,14 @@ if [[ -f "$TICKETS_FILE" ]]; then
 fi
 
 # ── OPEN AUDIT ITEMS BOARD ───────────────────────────────────────────────────
-CONCERN_FILES=(
-  "$CLAUDE_DIR/AUDIT_INFRASTRUCTURE.md"
-  "$CLAUDE_DIR/AUDIT_MAINTAINABILITY.md"
-  "$CLAUDE_DIR/AUDIT_USABILITY.md"
-  "$CLAUDE_DIR/AUDIT_SECURITY.md"
-  "$CLAUDE_DIR/AUDIT_PERFORMANCE.md"
-)
-
+# All open audit items live in the single AUDIT.md (consolidated 2026-07-02).
 TMPAUDIT=$(mktemp)
-for cf in "${CONCERN_FILES[@]}"; do
-  parse_items "$cf" "resolved:superseded" "$TMPAUDIT"
-done
+parse_items "$CLAUDE_DIR/AUDIT.md" "resolved:superseded" "$TMPAUDIT"
 
 if [[ -s "$TMPAUDIT" ]]; then
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "OPEN AUDIT ITEMS (from concern files)"
+  echo "OPEN AUDIT ITEMS (from .claude/AUDIT.md)"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   printf "%-12s  %-12s  %-8s  %s\n" "ID" "STATUS" "PRI" "TITLE"
   printf "%-12s  %-12s  %-8s  %s\n" "------------" "------------" "--------" "------------------------------------------"

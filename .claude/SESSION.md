@@ -6,78 +6,49 @@
 
 ---
 
-**Branch:** `claude/fix-deployment-errors-mRt2z`
-**Session date:** 2026-04-04
-**Last updated:** 2026-04-04T00:00Z
+**Branch:** `claude/fable5-harness-strategy-940li4`
+**Session date:** 2026-07-02
+**Last updated:** 2026-07-02T14:15Z
 
 ---
 
 ## In Progress
 
-Nothing — committing now.
-
-#### Stale premium radius shown as yellow guest circle after logout
-- Race condition: `refreshRadius()` on `onLogin` starts a `getNearbyRadius('premium')` API call.
-- With a slow backend (502s / 15s signal timeouts), that call can still be in flight when the user logs out.
-- `onLogout` resets `viewRadius=0`; `onGuestReady` sets it correctly to 500m.
-- But the stale premium call resolves last and overwrites `viewRadius=23km`.
-- Next geo event draws a yellow circle (sex=null after logout) at 23km. 
-- Fixed in `refreshRadius()`: capture `wasRegistered` at call time; discard `.then()` result if `isRegistered()` changed.
+Nothing — committing the harness restructure now.
 
 ---
 
 ## Completed This Session
 
-### Fix batch 3 — deployed v742581f bugs
+### Harness restructure for the Fable 5 model tier (no code touched)
 
-#### /settings — preferences section never showed (blocked by sequential API awaits)
-- `initSettings()` was doing `await initAccountInfo()` then `await initAppLimits()` then `await initPreferences()` sequentially.
-- If the backend times out (~15s per call), preferences took 30s+ to appear.
-- Fixed: `initPreferences()` and `initDangerZone()` now called immediately (no API dependency).
-- `initAccountInfo()`, `initAppLimits()`, `initBlockedUsers()` now run in parallel via `Promise.allSettled`.
-- Also removed `await` from `BbnPrefs.sync()` in boomboom.js — it was blocking `initSettings()` from starting by ~15s when the `/users/me/preferences` API is slow.
-
-#### /admin Settings tab — 10-20 second delay before content shows
-- `renderSettingsTab()` was doing `Promise.allSettled([adminGetSettings(), adminGetLocationConfig()])` — waiting for BOTH before rendering anything.
-- `adminGetSettings()` succeeds quickly (200ms), but `adminGetLocationConfig()` times out (~15s).
-- Fixed: settings render immediately after `adminGetSettings()` resolves. Location config loads in background via `.then()/.catch()` — shows "Loading…" placeholder then updates.
-
----
+- **AUDIT consolidation:** the five concern files (AUDIT_INFRASTRUCTURE/MAINTAINABILITY/USABILITY/SECURITY/PERFORMANCE.md) were deleted and their open items merged into a single `AUDIT.md`, grouped by concern with prefixes kept. All summary tables (per-file + global) removed — the `<!-- ITEM -->` tags are the only status registry. Full texts of resolved SEC-1.10, SEC-1.11, SEC-1.12, SEC-1.15 and MAINT-2.4 archived to AUDIT_DONE.md; every other resolved item was already there.
+- **TICKETS.md fixed:** converted from a markdown table to ITEM-tagged headings — the SessionStart open-tickets board had been silently broken since introduction because the hook parses ITEM tags and the table never had any. Five done tickets (T-28, T-29, T-31, T-32, T-33) removed from the index (stubs already in `tickets/done/`).
+- **CLAUDE.md rewritten** at ~half length: trust hook-injected context instead of re-reading files at session start; Friction Awareness ritual replaced by a "Known Failure Modes" section; Persistent Files now a table. Owner rules (Never/Always Do) preserved unchanged.
+- **Hooks/scripts aligned:** `sessionstart.sh` now parses AUDIT.md only; `verify.sh` audit-ref check simplified to AUDIT.md + AUDIT_DONE.md; legacy TICKETS_DONE.md fallback removed.
 
 ## Key Decisions Made
 
-- `BbnPrefs.sync()` is fire-and-forget in boomboom.js. The map reads prefs at init time (before line 351), so sync ordering doesn't matter for the map. Settings form reads localStorage directly.
-- Location config section in admin uses a named placeholder (`id="locConfigSection"`) that gets updated when the background fetch resolves.
+- Machine-parsed `<!-- ITEM -->` tags are the single source of truth for open-item status; no human-maintained summary tables anywhere.
+- One audit file for open items (AUDIT.md) + one archive (AUDIT_DONE.md). Concern separation is by section, not by file — 8 open items did not justify 5 files.
+- CHANGELOG.md keeps its taxonomy and compaction rules; the distilled failure modes now also live in CLAUDE.md where they are read every session.
 
 ---
 
 ## Blockers / Parked Items
 
-- **502 Bad Gateway on Railway** — `/api/auth/guest` and `/api/health` returning 502. Cold-start or service down. Backend/infra issue — cannot fix from frontend.
-- **503 / signal timeout on Railway** — `/api/favourites` timing out. Backend/infra issue.
-- **`/api/admin/location-config` timeout** — admin settings location tab shows "Loading…" then "Location config unavailable." Backend.
-- **geo.js:172 browser violation** — "Only request geolocation information in response to a user gesture." Non-breaking console hint — geolocation permission still works. Not fixable without significant UX restructure.
-- **ipwho.org 503** — external service. geo.js already handles with fallbacks (iplocate.io, api.ipapi.is). Console noise only.
-- **JWT_SECRET mismatch** — protected routes may redirect. Both server and gateway must use the same secret.
-- **18 CodeQL alerts open** (fetched 2026-03-25).
+Carried over from the 2026-04-04 session (fix-deployment-errors branch — check whether its PR was merged):
+
+- **502/503 + signal timeouts on Railway** — `/api/auth/guest`, `/api/health`, `/api/favourites`. Backend/infra, not frontend-fixable.
+- **`/api/admin/location-config` timeout** — admin settings location section shows "unavailable". Backend.
+- **JWT_SECRET mismatch suspicion** (INFRA-1.4) and **CORS_ORIGINS env var** (INFRA-1.3) — owner actions in Railway still pending.
+- **geo.js:172 browser violation** and **ipwho.org 503** — console noise only, handled with fallbacks.
+- CodeQL: 0 open alerts as of 2026-07-01 snapshot.
 
 ---
 
 ## Handoff Notes
 
-### Railway env vars
-No new env vars required.
-
-### Deploy impact
-- /settings now shows Preferences section immediately (no longer blocked by API timeouts).
-- /settings Danger Zone also shows immediately.
-- Account info and App Limits still load from API in parallel (as before, but concurrent not sequential).
-- /admin Settings tab shows settings content within ~1s (no longer waits 15s for location-config timeout).
-- Location config section in admin shows "Loading…" then either populates or shows "unavailable".
-
-### Notes on remaining errors
-The 502/503 errors and signal timeouts on `/api/favourites`, `/api/auth/guest`, `/api/health` are Railway backend issues. The frontend already handles them gracefully (shows error messages). These cannot be fixed in the frontend code.
-
-### Next session priorities
-1. Investigate 502/503 Railway timeouts — cold start issue or service down?
-2. Check CodeQL alerts (18 open from 2026-03-25).
+- This branch (`claude/fable5-harness-strategy-940li4`) touches only `.claude/` — no code, no CI workflows. Safe to merge into `dev` independently of any code branch.
+- After merge, the next session start should show BOTH boards (tickets + audit items). If the tickets board is missing, check that TICKETS.md entries still carry `<!-- ITEM -->` tags.
+- Next session priorities (unchanged from 2026-04-04): investigate the Railway 502/503 timeouts; INFRA-1.3 / INFRA-1.4 owner actions are still open.

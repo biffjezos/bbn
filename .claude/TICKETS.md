@@ -1,33 +1,58 @@
 # bOOmbOOm.NOW! — Ticket Index
 
-Each ticket lives in `.claude/tickets/<id>.md`. Completed tickets are in `.claude/tickets/done/`.
-This file lists only open, active, planned, and deferred tickets — one row each, sorted by priority.
+Each ticket lives in `.claude/tickets/<id>.md`; completed tickets in `.claude/tickets/done/`.
+This index lists only open / active / planned / deferred tickets — done tickets are not listed here.
+Each entry is a heading plus an `<!-- ITEM -->` tag; the SessionStart hook parses these tags
+into the open-tickets board. Keep tag and heading in sync with the ticket file's frontmatter.
+
+The project owner may add items directly. Do not remove entries unless the ticket
+moves to done or the owner says to.
 
 ---
 
 ## Open / Active / Planned
 
-| ID | Status | Priority | Title | Phase |
-|---|---|---|---|---|
-| [T-28](tickets/done/T-28.md) | done | high | server — Rust Tera HTML server with API/WS proxy facade | 4/4 |
-| [T-31](tickets/done/T-31.md) | done | low | Fix modal scope — move modal-block/modal-delete out of base template | done |
-| [T-29](tickets/done/T-29.md) | done | high | JS cleanup — fix ES6 module refactor, trim to UI-only | 3/3 |
-| [T-32](tickets/done/T-32.md) | done | medium | Profile pages — wire profile.js into boomboom.js | 2/2 |
-| [T-30](tickets/T-30.md) | planned | high | server deployment — Railway, CORS removal, CI/CD migration | 0/3 |
-| [T-27](tickets/T-27.md) | planned | high | App Architecture Specs | - |
-| [T-26](tickets/T-26.md) | planned | high | auth layering violation | - |
-| [T-24](tickets/T-24.md) | planned | high | Profile Data Encryption | 0/4 |
-| [T-25](tickets/T-25.md) | planned | medium | Per-User OPRF Key Rotation | 0/3 |
-| [T-05b](tickets/T-05b.md) | planned | medium | Encrypted note field in blocks | — |
-| [T-06](tickets/T-06.md) | deferred | medium | Venue Accounts — Phase 2 (venue messaging) | 2/3 |
-| [T-07b](tickets/T-07b.md) | open | medium | Device Notifications | — |
-| [T-09](tickets/T-09.md) | open | medium | Role CRUD with Permissions UI | — |
-| [T-34](tickets/T-34.md) | planned | medium | spec — write specs/ui/opaque-client.yaml | 0/1 |
-| [T-33](tickets/done/T-33.md) | done | medium | Admin panel — /admin page empty (admin.js dead code) | 2/2 |
-| [T-02](tickets/T-02.md) | open | low | Analytics (anal.js / analytics-service) | — |
-| [T-14](tickets/T-14.md) | deferred | low | Manager-tier venue quota | — |
-| [T-15](tickets/T-15.md) | deferred | low | Orphan Venue Reassignment | — |
-| [T-20](tickets/T-20.md) | deferred | low | Sharded Location Store — Phase 5 only | 4/5 |
-| [T-21](tickets/T-21.md) | deferred | low | Continental location-service routing | — |
+### T-30 — server deployment — Railway, CORS removal, CI/CD migration
+<!-- ITEM id:T-30 status:planned priority:high phase:0/3 -->
 
----
+### T-27 — App Architecture Specs
+<!-- ITEM id:T-27 status:planned priority:high -->
+
+### T-26 — auth layering violation
+<!-- ITEM id:T-26 status:planned priority:high -->
+
+### T-24 — Profile Data Encryption
+<!-- ITEM id:T-24 status:planned priority:high phase:0/4 -->
+
+### T-25 — Per-User OPRF Key Rotation
+<!-- ITEM id:T-25 status:planned priority:medium phase:0/3 -->
+
+### T-05b — Encrypted note field in blocks
+<!-- ITEM id:T-05b status:planned priority:medium -->
+
+### T-34 — spec — write specs/ui/opaque-client.yaml
+<!-- ITEM id:T-34 status:planned priority:medium phase:0/1 -->
+
+### T-07b — Device Notifications
+<!-- ITEM id:T-07b status:open priority:medium -->
+
+### T-09 — Role CRUD with Permissions UI
+<!-- ITEM id:T-09 status:open priority:medium -->
+
+### T-06 — Venue Accounts — Phase 2 (venue messaging)
+<!-- ITEM id:T-06 status:deferred priority:medium phase:2/3 -->
+
+### T-02 — Analytics (anal.js / analytics-service)
+<!-- ITEM id:T-02 status:open priority:low -->
+
+### T-14 — Manager-tier venue quota
+<!-- ITEM id:T-14 status:deferred priority:low -->
+
+### T-15 — Orphan Venue Reassignment
+<!-- ITEM id:T-15 status:deferred priority:low -->
+
+### T-20 — Sharded Location Store — Phase 5 only
+<!-- ITEM id:T-20 status:deferred priority:low phase:4/5 -->
+
+### T-21 — Continental location-service routing
+<!-- ITEM id:T-21 status:deferred priority:low -->
