@@ -393,6 +393,36 @@ where
     }
 }
 
+// ── VerifiedAdmin extractor ───────────────────────────────────────────────────
+
+/// Like [`AuthToken`] but additionally requires `role == "admin"`.
+///
+/// Unlike [`AdminUser`], the tokenVersion IS checked (via `AuthToken`), so a
+/// demoted or password-changed admin is rejected immediately. Use this on all
+/// admin routes in services that have DB access; `AdminUser` remains only for
+/// callers that cannot reach the DB.
+pub struct VerifiedAdmin(pub UserClaims);
+
+impl<S> FromRequestParts<S> for VerifiedAdmin
+where
+    JwtSecret: FromRef<S>,
+    mongodb::Database: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let AuthToken(claims) = AuthToken::from_request_parts(parts, state).await?;
+        if claims.role != "admin" {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" })),
+            ));
+        }
+        Ok(VerifiedAdmin(claims))
+    }
+}
+
 /// Sign a guest JWT.
 pub fn issue_guest_token(
     guest_id: &str,

@@ -25,13 +25,16 @@ pub fn bad_gw() -> axum::response::Response {
 
 pub fn real_ip(headers: &HeaderMap) -> IpAddr {
     // Prefer CF-Connecting-IP (SEC-1.3): Cloudflare sets this to the true client IP.
+    // X-Forwarded-For fallback: take the LAST entry — that is the hop appended by
+    // our own edge proxy. The first entry is client-supplied and spoofable, which
+    // would let one client rotate fake IPs to bypass the per-IP rate limits.
     headers.get("cf-connecting-ip")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse().ok())
         .or_else(|| {
             headers.get("x-forwarded-for")
                 .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.split(',').next())
+                .and_then(|s| s.split(',').next_back())
                 .and_then(|s| s.trim().parse().ok())
         })
         .unwrap_or_else(|| IpAddr::from([127, 0, 0, 1]))

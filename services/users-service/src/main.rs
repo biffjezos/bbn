@@ -16,7 +16,7 @@ use axum::{
 };
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use common::{
-    auth::{issue_user_token, AuthToken, JwtSecret, ServiceSecret, RequireRegistered, ServiceToken, UserTokenParams},
+    auth::{issue_user_token, AuthToken, JwtSecret, ServiceSecret, RequireRegistered, ServiceToken, UserTokenParams, VerifiedAdmin},
     mongo::safe_object_id,
 };
 use futures_util::TryStreamExt;
@@ -786,13 +786,10 @@ struct AdminSearchQuery {
 
 async fn admin_get_users(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(_claims): VerifiedAdmin,
     State(state): State<AppState>,
     Query(q): Query<AdminSearchQuery>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
 
     let mut filter = doc! {};
     if let Some(ref query_str) = q.q {
@@ -884,11 +881,8 @@ async fn admin_get_users(
 
 async fn admin_get_config(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(_claims): VerifiedAdmin,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
     let guard_active = env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1");
     Json(json!({ "selfPromotionGuard": guard_active })).into_response()
 }
@@ -934,12 +928,9 @@ async fn load_all_settings_flat(db: &Database) -> serde_json::Value {
 /// GET /admin/settings — returns all admin settings (admin auth).
 async fn admin_get_settings(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(_claims): VerifiedAdmin,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
     let cursor = state.db.collection::<AdminSettingDoc>("meta_settings")
         .find(doc! {})
         .await;
@@ -960,14 +951,11 @@ struct SettingValueBody {
 /// PUT /admin/settings/:key — update one admin setting (admin auth).
 async fn admin_put_setting(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(_claims): VerifiedAdmin,
     State(state): State<AppState>,
     Path(key): Path<String>,
     Json(body): Json<SettingValueBody>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
     if body.value < 0 {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "value must be non-negative." }))).into_response();
     }
@@ -1009,14 +997,11 @@ struct TierBody {
 
 async fn admin_patch_tier(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(claims): VerifiedAdmin,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<TierBody>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
 
     if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own tier.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
@@ -1067,14 +1052,11 @@ struct RoleBody {
 
 async fn admin_patch_role(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(claims): VerifiedAdmin,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<RoleBody>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
 
     if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own role.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
@@ -1119,14 +1101,11 @@ struct AdminPatchBody {
 
 async fn admin_patch_user(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(claims): VerifiedAdmin,
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(body): Json<AdminPatchBody>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
     if env::var("SELF_PROMOTION_GUARD").ok().as_deref() == Some("1") && claims.sub == id {
         return (StatusCode::FORBIDDEN, Json(json!({ "error": "Cannot modify your own tier or role.", "code": "SELF_MODIFICATION_FORBIDDEN" }))).into_response();
     }
@@ -1205,14 +1184,11 @@ struct RoleOnlyDoc {
 
 async fn admin_patch_venue_manager(
     _svc: ServiceToken,
-    AuthToken(claims): AuthToken,
+    VerifiedAdmin(_claims): VerifiedAdmin,
     State(state): State<AppState>,
     Path(venue_id): Path<String>,
     Json(body): Json<ReassignManagerBody>,
 ) -> impl IntoResponse {
-    if claims.role != "admin" {
-        return (StatusCode::FORBIDDEN, Json(json!({ "error": "Admin access required.", "code": "ADMIN_REQUIRED" }))).into_response();
-    }
 
     let venue_oid = match safe_object_id(&venue_id) {
         Some(o) => o,

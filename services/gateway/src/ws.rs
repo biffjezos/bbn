@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
-use common::{auth::decode_user_token, geo::haversine_distance};
+use common::geo::haversine_distance;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -73,7 +73,9 @@ async fn handle_loc_socket(socket: WebSocket, state: AppState) {
         Some(t) if !t.is_empty() => t.to_string(),
         _ => { tx.send(ws_close(4001, "Auth required")).ok(); sender_task.abort(); return; }
     };
-    if decode_user_token(&token, &state.jwt_secret).is_err() {
+    // Verify via authority-service: signature, expiry AND tokenVersion —
+    // a raw decode would keep revoked tokens alive on the socket until expiry.
+    if crate::guards::verify_raw_token(&state, &token).await.is_err() {
         tx.send(ws_close(4001, "Invalid token")).ok(); sender_task.abort(); return;
     }
 
@@ -212,15 +214,17 @@ async fn handle_msg_socket(socket: WebSocket, state: AppState) {
         Some(t) if !t.is_empty() => t.to_string(),
         _ => { tx.send(ws_close(4001, "Auth required")).ok(); sender_task.abort(); return; }
     };
-    let claims = match decode_user_token(&token, &state.jwt_secret) {
-        Ok(c)  => c,
-        Err(_) => { tx.send(ws_close(4001, "Invalid token")).ok(); sender_task.abort(); return; }
+    // Verify via authority-service (signature, expiry, tokenVersion).
+    let identity = match crate::guards::verify_raw_token(&state, &token).await {
+        Ok(id) => id,
+        Err(()) => { tx.send(ws_close(4001, "Invalid token")).ok(); sender_task.abort(); return; }
     };
-    if !matches!(claims.role.as_str(), "user" | "admin") {
+    // venue_manager is a registered role too — HTTP routes accept it, so must WS.
+    if !matches!(identity.role.as_str(), "user" | "admin" | "venue_manager") {
         tx.send(ws_close(4003, "Registered account required")).ok(); sender_task.abort(); return;
     }
 
-    let user_id = claims.sub.clone();
+    let user_id = identity.sub.clone();
     println!("[WS:msg] + {user_id}");
 
     let viewing: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));

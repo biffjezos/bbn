@@ -82,6 +82,26 @@ pub async fn authority_guard(
     }
 }
 
+/// Verify a raw bearer token (no headers available — WebSocket auth messages)
+/// against authority-service. Same semantics as `authority_guard`: signature,
+/// expiry, tokenVersion, tier/features all checked centrally.
+pub async fn verify_raw_token(
+    state: &AppState,
+    token: &str,
+) -> Result<VerifyResponse, ()> {
+    if token.is_empty() { return Err(()); }
+    let svc = get_svc_token(state).await.ok_or(())?;
+    let resp = state.http
+        .post(format!("{}/authority/verify", state.authority_url))
+        .header("X-Service-Token", &svc)
+        .json(&serde_json::json!({ "token": token }))
+        .timeout(Duration::from_secs(3))
+        .send().await
+        .map_err(|e| { eprintln!("[gateway] verify_raw_token: {e}"); })?;
+    if !resp.status().is_success() { return Err(()); }
+    resp.json::<VerifyResponse>().await.map_err(|_| ())
+}
+
 // ── role_guard ────────────────────────────────────────────────────────────────
 
 /// Returns an error response if the identity's role doesn't match `required`.
