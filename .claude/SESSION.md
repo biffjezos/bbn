@@ -6,49 +6,70 @@
 
 ---
 
-**Branch:** `claude/fable5-harness-strategy-940li4`
-**Session date:** 2026-07-02
-**Last updated:** 2026-07-02T14:15Z
+**Branch:** `claude/project-orchestrator-setup-sd7v52`
+**Session date:** 2026-07-22
+**Last updated:** 2026-07-22T00:00Z
 
 ---
 
 ## In Progress
 
-Nothing — committing the harness restructure now.
+Nothing — committing the orchestrator-mode CLAUDE.md rewrite now.
 
 ---
 
 ## Completed This Session
 
-### Harness restructure for the Fable 5 model tier (no code touched)
+### CLAUDE.md rewritten for orchestrator mode (no code touched)
 
-- **AUDIT consolidation:** the five concern files (AUDIT_INFRASTRUCTURE/MAINTAINABILITY/USABILITY/SECURITY/PERFORMANCE.md) were deleted and their open items merged into a single `AUDIT.md`, grouped by concern with prefixes kept. All summary tables (per-file + global) removed — the `<!-- ITEM -->` tags are the only status registry. Full texts of resolved SEC-1.10, SEC-1.11, SEC-1.12, SEC-1.15 and MAINT-2.4 archived to AUDIT_DONE.md; every other resolved item was already there.
-- **TICKETS.md fixed:** converted from a markdown table to ITEM-tagged headings — the SessionStart open-tickets board had been silently broken since introduction because the hook parses ITEM tags and the table never had any. Five done tickets (T-28, T-29, T-31, T-32, T-33) removed from the index (stubs already in `tickets/done/`).
-- **CLAUDE.md rewritten** at ~half length: trust hook-injected context instead of re-reading files at session start; Friction Awareness ritual replaced by a "Known Failure Modes" section; Persistent Files now a table. Owner rules (Never/Always Do) preserved unchanged.
-- **Hooks/scripts aligned:** `sessionstart.sh` now parses AUDIT.md only; `verify.sh` audit-ref check simplified to AUDIT.md + AUDIT_DONE.md; legacy TICKETS_DONE.md fallback removed.
+Owner decided the session model (Fable 5) acts as project orchestrator and
+delegates work to cheaper models via the Agent tool:
+
+- New **Orchestration** section at the top of CLAUDE.md: routing table
+  (coding → `sonnet` subagents, retrieval/search → `haiku` subagents,
+  planning/review/commits/state files/trivial edits/crypto-and-privacy-critical
+  work → orchestrator inline), briefing requirements (subagents start with zero
+  context — briefs must carry paths, module contracts, and the relevant Known
+  Failure Modes / Never Do rules verbatim), subagent boundaries (no commits, no
+  pushes, no `.claude/` edits, no workflow files, no `docs/`), and a mandatory
+  review-before-staging rule for all subagent diffs.
+- Everything hook-dependent preserved unchanged: session-start protocol,
+  pre-commit checklist, wrap-up, Persistent Files table, compaction rules.
+- Owner rules (Never/Always Do) preserved verbatim, now explicitly binding on
+  subagents too; Known Failure Modes list kept as the source to copy into briefs.
+- Ticket Workflow gained a routing decision step; CHANGELOG friction logging now
+  explicitly covers delegation friction (bad briefs, subagent scope creep).
 
 ## Key Decisions Made
 
-- Machine-parsed `<!-- ITEM -->` tags are the single source of truth for open-item status; no human-maintained summary tables anywhere.
-- One audit file for open items (AUDIT.md) + one archive (AUDIT_DONE.md). Concern separation is by section, not by file — 8 open items did not justify 5 files.
-- CHANGELOG.md keeps its taxonomy and compaction rules; the distilled failure modes now also live in CLAUDE.md where they are read every session.
+- Delegation is the default for coding (sonnet) and retrieval (haiku); the
+  orchestrator never delegates encryption/hashing/auth-timing/privacy-critical
+  work and never commits unreviewed subagent output.
+- Hook contract and owner rules were deliberately kept despite the "full
+  override" permission — the SessionStart/PreCompact/PostToolUse hooks and
+  verify.sh still parse these files, and the Never/Always rules are owner
+  policy, not harness mechanics.
 
 ---
 
 ## Blockers / Parked Items
 
-Carried over from the 2026-04-04 session (fix-deployment-errors branch — check whether its PR was merged):
+Carried over (unchanged since 2026-07-02):
 
 - **502/503 + signal timeouts on Railway** — `/api/auth/guest`, `/api/health`, `/api/favourites`. Backend/infra, not frontend-fixable.
 - **`/api/admin/location-config` timeout** — admin settings location section shows "unavailable". Backend.
 - **JWT_SECRET mismatch suspicion** (INFRA-1.4) and **CORS_ORIGINS env var** (INFRA-1.3) — owner actions in Railway still pending.
 - **geo.js:172 browser violation** and **ipwho.org 503** — console noise only, handled with fallbacks.
-- CodeQL: 0 open alerts as of 2026-07-01 snapshot.
 
 ---
 
 ## Handoff Notes
 
-- This branch (`claude/fable5-harness-strategy-940li4`) touches only `.claude/` — no code, no CI workflows. Safe to merge into `dev` independently of any code branch.
-- After merge, the next session start should show BOTH boards (tickets + audit items). If the tickets board is missing, check that TICKETS.md entries still carry `<!-- ITEM -->` tags.
-- Next session priorities (unchanged from 2026-04-04): investigate the Railway 502/503 timeouts; INFRA-1.3 / INFRA-1.4 owner actions are still open.
+- This branch touches only `.claude/CLAUDE.md`, `SESSION.md`, and
+  `CHANGELOG.md` — no code, no CI workflows. Safe to merge into `dev`
+  independently.
+- From the next session on, operate in orchestrator mode per the new
+  Orchestration section: route per the table, write self-contained briefs,
+  review every subagent diff before staging.
+- Next session priorities (unchanged): investigate the Railway 502/503
+  timeouts; INFRA-1.3 / INFRA-1.4 owner actions are still open.
