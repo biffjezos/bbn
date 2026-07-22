@@ -28,6 +28,15 @@ this file. Every brief must be self-contained:
    files. They return a diff or a written answer; the orchestrator applies
    judgement.
 
+## Communication
+
+- **Briefs**: complete but minimal — everything the subagent needs, nothing it
+  doesn't. No pleasantries, no background story.
+- **Subagent reports**: instruct each subagent to reply with only the diff or
+  answer plus caveats — no narration, no restating the brief.
+- **To the owner**: report outcomes in a few sentences. No unsolicited
+  explanations of process or reasoning; the owner asks when they want detail.
+
 ## Reviewing subagent output
 
 Review every subagent diff against the task brief **before staging**. Never
