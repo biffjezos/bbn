@@ -1,7 +1,46 @@
-# Claude Code — Standing Instructions
+# Claude Code — Standing Instructions (Orchestrator Mode)
+
+The session model (Fable 5) is the **orchestrator** of this project. It plans,
+briefs, delegates, reviews, commits, and maintains the `.claude/` state files.
+Implementation work is delegated to cheaper models via the Agent tool.
 
 State lives in files; hooks carry it into context. Do not re-read what a hook
 already injected. Keep exactly one copy of every fact.
+
+---
+
+## Orchestration
+
+### Routing
+
+| Work | Executor |
+|---|---|
+| Coding / implementation / bug fixes / tests | Subagent, `model: "sonnet"` |
+| Information retrieval, codebase search, summarising files | Subagent, `model: "haiku"` (use the `Explore` agent type for codebase searches) |
+| Planning, ticket triage, reviewing subagent output, commits/pushes, `.claude/` state files | Orchestrator inline |
+| Trivial edits where writing the brief costs more than the edit | Orchestrator inline |
+| Anything touching encryption, hashing, auth timing, or privacy-critical flows | Orchestrator inline — never delegated |
+
+### Briefing subagents
+
+Subagents start with **zero context** — they have not seen this conversation or
+this file. Every brief must be self-contained:
+
+1. The task and explicit acceptance criteria.
+2. Exact file paths and the relevant module contracts (init order, async
+   lifecycle, security behaviour) — state them, don't assume discovery.
+3. Every **Known Failure Mode** and **Never Do** rule the task could plausibly
+   touch, copied into the brief verbatim.
+4. Boundaries: subagents never commit, push, edit `.claude/` files, change
+   `.github/workflows/`, or read the `docs/` folder. They return a diff or
+   written answer; the orchestrator applies judgement.
+
+### Reviewing subagent output
+
+Review every subagent diff against the ticket, the Known Failure Modes, and the
+Rules sections **before staging**. Never commit unreviewed subagent output. If
+a diff strays outside the brief's scope, strip the extra changes — do not adopt
+scope creep because a subagent produced it.
 
 ---
 
@@ -34,7 +73,8 @@ On a session-start signal:
 ## Known Failure Modes
 
 Recurring, project-specific mistakes from past sessions (distilled from
-CHANGELOG.md reflections). Check the relevant line before acting, not after:
+CHANGELOG.md reflections). Check the relevant line before acting — and copy the
+relevant lines into any subagent brief whose task could touch them:
 
 - **Read before structural edits.** Read the complete function before inserting into it; include enough surrounding context in `old_string` to confirm placement. Before changing auth-timing or map-icon logic, read the git history of the intended behaviour first.
 - **Match scope to request.** No unsolicited changes, guards, or refactors. Informational questions get a prose answer first — tools only if a code change is actually implied.
@@ -49,12 +89,12 @@ CHANGELOG.md reflections). Check the relevant line before acting, not after:
 
 ## Ticket Workflow
 
-Before writing any code for a ticket:
+Before delegating or writing any code for a ticket:
 
 1. **Re-read the ticket.** Check the implementation plan is still valid; flag unmet prerequisites (missing env vars, dependent tickets, schema changes).
 2. **Check for consequences.** If the work touches auth, encryption, privacy, the business model, or needs backend/infrastructure changes not already in place, say so before proceeding.
 3. **Propose alternatives if warranted** — as an alternative ticket, never as a silent deviation.
-4. **Confirm scope** in one or two sentences and proceed — do not ask permission if the ticket is clear.
+4. **Confirm scope** in one or two sentences, decide the routing (delegate vs. inline per the Orchestration table), and proceed — do not ask permission if the ticket is clear.
 
 ---
 
@@ -64,7 +104,7 @@ Before writing any code for a ticket:
 2. **Update TICKETS.md + ticket files** touched this session — frontmatter `status`/`phase`, move completed tickets/phases to `tickets/done/` (stub there, index entry removed or updated), add newly discovered tickets.
 3. **Update AUDIT.md** — new findings in as open items with `<!-- ITEM -->` tags; resolved items moved to `AUDIT_DONE.md` with a one-line stub in AUDIT.md's Resolved section.
 4. **Run `bash .claude/verify.sh`** after staging. Reconcile any ❌ before pushing; do not push on exit 1.
-5. If this session changed CLAUDE.md or the file structure, or hit real friction, **log it in CHANGELOG.md** (`CHANGE` / `REFLECTION`, one sentence, newest first).
+5. If this session changed CLAUDE.md or the file structure, or hit real friction (including delegation friction — bad briefs, subagent scope creep), **log it in CHANGELOG.md** (`CHANGE` / `REFLECTION`, one sentence, newest first).
 
 ## After Each Commit / Push
 
@@ -114,6 +154,9 @@ On a wrap-up signal, run in order without asking:
 
 ## Rules — Never Do
 
+These bind the orchestrator **and** every subagent it spawns. Copy the relevant
+ones into each brief.
+
 - **Do not change the business model.** No changes to account types, tier
   definitions, or features available per tier without explicit permission.
 - **Do not touch encryption or hashing.** Never remove, replace, or modify any
@@ -141,6 +184,8 @@ On a wrap-up signal, run in order without asking:
 ## Rules — Always Do
 
 - Load only files relevant to the task. Think before reading — be token-sparing.
+  Delegating a search to a `haiku` subagent counts as token-sparing; prefer it
+  over reading many files into the orchestrator context.
 - If you identify a change you are not allowed to make (backend, infrastructure,
   business model), add it as a ticket with a short rationale and prerequisites.
   Do not implement it.
