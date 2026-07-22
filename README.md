@@ -1,132 +1,117 @@
-# bOOmbOOm.NOW!
+# Environment Variables
 
-Privacy-by-design location-based instant messaging.
+Reference for deploying the services (e.g. on Railway). Variables with a
+default are optional; everything listed under **Required** makes the service
+exit (or misbehave) at startup when missing.
 
----
+Shared secrets must hold the **same value in every service that lists them**:
+`JWT_SECRET`, `SERVICE_SECRET`, `EMAIL_PEPPER`, `OPAQUE_SERVER_SETUP`.
 
-## Features
-
-- **End-to-end encrypted messaging** — messages are encrypted client-side (ECDH P-256 + AES-GCM) before reaching the server. The server stores ciphertext only and cannot read any message content.
-- **Zero-knowledge key storage** — the user's ECDH private key is encrypted with a key derived from their password (PBKDF2, 200 000 iterations, SHA-256) before being stored on the server. The server holds the encrypted blob; decryption requires the user's password and never happens server-side.
-- **Hashed passwords** — bcrypt with per-user salt. Plain passwords are never stored or logged.
-- **Session lock** — the private key lives only in browser memory. It is wiped after 3 minutes of inactivity or 30 seconds of the tab being hidden. Re-entering the password re-derives the key without a full re-login.
-- **Short-lived data** — messages auto-delete after 4 hours; location data expires after 10 minutes of inactivity. Expiry is enforced in application queries as a primary safety net; MongoDB TTL indexes (applied by the migration service on boot) provide background cleanup at the database level once migrations have been fully applied.
-- **Guest sessions** — any visitor gets an anonymous 15-minute JWT (UUID-identified, no account required) that allows seeing the map and nearby users.
-- **Registered sessions** — 7-day JWT. Email and password required. Unlocks messaging, favourites, and blocking.
-- **Tier-based access control** — `guest`, `regular`, `premium`, `developer`. Tiers define nearby and messaging radii. Tier definitions are stored in the database and manageable through the admin UI without redeployment.
-- **Block and report** — any user can block any other user with a mandatory reason (`spam`, `harassment`, `inappropriate_content`, `fake_profile`, `other`). Blocked users are filtered from nearby results, cannot send messages, and cannot view the blocker's profile.
-- **Favourites with range sync** — one-directional. The service tracks whether a favourited user is within messaging range and stores a `withinRange` flag on the favourite document; this flag is checked before messages can be sent. *(Planned: in-range notification when a favourite enters range — not yet implemented.)*
-- **In-app notifications** — new-favourite events delivered via a `notifications` collection polled by the frontend every 2 minutes.
-- **Admin UI** — user search, tier and role changes, tier CRUD. Accessible to `admin`-role accounts only.
-- **Admin bootstrap** — first admin account is promoted via a one-time `ADMIN_BOOTSTRAP_USER_ID` environment variable set at boot. Subsequent promotions go through the admin UI. Raw database edits to role or tier fields have no effect without a `tokenVersion` bump.
-- **Separate inter-service secret** — user JWTs and inter-service tokens are signed with independent secrets (`JWT_SECRET` and `SERVICE_SECRET`). A compromised user secret cannot be used to forge service requests.
-- **Database migrations** — an idempotent migration runner applies schema changes on every boot before traffic is accepted.
-- **IP geolocation fallback** — if the browser denies location access, the frontend tries a shuffled list of free IP geolocation services and shows an "approximate location" indicator on the map pin.
+Every `*_SERVICE_URL` has a paired `*_ALLOWED_HOST` (SSRF guard): the URL's
+hostname must match it exactly.
 
 ---
 
-## Security & Encryption
+## All services
 
-### Passwords
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `PORT` | no | see per-service | HTTP listen port (Railway injects this) |
+| `RUST_LOG` | no | unset | log level filter |
 
-Stored as bcrypt hashes. Salt is generated per-user. The plain password is used only to verify at login time and is never persisted or forwarded.
+## gateway (default port 3000)
 
-### Crypto Keys
+| Variable | Required | Purpose |
+|---|---|---|
+| `JWT_SECRET` | yes | HS256 user-JWT key (same everywhere) |
+| `SERVICE_SECRET` | yes | inter-service token key (same everywhere) |
+| `CORS_ORIGINS` | yes | comma-separated allowed origins (also used for WS Origin check) |
+| `AUTHORITY_SERVICE_URL` / `AUTHORITY_SERVICE_ALLOWED_HOST` | yes | authority-service base URL + host pin |
+| `USER_SERVICE_URL` / `USER_SERVICE_ALLOWED_HOST` | yes | users-service |
+| `LOC_SERVICE_URL` / `LOC_SERVICE_ALLOWED_HOST` | yes | location-service |
+| `MSG_SERVICE_URL` / `MSG_SERVICE_ALLOWED_HOST` | yes | messages-service |
+| `FAV_SERVICE_URL` / `FAV_SERVICE_ALLOWED_HOST` | yes | favourites-service |
+| `BLOCKS_SERVICE_URL` / `BLOCKS_SERVICE_ALLOWED_HOST` | yes | blocks-service |
+| `MIGRATION_SERVICE_URL` / `MIGRATION_SERVICE_ALLOWED_HOST` | yes | migration-service (called once at boot) |
 
-On registration the client generates an ECDH P-256 keypair. The public key is stored in plain on the server (needed by anyone who wants to send a message). The private key is encrypted before it leaves the browser:
+## server — SSR frontend (default port 8080)
 
-1. A 256-bit AES-GCM key is derived from the user's password using PBKDF2 (SHA-256, 200 000 iterations, random 16-byte salt).
-2. The private key is encrypted with that AES key. Only the ciphertext, IV, and salt are sent to the server.
-3. To unlock E2EE after a page load or session lock, the user re-enters their password. The browser re-runs PBKDF2, decrypts the blob, and loads the key into memory. Nothing happens server-side.
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `GATEWAY_URL` | yes | — | gateway base URL for /api and /ws proxying |
+| `GATEWAY_ALLOWED_HOST` | yes | — | host pin for `GATEWAY_URL` |
+| `JWT_SECRET` | yes | — | decode user JWT for SSR auth context |
+| `STATIC_DIR` | no | `./static` | static asset directory |
+| `TEMPLATES_DIR` | no | `./templates` | Tera templates directory |
+| `ASSET_VERSION` | no | `RAILWAY_GIT_COMMIT_SHA` or `dev` | cache-bust string |
 
-When a user changes their password, the frontend re-encrypts the private key blob under the new derived key before saving — existing messages remain readable.
+## authority-service (default port 8080)
 
-### Messages
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `MONGO_URI` | yes | — | MongoDB connection string |
+| `DB_NAME` | no | `boomboom` | database name |
+| `JWT_SECRET` | yes | — | signs user/guest JWTs |
+| `SERVICE_SECRET` | yes | — | inter-service token key |
+| `EMAIL_PEPPER` | yes | — | HMAC pepper for email hashes (≥32 bytes) |
+| `OPAQUE_SERVER_SETUP` | yes | — | base64 OPAQUE server setup; if unset the service prints a freshly generated value and exits — set that value once and never change it |
+| `ADMIN_BOOTSTRAP_USER_ID` | no | unset | ObjectId promoted to admin at startup |
 
-Every message is encrypted on the client using the ECDH-derived shared secret before being sent. The sender derives the shared AES-GCM key from their private key and the recipient's public key; the recipient derives the same key from their private key and the sender's public key — a symmetric property of Diffie-Hellman. Both parties can therefore decrypt the same single ciphertext independently without a second copy being stored.
+## users-service (default port 3002)
 
-The server receives and stores the ciphertext envelope `{ cipher, recipientId }` as a JSON string. It cannot reconstruct the shared secret because it never holds any private key. Messages are deleted automatically by MongoDB TTL index 4 hours after they are sent.
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `MONGO_URI` | yes | — | MongoDB |
+| `DB_NAME` | no | `boomboom` | database name |
+| `JWT_SECRET` | yes | — | verify/issue user JWTs |
+| `SERVICE_SECRET` | yes | — | inter-service token key |
+| `OPAQUE_SERVER_SETUP` | yes | — | same value as authority-service (password change) |
+| `SELF_PROMOTION_GUARD` | no | unset | set to `1` to block admins editing their own role/tier |
 
-### Authentication
+## location-service (default port 8080)
 
-Two token types, signed separately:
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `MONGO_URI`, `DB_NAME`, `JWT_SECRET`, `SERVICE_SECRET` | yes / `boomboom` | | as above |
+| `FAV_SERVICE_URL` / `FAV_SERVICE_ALLOWED_HOST` | yes | — | favourites-service (range-sync) |
+| `AUTHORITY_SERVICE_URL` / `AUTHORITY_SERVICE_ALLOWED_HOST` | yes | — | tier radius lookups |
+| `LOCATION_STORE` | no | `memory` | `memory` or `db` |
+| `LOCATION_SHARD_SIZE_M` | no | `2000` | shard size (m) |
+| `LOCATION_NEARBY_LIMIT` | no | `200` | max nearby results |
+| `LOCATION_TTL_SECS` | no | `600` | location entry TTL |
+| `LOCATION_UPDATE_INTERVAL_SECS` | no | `15` | min interval between updates |
+| `LOCATION_UPDATE_DISTANCE_M` | no | `100` | min movement to store an update |
+| `LOCATION_SWEEP_INTERVAL_SECS` | no | `300` | stale-entry sweep interval |
 
-- **User/guest tokens** — HS256 JWTs signed with `JWT_SECRET`. Carry `sub`, `role`, `tier`, `tv` (tokenVersion). User tokens expire after 7 days; guest tokens after 15 minutes.
-- **Inter-service tokens** — short-lived HS256 JWTs signed with `SERVICE_SECRET`. Injected by the gateway on every proxied request via `X-Service-Token`. Each downstream service validates this header and rejects requests without it, so services are unreachable without going through the gateway.
+## messages-service (default port 8080)
 
-`tokenVersion` is a counter stored on the user document and baked into the JWT at issue time. On each login, registration, or admin role/tier change, `tokenVersion` is bumped. Services that handle registered users verify the `tv` claim against the database, which immediately invalidates all previously issued tokens for that user without a deny-list.
+| Variable | Required | Purpose |
+|---|---|---|
+| `MONGO_URI`, `DB_NAME`, `JWT_SECRET`, `SERVICE_SECRET` | yes (`DB_NAME` optional) | as above |
+| `LOC_SERVICE_URL` / `LOC_SERVICE_ALLOWED_HOST` | yes | proximity checks |
+| `AUTHORITY_SERVICE_URL` / `AUTHORITY_SERVICE_ALLOWED_HOST` | yes | tier radius lookups |
+| `FAV_SERVICE_URL` / `FAV_SERVICE_ALLOWED_HOST` | yes | mutual-favourite checks |
 
----
+## favourites-service (default port 8080)
 
-## Technology
+| Variable | Required | Purpose |
+|---|---|---|
+| `MONGO_URI`, `DB_NAME`, `JWT_SECRET`, `SERVICE_SECRET` | yes (`DB_NAME` optional) | as above |
+| `LOC_SERVICE_URL` / `LOC_SERVICE_ALLOWED_HOST` | yes | range checks |
+| `AUTHORITY_SERVICE_URL` / `AUTHORITY_SERVICE_ALLOWED_HOST` | yes | tier lookups |
 
-### Frontend
+## blocks-service (default port 8080)
 
-- GitHub Pages (static hosting, auto-deployed from `dev` and `claude/**` branches)
-- Jekyll SSG with Thymeleaf-style templating
-- Bootstrap + custom CSS
-- Web Crypto API for all client-side cryptography
-- SharedWorker for private key isolation across tabs
+| Variable | Required | Purpose |
+|---|---|---|
+| `MONGO_URI`, `DB_NAME`, `JWT_SECRET`, `SERVICE_SECRET` | yes (`DB_NAME` optional) | as above |
 
-### Backend
+## migration-service (default port 3099)
 
-All services are written in Rust (Axum 0.8, Tokio, MongoDB driver 3). They are deployed as individual Railway services built from a shared Cargo workspace at `services/`.
-
-#### gateway
-
-Entry point for all client traffic. Routes HTTP requests to downstream services, injects `X-Service-Token` on every proxied request, enforces per-IP rate limits (login, register, guest, general API), handles WebSocket connections for live location and messaging, and runs database migrations on boot.
-
-#### auth-service
-
-Issues guest, user, and admin JWTs. Validates credentials via bcrypt. Handles admin bootstrap on first boot. All endpoints require a valid `X-Service-Token` from the gateway.
-
-#### users-service
-
-Profile CRUD, crypto key storage and retrieval, password changes (including re-keying the encrypted private key blob), account deletion, admin user management (tier and role changes with `tokenVersion` bump).
-
-#### location-service
-
-Stores and expires location documents, serves nearby-user queries filtered by tier radius and block list, exposes an internal per-user location endpoint used by messages-service and favourites-service.
-
-#### messages-service
-
-Stores and retrieves E2EE message ciphertext, enforces TTL (4 hours), validates sender/recipient are mutually within range (tier-dependent), checks the block list before delivery.
-
-#### favourites-service
-
-Manages one-directional favourite links, syncs range state (writes `withinRange` flag and fires a notification when a favourite comes into messaging range), delivers in-app notifications.
-
-#### blocks-service
-
-Block and unblock with mandatory reason enum. Blocked-user status is checked in location-service, messages-service, and users-service by reading the `blocks` collection directly.
-
-#### tiers-service
-
-DB-stored tier definitions with admin CRUD. Serves tier info and radius lookups to other services. In-memory cache (5-minute TTL) with static fallback if the collection is empty.
-
-#### migration-service
-
-Applies idempotent database migrations in order on every gateway boot. Tracks applied migrations in a `_migrations` collection. Runs before the gateway opens to traffic.
-
-### Persistence
-
-MongoDB. Collections: `users`, `locations`, `messages`, `favourites`, `blocks`, `notifications`, `tiers`, `sessions`, `_migrations`.
-
----
-
-## Live Demo
-
-The `dev` branch and all `claude/**` branches auto-deploy to [https://biffjezos.github.io/bbn](https://biffjezos.github.io/bbn). The backend services may not be running at the time of your visit — Railway hosting costs money.
-
-## Donate
-
-Donate at [https://biffjezos.github.io/bbn/donate/](https://biffjezos.github.io/bbn/donate/) via Apple Pay, credit/debit card, or Revolut. Add a note if you want to be listed as a donor.
-
-### Current monthly expenditure: **25,75€**
-
-- 21,42€ — Claude Code
-- $ 5,00 — Railway (~4,33€ microservices + MongoDB)
-
-### Total amount spent (since February 2026)
-
-- 25,75€
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `MONGO_URI` | yes | — | MongoDB |
+| `DB_NAME` | no | `boomboom` | database name |
+| `JWT_SECRET` | yes | — | (shared config pattern) |
+| `SERVICE_SECRET` | yes | — | validates the gateway's migrate call |
+| `MIGRATION_PORT` | no | `3099` | overrides `PORT` |
