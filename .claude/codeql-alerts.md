@@ -1,6 +1,6 @@
 # CodeQL Alerts
 
-**Fetched:** 2026-09-02T11:54:13Z
+**Fetched:** 2026-09-09T12:05:55Z
 **Open alerts:** 17
 
 ```json
